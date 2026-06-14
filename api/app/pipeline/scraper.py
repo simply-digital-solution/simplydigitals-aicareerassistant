@@ -26,6 +26,8 @@ import httpx
 import feedparser
 from bs4 import BeautifulSoup
 
+from app.shared.industry_extractor import extract_industry_names
+
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parents[4] / "data" / "jobs_raw"
@@ -98,12 +100,14 @@ def scrape_rss(feed_name: str, keyword: str = "") -> list[dict]:
         if keyword and keyword.lower() not in (title + description).lower():
             continue
 
+        clean_desc = BeautifulSoup(description, "lxml").get_text(separator=" ")[:2000]
         jobs.append({
             "title": title,
             "company": entry.get("author", entry.get("dc_company", "Unknown")),
             "url": entry.get("link", ""),
             "location": entry.get("location", "Remote"),
-            "description": BeautifulSoup(description, "lxml").get_text(separator=" ")[:2000],
+            "description": clean_desc,
+            "inferred_industries": extract_industry_names(clean_desc),
             "source": f"rss_{feed_name}",
             "scraped_at": _now_iso(),
         })
@@ -176,6 +180,7 @@ async def scrape_indeed(query: str, location: str = "Remote", max_results: int =
                     "url": job_url,
                     "location": location_el.get_text(strip=True) if location_el else location,
                     "description": snippet,
+                    "inferred_industries": extract_industry_names(snippet),
                     "source": "indeed",
                     "scraped_at": _now_iso(),
                 })
@@ -254,6 +259,7 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
             "url": job_url,
             "location": "Singapore",
             "description": description,
+            "inferred_industries": extract_industry_names(description),
             "source": "mycareersfuture",
             "scraped_at": _now_iso(),
         })
@@ -323,12 +329,14 @@ async def scrape_adzuna(
         return []
 
     for item in data.get("results", []):
+        desc = item.get("description", "")[:2000]
         jobs.append({
             "title": item.get("title", ""),
             "company": item.get("company", {}).get("display_name", "Unknown"),
             "url": item.get("redirect_url", ""),
             "location": item.get("location", {}).get("display_name", location),
-            "description": item.get("description", "")[:2000],
+            "description": desc,
+            "inferred_industries": extract_industry_names(desc),
             "source": "adzuna",
             "scraped_at": _now_iso(),
         })
@@ -362,6 +370,7 @@ async def scrape_remotive(query: str, max_results: int = 15) -> list[dict]:
             "url": item.get("url", ""),
             "location": item.get("candidate_required_location", "Remote"),
             "description": description,
+            "inferred_industries": extract_industry_names(description),
             "source": "remotive",
             "scraped_at": _now_iso(),
         })

@@ -18,6 +18,7 @@ class JobOpportunity(AgentBaseModel):
     reasons: list[str] = Field(min_length=1, max_length=5)
     risks: list[str] = Field(min_length=1, max_length=5)
     key_keywords: list[str] = Field(min_length=1, max_length=10)
+    inferred_industries: list[str] = Field(default_factory=list)
 
 
 class ResearchOutput(AgentBaseModel):

@@ -102,6 +102,56 @@ def _sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
+def _industry_match(a: str, b: str) -> float:
+    """
+    Return similarity between two industry strings (case-insensitive).
+
+    Three-level check (returns highest):
+    1. Substring — "Banking & Finance" in "Banking & Financial Services" → 1.0
+    2. Segment — split by "&", best pairwise SequenceMatcher ratio across segments
+       catches "Banking & Finance" vs "Banking & Financial Services" (finance≈financial)
+    3. Full string SequenceMatcher fallback
+    """
+    from difflib import SequenceMatcher
+    a_l, b_l = a.lower(), b.lower()
+    if a_l in b_l or b_l in a_l:
+        return 1.0
+    segs_a = [s.strip() for s in a_l.split("&")]
+    segs_b = [s.strip() for s in b_l.split("&")]
+    seg_score = max(
+        (SequenceMatcher(None, sa, sb).ratio() for sa in segs_a for sb in segs_b),
+        default=0.0,
+    )
+    return max(SequenceMatcher(None, a_l, b_l).ratio(), seg_score)
+
+
+def _filter_by_industry(
+    jobs: list[dict],
+    target_industries: list[str],
+    threshold: float = 0.80,
+) -> list[dict]:
+    """
+    Keep a job if:
+      - target_industries is empty (no filter configured), OR
+      - it has no inferred industries (can't exclude what we don't know), OR
+      - at least one inferred industry fuzzy-matches at least one target industry
+        at >= threshold similarity.
+    """
+    if not target_industries:
+        return jobs
+    kept = []
+    for job in jobs:
+        inferred: list[str] = job.get("inferred_industries") or []
+        if not inferred:
+            kept.append(job)
+            continue
+        for inf in inferred:
+            if any(_industry_match(inf, tgt) >= threshold for tgt in target_industries):
+                kept.append(job)
+                break
+    return kept
+
+
 async def _stream_research(
     request: ResearchRequest,
     user_id: int,
@@ -207,6 +257,11 @@ async def _stream_research(
         if request.excluded_companies:
             excluded_lower = {c.lower() for c in request.excluded_companies}
             job_postings = [j for j in job_postings if j.get("company", "").lower() not in excluded_lower]
+
+        # Filter by target industry — keep jobs that match ≥80% OR have no inferred industry
+        target_industries: list[str] = profile.get("industries") or []
+        if target_industries:
+            job_postings = _filter_by_industry(job_postings, target_industries, threshold=0.80)
 
         if not job_postings:
             if scrape_errors:

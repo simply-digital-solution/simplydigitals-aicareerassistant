@@ -73,6 +73,7 @@ export interface JobOpportunity {
   reasons: string[]
   risks: string[]
   key_keywords: string[]
+  inferred_industries: string[]
 }
 
 export interface ResearchOutput {

@@ -55,9 +55,12 @@ def _build_user_message(profile: dict[str, Any], job_postings: list[dict], searc
 
     postings_block = f"Job postings to analyze ({len(postings)} total):\n"
     for i, job in enumerate(postings, 1):
+        inferred = job.get("inferred_industries") or []
+        industry_line = f"Industry: {', '.join(inferred)}\n" if inferred else ""
         postings_block += (
             f"\n[{i}] {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}\n"
             f"URL: {job.get('url', '')}\n"
+            f"{industry_line}"
             f"Snippet: {str(job.get('description', ''))[:DESC_SNIPPET_CHARS]}\n"
         )
 

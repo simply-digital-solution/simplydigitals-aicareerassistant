@@ -86,6 +86,16 @@ function OpportunityCard({
         </div>
       </div>
 
+      {opp.inferred_industries?.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {opp.inferred_industries.map((ind) => (
+            <span key={ind} className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">
+              {ind}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-1">
         {opp.key_keywords.map((kw) => (
           <span key={kw} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">{kw}</span>
