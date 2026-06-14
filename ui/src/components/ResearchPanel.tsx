@@ -8,6 +8,15 @@ import TagInput from './profile/TagInput'
 
 type FeedbackMap = Record<string, 'relevant' | 'not_relevant'>
 
+const PAGE_SIZE = 10
+
+const DATE_OPTIONS = [
+  { label: 'All time', days: 0 },
+  { label: 'Today', days: 1 },
+  { label: 'Last 7 days', days: 7 },
+  { label: 'Last 30 days', days: 30 },
+]
+
 function FitBadge({ score }: { score: number }) {
   const pct = Math.round(score * 100)
   const color =
@@ -138,11 +147,9 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
-const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-const selectCls = inputCls
-
 export default function ResearchPanel() {
   const queryClient = useQueryClient()
+
   const { data: profile } = useQuery<ProfileData>({
     queryKey: ['profile'],
     queryFn: () => api.get<ProfileData>('/profile').then(r => r.data),
@@ -154,7 +161,6 @@ export default function ResearchPanel() {
   })
 
   const [localFeedback, setLocalFeedback] = useState<FeedbackMap>({})
-
   const feedbackMap: FeedbackMap = {
     ...(savedFeedback ?? []).reduce<FeedbackMap>((acc, f) => { acc[f.job_url] = f.relevance; return acc }, {}),
     ...localFeedback,
@@ -170,6 +176,7 @@ export default function ResearchPanel() {
   const [industries, setIndustries] = useState<string[]>([])
   const [targetsDirty, setTargetsDirty] = useState(false)
   const [targetsSaving, setTargetsSaving] = useState(false)
+  const [profileLoaded, setProfileLoaded] = useState(false)
 
   const handleTitles = (next: string[]) => { setTitles(next); setTargetsDirty(true) }
   const handleIndustries = (next: string[]) => { setIndustries(next); setTargetsDirty(true) }
@@ -188,61 +195,64 @@ export default function ResearchPanel() {
     }
   }
 
-  // Search fields — pre-filled from profile, overridable per-search
-  const [location, setLocation] = useState('')
-  const [remotePref, setRemotePref] = useState('any')
-  const [employmentType, setEmploymentType] = useState('any')
-  const [salaryFloor, setSalaryFloor] = useState('')
-  const [salaryCurrency, setSalaryCurrency] = useState('USD')
-  const [excludedCompanies, setExcludedCompanies] = useState('')
-  const [profileLoaded, setProfileLoaded] = useState(false)
-
-  const [manualJd, setManualJd] = useState('')
-  const [showManual, setShowManual] = useState(false)
-
-  // Pre-fill from profile once loaded
   useEffect(() => {
     if (profile && !profileLoaded) {
       setTitles(parseJsonArray(profile.target_titles))
       setIndustries(parseJsonArray(profile.target_industries))
-      const locations = parseJsonArray(profile.target_locations)
-      if (locations.length > 0) setLocation(locations[0])
-      if (profile.remote_preference) setRemotePref(profile.remote_preference)
-      if (profile.employment_type) setEmploymentType(profile.employment_type)
-      if (profile.salary_floor) setSalaryFloor(String(profile.salary_floor))
-      if (profile.salary_currency) setSalaryCurrency(profile.salary_currency)
-      const excluded = parseJsonArray(profile.excluded_companies)
-      if (excluded.length > 0) setExcludedCompanies(excluded.join(', '))
       setProfileLoaded(true)
     }
   }, [profile, profileLoaded])
 
+  // Manual JD paste
+  const [manualJd, setManualJd] = useState('')
+  const [showManual, setShowManual] = useState(false)
+
   const { status, chunks, result, meta, error, run, reset } =
     useAgentStream<ResearchOutput>({ endpoint: '/agents/research' })
 
-  const buildFilters = () => ({
-    ...(titles.length > 0 ? { target_titles: titles } : {}),
-    ...(industries.length > 0 ? { target_industries: industries } : {}),
-    ...(location ? { location } : {}),
-    ...(remotePref !== 'any' ? { remote_preference: remotePref } : {}),
-    ...(employmentType !== 'any' ? { employment_type: employmentType } : {}),
-    ...(salaryFloor ? { salary_floor: parseInt(salaryFloor), salary_currency: salaryCurrency } : {}),
-    ...(excludedCompanies ? { excluded_companies: excludedCompanies.split(',').map(s => s.trim()).filter(Boolean) } : {}),
-  })
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    run({ ...buildFilters() })
-  }
+  const handleSearch = () => run({})
 
   const handleManual = (e: React.FormEvent) => {
     e.preventDefault()
     run({ job_postings: [{ title: 'Role', company: '', url: '', description: manualJd }] })
   }
 
+  // Result filters + pagination — applied client-side on the agent result
+  const [filterRole, setFilterRole] = useState('')
+  const [filterDays, setFilterDays] = useState(0)
+  const [page, setPage] = useState(1)
+
+  // Reset pagination when filters or result changes
+  useEffect(() => { setPage(1) }, [filterRole, filterDays, result])
+
+  const cutoff = filterDays > 0
+    ? new Date(Date.now() - filterDays * 24 * 60 * 60 * 1000)
+    : null
+
+  const allOpportunities = result
+    ? [...result.opportunities].sort((a, b) => {
+        // Sort by posted_at DESC when available, otherwise keep agent order
+        const da = (a as JobOpportunity & { posted_at?: string }).posted_at
+        const db = (b as JobOpportunity & { posted_at?: string }).posted_at
+        if (da && db) return new Date(db).getTime() - new Date(da).getTime()
+        return 0
+      })
+    : []
+
+  const filtered = allOpportunities.filter(opp => {
+    if (filterRole && opp.role.toLowerCase() !== filterRole.toLowerCase()) return false
+    if (cutoff) {
+      const posted = (opp as JobOpportunity & { posted_at?: string }).posted_at
+      if (posted && new Date(posted) < cutoff) return false
+    }
+    return true
+  })
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   const form = (
     <div className="space-y-5">
-
       {/* Target Roles + Industries — editable, synced to Profile */}
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
@@ -258,11 +268,7 @@ export default function ResearchPanel() {
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Target Job Titles</label>
-          <TagInput
-            tags={titles}
-            onChange={handleTitles}
-            placeholder="e.g. Product Manager"
-          />
+          <TagInput tags={titles} onChange={handleTitles} placeholder="e.g. Product Manager" />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Target Industries</label>
@@ -275,83 +281,34 @@ export default function ResearchPanel() {
         </div>
       </div>
 
-      <form onSubmit={handleSearch} className="space-y-4">
-
-        {/* Location */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Location <span className="text-red-500">*</span>
-          </label>
-          <input value={location} onChange={e => setLocation(e.target.value)}
-            placeholder="e.g. Singapore, Remote" required className={inputCls} />
-        </div>
-
-        {/* Row 2: remote + employment */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Remote preference</label>
-            <select value={remotePref} onChange={e => setRemotePref(e.target.value)} className={selectCls}>
-              <option value="any">Any</option>
-              <option value="remote">Remote only</option>
-              <option value="hybrid">Hybrid</option>
-              <option value="onsite">Onsite only</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Employment type</label>
-            <select value={employmentType} onChange={e => setEmploymentType(e.target.value)} className={selectCls}>
-              <option value="any">Any</option>
-              <option value="full_time">Full-time</option>
-              <option value="contract">Contract</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Row 3: salary + skills */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Minimum salary</label>
-            <div className="flex gap-2">
-              <select value={salaryCurrency} onChange={e => setSalaryCurrency(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 w-24">
-                <option>USD</option>
-                <option>SGD</option>
-                <option>GBP</option>
-                <option>EUR</option>
-                <option>AUD</option>
-                <option>INR</option>
-              </select>
-              <input type="number" min={0} value={salaryFloor} onChange={e => setSalaryFloor(e.target.value)}
-                placeholder="120000" className={inputCls} />
-            </div>
-          </div>
-        </div>
-
-        {/* Row 4: excluded companies */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Exclude companies</label>
-          <input value={excludedCompanies} onChange={e => setExcludedCompanies(e.target.value)}
-            placeholder="Company A, Company B" className={inputCls} />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button type="submit" disabled={!location.trim()}
-            className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-            Search
-          </button>
-          <button type="button" onClick={() => setShowManual(v => !v)}
-            className="text-sm text-gray-500 hover:text-gray-700 underline">
-            {showManual ? 'Hide manual paste' : 'Or paste a specific job description'}
-          </button>
-        </div>
-      </form>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSearch}
+          className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
+          Search
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowManual(v => !v)}
+          className="text-sm text-gray-500 hover:text-gray-700 underline"
+        >
+          {showManual ? 'Hide manual paste' : 'Or paste a specific job description'}
+        </button>
+      </div>
 
       {showManual && (
         <form onSubmit={handleManual} className="border-t border-gray-100 pt-4 space-y-3">
           <p className="text-xs text-gray-500">Paste a single job description to score it against your profile.</p>
-          <textarea value={manualJd} onChange={e => setManualJd(e.target.value)}
-            rows={5} placeholder="Paste job description here…" required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+          <textarea
+            value={manualJd}
+            onChange={e => setManualJd(e.target.value)}
+            rows={5}
+            placeholder="Paste job description here…"
+            required
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+          />
           <button type="submit"
             className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
             Score this job
@@ -361,23 +318,86 @@ export default function ResearchPanel() {
     </div>
   )
 
-  const topOpportunities = result
-    ? [...result.opportunities].sort((a, b) => b.fit_score - a.fit_score).slice(0, 10)
-    : []
-
   const resultNode = result ? (
-    <div className="space-y-3">
-      <p className="text-sm font-medium text-gray-700">
-        Top {topOpportunities.length} opportunit{topOpportunities.length === 1 ? 'y' : 'ies'} — rate each to refine future searches
-      </p>
-      {topOpportunities.map((opp, i) => (
-        <OpportunityCard
-          key={i}
-          opp={opp}
-          feedback={opp.link ? feedbackMap[opp.link] : undefined}
-          onFeedback={handleFeedback}
-        />
-      ))}
+    <div className="space-y-4">
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-3 pb-2 border-b border-gray-100">
+        <select
+          value={filterRole}
+          onChange={e => setFilterRole(e.target.value)}
+          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          aria-label="Filter by role"
+        >
+          <option value="">All roles</option>
+          {Array.from(new Set(allOpportunities.map(o => o.role))).map(r => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
+
+        <select
+          value={filterDays}
+          onChange={e => setFilterDays(Number(e.target.value))}
+          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          aria-label="Filter by date"
+        >
+          {DATE_OPTIONS.map(o => (
+            <option key={o.days} value={o.days}>{o.label}</option>
+          ))}
+        </select>
+
+        <span className="text-xs text-gray-400 ml-auto">
+          {filtered.length} result{filtered.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {/* Job cards */}
+      {paginated.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center py-6">No results match the selected filters.</p>
+      ) : (
+        <div className="space-y-3">
+          {paginated.map((opp, i) => (
+            <OpportunityCard
+              key={i}
+              opp={opp}
+              feedback={opp.link ? feedbackMap[opp.link] : undefined}
+              onFeedback={handleFeedback}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="text-sm px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-gray-500">Page {page} of {totalPages}</span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="text-sm px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+
+      {/* Meta + reset */}
+      <div className="flex items-center justify-between pt-1">
+        {meta && (
+          <p className="text-xs text-gray-400">
+            {meta.model as string} · {meta.output_tokens as number} tokens · ${(meta.cost_usd as number).toFixed(4)}
+          </p>
+        )}
+        <button onClick={reset} className="text-xs text-indigo-500 hover:underline ml-auto">
+          Run again
+        </button>
+      </div>
     </div>
   ) : null
 
