@@ -72,7 +72,7 @@ function StoredJobCard({ job, feedback, onFeedback }: {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {job.scored && job.fit_score !== null
+          {!!job.scored && job.fit_score !== null
             ? <FitBadge score={job.fit_score} />
             : <span className="text-xs text-gray-400 italic">Scoring…</span>
           }
@@ -103,7 +103,7 @@ function StoredJobCard({ job, feedback, onFeedback }: {
         </div>
       )}
 
-      {job.scored && (reasons.length > 0 || risks.length > 0) && (
+      {!!job.scored && (reasons.length > 0 || risks.length > 0) && (
         <>
           <button onClick={() => setOpen(v => !v)} className="text-xs text-gray-400 hover:text-gray-600">
             {open ? 'Hide details ▲' : 'Show details ▼'}

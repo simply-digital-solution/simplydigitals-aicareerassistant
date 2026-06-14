@@ -3,6 +3,10 @@ Unit tests for api/app/pipeline/daily_scrape.py
 
 All external calls (MCF scraper, DB) are mocked so tests run without a live
 database or network connection.
+
+Per-job execute() call sequence (after profile select):
+  1. SELECT 1 ... (dedup check) → fetchone() returns None (no dup) or a row
+  2. INSERT ...                  → .rowcount
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,37 +21,42 @@ from app.pipeline.daily_scrape import scrape_for_user, scrape_for_all_users
 
 def _make_profile(target_titles=None, target_industries=None):
     p = MagicMock()
-    p.target_titles     = json.dumps(target_titles)    if target_titles    is not None else None
+    p.target_titles     = json.dumps(target_titles)     if target_titles     is not None else None
     p.target_industries = json.dumps(target_industries) if target_industries is not None else None
     return p
 
 
-def _make_db(profile=None, rowcount=1):
-    """Return a mock AsyncSession."""
-    db = AsyncMock()
+def _profile_exec(profile):
+    m = MagicMock()
+    m.scalar_one_or_none.return_value = profile
+    return m
 
-    # scalar_one_or_none() for profile select
-    profile_result = MagicMock()
-    profile_result.scalar_one_or_none.return_value = profile
 
-    # .execute() for the INSERT returns an object with .rowcount
-    insert_result = MagicMock()
-    insert_result.rowcount = rowcount
+def _no_dup_exec():
+    """Simulates the dedup SELECT finding no existing row."""
+    m = MagicMock()
+    m.fetchone.return_value = None
+    return m
 
-    # For scrape_for_all_users: SELECT user_id FROM profiles
-    all_users_result = MagicMock()
-    all_users_result.fetchall.return_value = []
 
-    # Route execute calls: first call returns profile, subsequent ones return insert_result
-    db.execute.side_effect = [profile_result, insert_result, insert_result, insert_result]
-    return db
+def _dup_exec():
+    """Simulates the dedup SELECT finding an existing row."""
+    m = MagicMock()
+    m.fetchone.return_value = (1,)
+    return m
+
+
+def _insert_exec(rowcount=1):
+    m = MagicMock()
+    m.rowcount = rowcount
+    return m
 
 
 def _make_job(url="https://www.mycareersfuture.gov.sg/job/abc123",
               title="Data Engineer", company="ACME",
               inferred_industries=None, posted_at=None):
     return {
-        "url": url,
+        "url":   url,
         "title": title,
         "company": company,
         "location": "Singapore",
@@ -64,9 +73,7 @@ def _make_job(url="https://www.mycareersfuture.gov.sg/job/abc123",
 @pytest.mark.asyncio
 async def test_no_profile_returns_zero():
     db = AsyncMock()
-    result_mock = MagicMock()
-    result_mock.scalar_one_or_none.return_value = None
-    db.execute.return_value = result_mock
+    db.execute.return_value = _profile_exec(None)
 
     inserted = await scrape_for_user(user_id=1, db=db)
 
@@ -80,9 +87,7 @@ async def test_no_profile_returns_zero():
 @pytest.mark.asyncio
 async def test_no_target_titles_returns_zero():
     db = AsyncMock()
-    result_mock = MagicMock()
-    result_mock.scalar_one_or_none.return_value = _make_profile(target_titles=[])
-    db.execute.return_value = result_mock
+    db.execute.return_value = _profile_exec(_make_profile(target_titles=[]))
 
     inserted = await scrape_for_user(user_id=1, db=db)
 
@@ -90,25 +95,21 @@ async def test_no_target_titles_returns_zero():
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_user — happy path: one title, one job, no industry filter
+# scrape_for_user — happy path: no duplicate, job inserted
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_inserts_new_job():
     profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
-    db      = AsyncMock()
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),  # SELECT profile
+        _no_dup_exec(),           # dedup SELECT → no existing row
+        _insert_exec(1),          # INSERT → 1 row
+    ]
 
-    profile_exec = MagicMock()
-    profile_exec.scalar_one_or_none.return_value = profile
-
-    insert_exec = MagicMock()
-    insert_exec.rowcount = 1
-
-    db.execute.side_effect = [profile_exec, insert_exec]
-
-    job = _make_job()
-
-    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[job])):
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
+               AsyncMock(return_value=[_make_job()])):
         inserted = await scrape_for_user(user_id=1, db=db)
 
     assert inserted == 1
@@ -116,28 +117,49 @@ async def test_inserts_new_job():
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_user — duplicate job (rowcount=0 from INSERT OR IGNORE)
+# scrape_for_user — same title+company+date → duplicate, skipped
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_duplicate_job_not_counted():
+async def test_same_day_duplicate_is_skipped():
     profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
-    db      = AsyncMock()
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),  # SELECT profile
+        _dup_exec(),              # dedup SELECT → existing row found
+        # INSERT should NOT be called
+    ]
 
-    profile_exec = MagicMock()
-    profile_exec.scalar_one_or_none.return_value = profile
-
-    insert_exec = MagicMock()
-    insert_exec.rowcount = 0   # row already existed → INSERT OR IGNORE → 0 rows affected
-
-    db.execute.side_effect = [profile_exec, insert_exec]
-
-    job = _make_job()
-
-    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[job])):
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
+               AsyncMock(return_value=[_make_job(posted_at="2026-06-14T10:00:00Z")])):
         inserted = await scrape_for_user(user_id=1, db=db)
 
     assert inserted == 0
+    # Only 2 execute calls — the INSERT was never issued
+    assert db.execute.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# scrape_for_user — same title+company but different date → kept
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_different_date_not_duplicate():
+    profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),  # SELECT profile
+        _no_dup_exec(),           # dedup SELECT → no row for this date
+        _insert_exec(1),          # INSERT → inserted
+    ]
+
+    job = _make_job(posted_at="2026-06-15T10:00:00Z")  # different date from any existing
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
+               AsyncMock(return_value=[job])):
+        inserted = await scrape_for_user(user_id=1, db=db)
+
+    assert inserted == 1
 
 
 # ---------------------------------------------------------------------------
@@ -147,11 +169,8 @@ async def test_duplicate_job_not_counted():
 @pytest.mark.asyncio
 async def test_scraper_error_is_handled():
     profile = _make_profile(target_titles=["SRE"], target_industries=[])
-    db      = AsyncMock()
-
-    profile_exec = MagicMock()
-    profile_exec.scalar_one_or_none.return_value = profile
-    db.execute.return_value = profile_exec
+    db = AsyncMock()
+    db.execute.return_value = _profile_exec(profile)
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
                AsyncMock(side_effect=RuntimeError("network error"))):
@@ -171,17 +190,16 @@ async def test_industry_filter_drops_non_matching():
         target_industries=["Banking & Financial Services"],
     )
     db = AsyncMock()
-    profile_exec = MagicMock()
-    profile_exec.scalar_one_or_none.return_value = profile
-    db.execute.return_value = profile_exec
+    db.execute.return_value = _profile_exec(profile)
 
     job = _make_job(inferred_industries=["Healthcare & Life Sciences"])
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[job])):
         inserted = await scrape_for_user(user_id=1, db=db)
 
-    # 0 because the job was filtered out before any INSERT
+    # Filtered before dedup check — only 1 execute call (profile select)
     assert inserted == 0
+    assert db.execute.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -195,14 +213,11 @@ async def test_industry_filter_passes_matching():
         target_industries=["Banking & Financial Services"],
     )
     db = AsyncMock()
-
-    profile_exec = MagicMock()
-    profile_exec.scalar_one_or_none.return_value = profile
-
-    insert_exec = MagicMock()
-    insert_exec.rowcount = 1
-
-    db.execute.side_effect = [profile_exec, insert_exec]
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _no_dup_exec(),
+        _insert_exec(1),
+    ]
 
     job = _make_job(inferred_industries=["Banking & Finance"])  # fuzzy match ≥0.80
 
@@ -220,17 +235,14 @@ async def test_industry_filter_passes_matching():
 async def test_job_with_empty_url_is_skipped():
     profile = _make_profile(target_titles=["DevOps"], target_industries=[])
     db = AsyncMock()
+    db.execute.return_value = _profile_exec(profile)
 
-    profile_exec = MagicMock()
-    profile_exec.scalar_one_or_none.return_value = profile
-    db.execute.return_value = profile_exec
-
-    job = _make_job(url="")  # no URL → can't extract UUID
-
-    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[job])):
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
+               AsyncMock(return_value=[_make_job(url="")])):
         inserted = await scrape_for_user(user_id=1, db=db)
 
     assert inserted == 0
+    assert db.execute.call_count == 1  # only profile select
 
 
 # ---------------------------------------------------------------------------
@@ -240,12 +252,12 @@ async def test_job_with_empty_url_is_skipped():
 @pytest.mark.asyncio
 async def test_scrape_for_all_users_calls_each_user():
     db = AsyncMock()
-
     users_exec = MagicMock()
     users_exec.fetchall.return_value = [(1,), (2,)]
     db.execute.return_value = users_exec
 
-    with patch("app.pipeline.daily_scrape.scrape_for_user", AsyncMock(return_value=5)) as mock_scrape:
+    with patch("app.pipeline.daily_scrape.scrape_for_user",
+               AsyncMock(return_value=5)) as mock_scrape:
         await scrape_for_all_users(db)
 
     assert mock_scrape.call_count == 2
@@ -260,7 +272,6 @@ async def test_scrape_for_all_users_calls_each_user():
 @pytest.mark.asyncio
 async def test_scrape_for_all_users_continues_on_error():
     db = AsyncMock()
-
     users_exec = MagicMock()
     users_exec.fetchall.return_value = [(1,), (2,)]
     db.execute.return_value = users_exec

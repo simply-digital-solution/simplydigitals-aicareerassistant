@@ -1,8 +1,10 @@
 """
 Daily scraper — pulls MCF jobs for every user based on their profile.
 
-Designed to be called by the scheduler at 07:00 SGT and via the on-demand
-POST /research/scrape endpoint. Inserts only new job UUIDs (INSERT OR IGNORE).
+Deduplication rule: skip if (user_id, title, company, date(posted_at)) already
+exists. Same job re-posted on a different date is kept — it may have updated
+requirements. Same job on the same date is a true duplicate (MCF assigns a new
+UUID to the same posting) and is dropped.
 """
 import json
 import logging
@@ -12,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 
 from app.pipeline.scraper import scrape_mycareersfuture
-from app.shared.models import Profile, JobPosting
+from app.shared.models import Profile
 from app.modules.agents.router import _filter_by_industry
 
 logger = logging.getLogger(__name__)
@@ -64,9 +66,29 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                 except ValueError:
                     pass
 
+            job_title   = job.get("title", "")
+            job_company = job.get("company", "")
+            posted_date = posted_at.date().isoformat() if posted_at else None
+
+            # Deduplicate: skip if same title+company+date already stored for this user
+            dup = await db.execute(
+                text("""
+                    SELECT 1 FROM job_postings
+                    WHERE user_id = :uid
+                      AND title   = :title
+                      AND company = :company
+                      AND date(posted_at) = :posted_date
+                    LIMIT 1
+                """),
+                {"uid": user_id, "title": job_title, "company": job_company,
+                 "posted_date": posted_date},
+            )
+            if dup.fetchone():
+                continue
+
             row = await db.execute(
                 text("""
-                    INSERT OR IGNORE INTO job_postings
+                    INSERT INTO job_postings
                         (user_id, mcf_uuid, title, company, url, location,
                          description, inferred_industries, posted_at, scraped_at, scored)
                     VALUES
@@ -74,16 +96,16 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                          :description, :industries, :posted_at, :scraped_at, 0)
                 """),
                 {
-                    "user_id": user_id,
-                    "uuid": uuid,
-                    "title": job.get("title", ""),
-                    "company": job.get("company", ""),
-                    "url": job.get("url", ""),
-                    "location": job.get("location", ""),
+                    "user_id":     user_id,
+                    "uuid":        uuid,
+                    "title":       job_title,
+                    "company":     job_company,
+                    "url":         job.get("url", ""),
+                    "location":    job.get("location", ""),
                     "description": job.get("description", ""),
-                    "industries": json.dumps(job.get("inferred_industries") or []),
-                    "posted_at": posted_at.isoformat() if posted_at else None,
-                    "scraped_at": now.isoformat(),
+                    "industries":  json.dumps(job.get("inferred_industries") or []),
+                    "posted_at":   posted_at.isoformat() if posted_at else None,
+                    "scraped_at":  now.isoformat(),
                 },
             )
             inserted += row.rowcount
