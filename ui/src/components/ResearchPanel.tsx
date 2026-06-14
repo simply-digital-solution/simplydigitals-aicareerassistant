@@ -4,6 +4,7 @@ import { useAgentStream } from '../hooks/useAgentStream'
 import type { ResearchOutput, JobOpportunity, ProfileData } from '../api/client'
 import api from '../api/client'
 import AgentPanel from './AgentPanel'
+import TagInput from './profile/TagInput'
 
 type FeedbackMap = Record<string, 'relevant' | 'not_relevant'>
 
@@ -154,6 +155,29 @@ export default function ResearchPanel() {
     queryClient.invalidateQueries({ queryKey: ['research-feedback'] })
   }
 
+  // Target roles/industries — editable here, synced to profile on Save
+  const [titles, setTitles] = useState<string[]>([])
+  const [industries, setIndustries] = useState<string[]>([])
+  const [targetsDirty, setTargetsDirty] = useState(false)
+  const [targetsSaving, setTargetsSaving] = useState(false)
+
+  const handleTitles = (next: string[]) => { setTitles(next); setTargetsDirty(true) }
+  const handleIndustries = (next: string[]) => { setIndustries(next); setTargetsDirty(true) }
+
+  const saveTargets = async () => {
+    setTargetsSaving(true)
+    try {
+      await api.patch('/profile', {
+        target_titles: JSON.stringify(titles),
+        target_industries: JSON.stringify(industries),
+      })
+      setTargetsDirty(false)
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
+    } finally {
+      setTargetsSaving(false)
+    }
+  }
+
   // Search fields — pre-filled from profile, overridable per-search
   const [location, setLocation] = useState('')
   const [remotePref, setRemotePref] = useState('any')
@@ -169,6 +193,8 @@ export default function ResearchPanel() {
   // Pre-fill from profile once loaded
   useEffect(() => {
     if (profile && !profileLoaded) {
+      setTitles(parseJsonArray(profile.target_titles))
+      setIndustries(parseJsonArray(profile.target_industries))
       const locations = parseJsonArray(profile.target_locations)
       if (locations.length > 0) setLocation(locations[0])
       if (profile.remote_preference) setRemotePref(profile.remote_preference)
@@ -185,6 +211,8 @@ export default function ResearchPanel() {
     useAgentStream<ResearchOutput>({ endpoint: '/agents/research' })
 
   const buildFilters = () => ({
+    ...(titles.length > 0 ? { target_titles: titles } : {}),
+    ...(industries.length > 0 ? { target_industries: industries } : {}),
     ...(location ? { location } : {}),
     ...(remotePref !== 'any' ? { remote_preference: remotePref } : {}),
     ...(employmentType !== 'any' ? { employment_type: employmentType } : {}),
@@ -202,35 +230,40 @@ export default function ResearchPanel() {
     run({ job_postings: [{ title: 'Role', company: '', url: '', description: manualJd }] })
   }
 
-  const profileIndustries = parseJsonArray(profile?.target_industries)
-  const profileTitles = parseJsonArray(profile?.target_titles)
-
   const form = (
     <div className="space-y-5">
 
-      {/* Profile context banner */}
-      {(profileTitles.length > 0 || profileIndustries.length > 0) && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className="text-xs text-gray-500 font-medium shrink-0">Targeting:</span>
-          {profileTitles.map(t => (
-            <span key={t} className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
-              {t}
-            </span>
-          ))}
-          {profileIndustries.length > 0 && profileTitles.length > 0 && (
-            <span className="text-xs text-gray-300">·</span>
-          )}
-          {profileIndustries.map(ind => (
-            <span key={ind} className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full">
-              {ind}
-            </span>
-          ))}
-          <a href="#" onClick={e => e.preventDefault()}
-            className="text-xs text-gray-400 hover:text-gray-600 ml-auto">
-            Edit in Profile →
-          </a>
+      {/* Target Roles + Industries — editable, synced to Profile */}
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-700">Targeting</span>
+          <button
+            type="button"
+            onClick={saveTargets}
+            disabled={!targetsDirty || targetsSaving}
+            className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+          >
+            {targetsSaving ? 'Saving…' : 'Save'}
+          </button>
         </div>
-      )}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Target Job Titles</label>
+          <TagInput
+            tags={titles}
+            onChange={handleTitles}
+            placeholder="e.g. Product Manager"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Target Industries</label>
+          <TagInput
+            tags={industries}
+            onChange={handleIndustries}
+            placeholder="e.g. Banking & Finance"
+            colorCls="bg-purple-50 text-purple-700"
+          />
+        </div>
+      </div>
 
       <form onSubmit={handleSearch} className="space-y-4">
 
