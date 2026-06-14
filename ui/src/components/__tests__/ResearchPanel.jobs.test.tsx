@@ -7,7 +7,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ResearchPanel from '../ResearchPanel'
-import { useAgentStream } from '../../hooks/useAgentStream'
 import api from '../../api/client'
 import type { StoredJob } from '../../api/client'
 
@@ -21,18 +20,6 @@ vi.mock('../../api/client', () => ({
     post:  vi.fn(),
     patch: vi.fn().mockResolvedValue({}),
   },
-}))
-
-vi.mock('../../hooks/useAgentStream', () => ({
-  useAgentStream: vi.fn(() => ({
-    status: 'idle',
-    chunks: '',
-    result: null,
-    meta:   null,
-    error:  null,
-    run:    vi.fn(),
-    reset:  vi.fn(),
-  })),
 }))
 
 // ---------------------------------------------------------------------------
@@ -87,10 +74,6 @@ function wrap() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(useAgentStream).mockReturnValue({
-    status: 'idle', chunks: '', result: null, meta: null, error: null,
-    run: vi.fn(), reset: vi.fn(),
-  })
 })
 
 function setupApiMocks(jobs: StoredJob[] = [], total?: number) {
