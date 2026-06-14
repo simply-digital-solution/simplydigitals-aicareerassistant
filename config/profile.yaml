@@ -1,0 +1,62 @@
+# AI Career Assistant — User Profile
+# This file is read by agents at startup. Edit it with your real details.
+# IMPORTANT: Do not include API keys, passwords, or credentials here.
+
+personal:
+  name: "Your Name"
+  linkedin_url: "https://www.linkedin.com/in/your-profile"
+
+# What you're looking for
+targets:
+  roles:
+    - "Senior Product Manager"
+    - "Head of Product"
+    - "Director of Product"
+  locations:
+    - "Singapore"
+    - "Remote"
+    - "London"
+  industries:
+    - "FinTech"
+    - "B2B SaaS"
+    - "Climate Tech"
+  seniority: "senior"           # junior | mid | senior | staff | director | vp
+
+# Compensation
+compensation:
+  min_base: 150000
+  preferred_total: 200000
+  currency: "SGD"
+  open_to_equity: true
+
+# Professional background (used by agents for tailoring — no PII)
+background:
+  years_experience: 8
+  current_title: "Product Manager"
+  education: "MBA, NUS Business School"
+  skills:
+    - "Product strategy"
+    - "Stakeholder management"
+    - "SQL"
+    - "Agile / Scrum"
+    - "User research"
+    - "Roadmapping"
+  experience_summary: |
+    8 years in B2B product roles across FinTech and SaaS.
+    Led 0-to-1 product launches, managed cross-functional teams of 10+,
+    and scaled products from 0 to $5M ARR.
+    Strong background in data-driven decision making and OKR frameworks.
+
+# Hard rules for agents
+rules:
+  excluded_companies: []         # e.g. ["Company X", "Company Y"]
+  excluded_industries: []        # e.g. ["gambling", "tobacco"]
+  requires_visa_sponsorship: false
+  remote_only: false
+  max_commute_minutes: 60
+
+# Cover letter preferences (used by Resume and Application agents)
+communication_style:
+  cover_letter: "concise, 3 paragraphs max, no buzzwords"
+  outreach: "professional but warm"
+  follow_up_tone: "brief and direct"

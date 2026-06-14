@@ -1,0 +1,43 @@
+# Environment
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+*.egg
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs (keep directory, not contents)
+logs/*.jsonl
+logs/*.log
+
+# Node
+node_modules/
+ui/dist/
+ui/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Playwright
+playwright/.auth/
+
+# Data (raw scraped data, not templates)
+data/jobs_raw/
+data/companies/
