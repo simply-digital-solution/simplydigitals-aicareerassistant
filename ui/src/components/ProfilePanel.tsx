@@ -5,7 +5,6 @@ import ResumeSection from './profile/ResumeSection'
 import SkillsSection from './profile/SkillsSection'
 import TargetRolesSection from './profile/TargetRolesSection'
 import PreferencesSection from './profile/PreferencesSection'
-import SkillGapPanel from './SkillGapPanel'
 
 export default function ProfilePanel() {
   const qc = useQueryClient()
@@ -32,7 +31,6 @@ export default function ProfilePanel() {
       <SkillsSection data={data} onSaved={invalidate} />
       <TargetRolesSection data={data} onSaved={invalidate} />
       <PreferencesSection data={data} onSaved={invalidate} />
-      <SkillGapPanel />
     </div>
   )
 }
