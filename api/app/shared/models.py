@@ -331,6 +331,34 @@ class TitleSkillMap(Base):
 
 
 # ---------------------------------------------------------------------------
+# Job postings (auto-scraped, scored in background)
+# ---------------------------------------------------------------------------
+
+class JobPosting(Base):
+    __tablename__ = "job_postings"
+    __table_args__ = (UniqueConstraint("user_id", "mcf_uuid"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    mcf_uuid = Column(String(100), nullable=False)
+    title = Column(String(255), nullable=False)
+    company = Column(String(255), nullable=False)
+    url = Column(String(1000), nullable=False)
+    location = Column(String(255))
+    description = Column(Text)
+    inferred_industries = Column(Text)          # JSON array
+    posted_at = Column(DateTime(timezone=True))
+    scraped_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+    # LLM scoring fields — null until scored
+    scored = Column(Boolean, default=False, nullable=False, index=True)
+    fit_score = Column(Float)
+    reasons = Column(Text)                      # JSON array
+    risks = Column(Text)                        # JSON array
+    key_keywords = Column(Text)                 # JSON array
+    scored_at = Column(DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------------------
 # Budget tracking
 # ---------------------------------------------------------------------------
 

@@ -889,6 +889,70 @@ async def save_job_feedback(
     return {"status": "saved"}
 
 
+@router.get("/research/jobs")
+async def get_stored_jobs(
+    page: int = 1,
+    per_page: int = 20,
+    role: str = "",
+    days: int = 0,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return paginated stored job postings for the current user.
+    Ordered by posted_at DESC (most recent first).
+    Optionally filter by role title and/or recency (days).
+    """
+    offset = (page - 1) * per_page
+
+    where_clauses = ["user_id = :uid"]
+    params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
+
+    if role:
+        where_clauses.append("title = :role")
+        params["role"] = role
+
+    if days > 0:
+        where_clauses.append(
+            "posted_at >= datetime('now', :cutoff)"
+        )
+        params["cutoff"] = f"-{days} days"
+
+    where_sql = " AND ".join(where_clauses)
+
+    count_row = await db.execute(
+        text(f"SELECT COUNT(*) FROM job_postings WHERE {where_sql}"),
+        params,
+    )
+    total = count_row.scalar_one()
+
+    rows = await db.execute(
+        text(f"""
+            SELECT id, mcf_uuid, title, company, url, location,
+                   inferred_industries, posted_at, scraped_at,
+                   scored, fit_score, reasons, risks, key_keywords, scored_at
+            FROM job_postings
+            WHERE {where_sql}
+            ORDER BY posted_at DESC, scraped_at DESC
+            LIMIT :limit OFFSET :offset
+        """),
+        params,
+    )
+    jobs = [dict(r) for r in rows.mappings()]
+    return {"total": total, "page": page, "per_page": per_page, "jobs": jobs}
+
+
+@router.post("/research/scrape")
+async def trigger_scrape(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """On-demand scrape for the current user — same as the daily job but immediate."""
+    from app.pipeline.daily_scrape import scrape_for_user
+    inserted = await scrape_for_user(current_user.id, db)
+    return {"inserted": inserted}
+
+
 @router.get("/research/feedback")
 async def get_job_feedback(
     current_user = Depends(get_current_user),

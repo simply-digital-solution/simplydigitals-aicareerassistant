@@ -80,6 +80,31 @@ export interface ResearchOutput {
   opportunities: JobOpportunity[]
 }
 
+export interface StoredJob {
+  id: number
+  mcf_uuid: string
+  title: string
+  company: string
+  url: string
+  location: string | null
+  inferred_industries: string | null   // JSON string from DB
+  posted_at: string | null
+  scraped_at: string
+  scored: boolean
+  fit_score: number | null
+  reasons: string | null               // JSON string from DB
+  risks: string | null                 // JSON string from DB
+  key_keywords: string | null          // JSON string from DB
+  scored_at: string | null
+}
+
+export interface StoredJobsResponse {
+  total: number
+  page: number
+  per_page: number
+  jobs: StoredJob[]
+}
+
 export interface LineEdit {
   original: string
   suggested: string
