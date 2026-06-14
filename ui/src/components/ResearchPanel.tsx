@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
-import type { KeyboardEvent } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAgentStream } from '../hooks/useAgentStream'
 import type { ResearchOutput, JobOpportunity, ProfileData } from '../api/client'
@@ -123,52 +122,6 @@ function OpportunityCard({
   )
 }
 
-function TagInput({ tags, onChange, placeholder }: {
-  tags: string[]
-  onChange: (tags: string[]) => void
-  placeholder?: string
-}) {
-  const [input, setInput] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const addTag = () => {
-    const val = input.trim()
-    const isDupe = tags.some(t => t.toLowerCase() === val.toLowerCase())
-    if (val && !isDupe) onChange([...tags, val])
-    setInput('')
-  }
-
-  const removeTag = (index: number) => onChange(tags.filter((_, i) => i !== index))
-
-  const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() }
-    else if (e.key === 'Backspace' && !input && tags.length > 0) onChange(tags.slice(0, -1))
-  }
-
-  return (
-    <div
-      className="min-h-[38px] flex flex-wrap gap-1.5 items-center border border-gray-300 rounded-lg px-2 py-1.5 focus-within:ring-2 focus-within:ring-indigo-400 bg-white cursor-text"
-      onClick={() => inputRef.current?.focus()}
-    >
-      {tags.map((tag, i) => (
-        <span key={i} className="flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-md border border-indigo-200">
-          {tag}
-          <button type="button" onClick={e => { e.stopPropagation(); removeTag(i) }} className="opacity-50 hover:opacity-100 leading-none">×</button>
-        </span>
-      ))}
-      <input
-        ref={inputRef}
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={handleKey}
-        onBlur={addTag}
-        placeholder={tags.length === 0 ? placeholder : ''}
-        className="flex-1 min-w-[120px] text-sm outline-none bg-transparent placeholder-gray-400"
-      />
-    </div>
-  )
-}
-
 function parseJsonArray(val: string | null | undefined): string[] {
   if (!val) return []
   try { return JSON.parse(val) } catch { return [] }
@@ -202,13 +155,11 @@ export default function ResearchPanel() {
   }
 
   // Search fields — pre-filled from profile, overridable per-search
-  const [query, setQuery] = useState('')
   const [location, setLocation] = useState('')
   const [remotePref, setRemotePref] = useState('any')
   const [employmentType, setEmploymentType] = useState('any')
   const [salaryFloor, setSalaryFloor] = useState('')
   const [salaryCurrency, setSalaryCurrency] = useState('USD')
-  const [skills, setSkills] = useState<string[]>([])
   const [excludedCompanies, setExcludedCompanies] = useState('')
   const [profileLoaded, setProfileLoaded] = useState(false)
 
@@ -224,8 +175,6 @@ export default function ResearchPanel() {
       if (profile.employment_type) setEmploymentType(profile.employment_type)
       if (profile.salary_floor) setSalaryFloor(String(profile.salary_floor))
       if (profile.salary_currency) setSalaryCurrency(profile.salary_currency)
-      const skillsList = parseJsonArray(profile.skills)
-      if (skillsList.length > 0) setSkills(skillsList)
       const excluded = parseJsonArray(profile.excluded_companies)
       if (excluded.length > 0) setExcludedCompanies(excluded.join(', '))
       setProfileLoaded(true)
@@ -240,18 +189,17 @@ export default function ResearchPanel() {
     ...(remotePref !== 'any' ? { remote_preference: remotePref } : {}),
     ...(employmentType !== 'any' ? { employment_type: employmentType } : {}),
     ...(salaryFloor ? { salary_floor: parseInt(salaryFloor), salary_currency: salaryCurrency } : {}),
-    ...(skills.length > 0 ? { required_skills: skills } : {}),
     ...(excludedCompanies ? { excluded_companies: excludedCompanies.split(',').map(s => s.trim()).filter(Boolean) } : {}),
   })
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    run({ query, ...buildFilters() })
+    run({ ...buildFilters() })
   }
 
   const handleManual = (e: React.FormEvent) => {
     e.preventDefault()
-    run({ job_postings: [{ title: query || 'Role', company: '', url: '', description: manualJd }] })
+    run({ job_postings: [{ title: 'Role', company: '', url: '', description: manualJd }] })
   }
 
   const profileIndustries = parseJsonArray(profile?.target_industries)
@@ -286,22 +234,13 @@ export default function ResearchPanel() {
 
       <form onSubmit={handleSearch} className="space-y-4">
 
-        {/* Row 1: title + location */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Job title <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <input value={query} onChange={e => setQuery(e.target.value)}
-              placeholder="e.g. Senior Product Manager" className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Location <span className="text-red-500">*</span>
-            </label>
-            <input value={location} onChange={e => setLocation(e.target.value)}
-              placeholder="e.g. Singapore, Remote" required className={inputCls} />
-          </div>
+        {/* Location */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Location <span className="text-red-500">*</span>
+          </label>
+          <input value={location} onChange={e => setLocation(e.target.value)}
+            placeholder="e.g. Singapore, Remote" required className={inputCls} />
         </div>
 
         {/* Row 2: remote + employment */}
@@ -342,15 +281,6 @@ export default function ResearchPanel() {
               <input type="number" min={0} value={salaryFloor} onChange={e => setSalaryFloor(e.target.value)}
                 placeholder="120000" className={inputCls} />
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Must-have skills</label>
-            <TagInput
-              tags={skills}
-              onChange={setSkills}
-              placeholder="Python, SQL…"
-            />
-            <p className="text-xs text-gray-400 mt-0.5">Type and press Enter · duplicates ignored</p>
           </div>
         </div>
 
