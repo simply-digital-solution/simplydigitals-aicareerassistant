@@ -162,6 +162,8 @@ export default function ResearchPanel() {
   const titles     = parseJsonArray(profile?.target_titles)
   const industries = parseJsonArray(profile?.target_industries)
 
+  const [targetingOpen, setTargetingOpen] = useState(false)
+
   // Latest Jobs state
   const [page, setPage] = useState(1)
   const [filterRole, setFilterRole] = useState('')
@@ -201,30 +203,47 @@ export default function ResearchPanel() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* ── Targeting (read-only) ── */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-800">Targeting</span>
-          <a href="#profile" className="text-xs text-indigo-500 hover:underline">Edit in Profile →</a>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Job Titles</p>
-          {titles.length === 0
-            ? <p className="text-xs text-gray-400 italic">None set — <a href="#profile" className="underline">add in Profile</a></p>
-            : <div className="flex flex-wrap gap-1">
-                {titles.map(t => <span key={t} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">{t}</span>)}
-              </div>
-          }
-        </div>
-        <div>
-          <p className="text-xs font-medium text-gray-500 mb-1">Industries</p>
-          {industries.length === 0
-            ? <p className="text-xs text-gray-400 italic">None set — <a href="#profile" className="underline">add in Profile</a></p>
-            : <div className="flex flex-wrap gap-1">
-                {industries.map(i => <span key={i} className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md">{i}</span>)}
-              </div>
-          }
-        </div>
+      {/* ── Targeting (collapsible, read-only) ── */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setTargetingOpen(v => !v)}
+          className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+          aria-expanded={targetingOpen}
+        >
+          <span className="text-sm font-semibold text-gray-800">
+            Targeting <span className="ml-1 text-xs font-normal text-gray-400">{targetingOpen ? '▲' : '▼'}</span>
+          </span>
+          <a
+            href="#profile"
+            onClick={e => e.stopPropagation()}
+            className="text-xs text-indigo-500 hover:underline"
+          >
+            Edit in Profile →
+          </a>
+        </button>
+        {targetingOpen && (
+          <div className="px-5 pb-4 space-y-3 border-t border-gray-100">
+            <div className="pt-3">
+              <p className="text-xs font-medium text-gray-500 mb-1">Job Titles</p>
+              {titles.length === 0
+                ? <p className="text-xs text-gray-400 italic">None set — <a href="#profile" className="underline">add in Profile</a></p>
+                : <div className="flex flex-wrap gap-1">
+                    {titles.map(t => <span key={t} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">{t}</span>)}
+                  </div>
+              }
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 mb-1">Industries</p>
+              {industries.length === 0
+                ? <p className="text-xs text-gray-400 italic">None set — <a href="#profile" className="underline">add in Profile</a></p>
+                : <div className="flex flex-wrap gap-1">
+                    {industries.map(i => <span key={i} className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md">{i}</span>)}
+                  </div>
+              }
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Latest Jobs ── */}

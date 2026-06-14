@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ResearchPanel from '../ResearchPanel'
@@ -63,34 +63,35 @@ describe('removed fields', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Targeting block (read-only)
+// Targeting block (collapsible, read-only)
 // ---------------------------------------------------------------------------
 
 describe('targeting block', () => {
-  it('renders the Targeting heading', () => {
+  it('renders the Targeting toggle button', () => {
     wrap()
-    expect(screen.getByText('Targeting')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /targeting/i })).toBeInTheDocument()
   })
 
-  it('renders an Edit in Profile link', () => {
+  it('is collapsed by default — chips not visible', () => {
     wrap()
-    expect(screen.getAllByRole('link', { name: /edit in profile/i })[0]).toBeInTheDocument()
+    expect(screen.queryByText('Product Manager')).not.toBeInTheDocument()
+  })
+
+  it('expands when the header is clicked', async () => {
+    wrap()
+    fireEvent.click(screen.getByRole('button', { name: /targeting/i }))
+    expect(await screen.findByText('Product Manager')).toBeInTheDocument()
+    expect(await screen.findByText('Technology & Software')).toBeInTheDocument()
+  })
+
+  it('shows Edit in Profile link in the header', () => {
+    wrap()
+    expect(screen.getByRole('link', { name: /edit in profile/i })).toBeInTheDocument()
   })
 
   it('does not render a Save button', () => {
     wrap()
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
-  })
-
-  it('shows profile job titles as read-only chips', async () => {
-    wrap()
-    expect(await screen.findByText('Product Manager')).toBeInTheDocument()
-    expect(await screen.findByText('Data Analyst')).toBeInTheDocument()
-  })
-
-  it('shows profile industries as read-only chips', async () => {
-    wrap()
-    expect(await screen.findByText('Technology & Software')).toBeInTheDocument()
   })
 })
 
