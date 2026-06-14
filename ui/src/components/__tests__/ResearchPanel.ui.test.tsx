@@ -63,23 +63,34 @@ describe('removed fields', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Targeting block
+// Targeting block (read-only)
 // ---------------------------------------------------------------------------
 
 describe('targeting block', () => {
-  it('renders Target Job Titles label', () => {
+  it('renders the Targeting heading', () => {
     wrap()
-    expect(screen.getByText('Target Job Titles')).toBeInTheDocument()
+    expect(screen.getByText('Targeting')).toBeInTheDocument()
   })
 
-  it('renders Target Industries label', () => {
+  it('renders an Edit in Profile link', () => {
     wrap()
-    expect(screen.getByText('Target Industries')).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /edit in profile/i })[0]).toBeInTheDocument()
   })
 
-  it('renders a Save button for targeting', () => {
+  it('does not render a Save button', () => {
     wrap()
-    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
+  })
+
+  it('shows profile job titles as read-only chips', async () => {
+    wrap()
+    expect(await screen.findByText('Product Manager')).toBeInTheDocument()
+    expect(await screen.findByText('Data Analyst')).toBeInTheDocument()
+  })
+
+  it('shows profile industries as read-only chips', async () => {
+    wrap()
+    expect(await screen.findByText('Technology & Software')).toBeInTheDocument()
   })
 })
 

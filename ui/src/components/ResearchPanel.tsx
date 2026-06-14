@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ProfileData, StoredJobsResponse, StoredJob } from '../api/client'
 import api from '../api/client'
-import TagInput from './profile/TagInput'
 
 type FeedbackMap = Record<string, 'relevant' | 'not_relevant'>
 
@@ -156,38 +155,12 @@ export default function ResearchPanel() {
     queryClient.invalidateQueries({ queryKey: ['research-feedback'] })
   }
 
-  // Target roles/industries — editable here, synced to profile on Save
   const { data: profile } = useQuery<ProfileData>({
     queryKey: ['profile'],
     queryFn: () => api.get<ProfileData>('/profile').then(r => r.data),
   })
-  const [titles, setTitles] = useState<string[]>([])
-  const [industries, setIndustries] = useState<string[]>([])
-  const [targetsDirty, setTargetsDirty] = useState(false)
-  const [targetsSaving, setTargetsSaving] = useState(false)
-  const [profileLoaded, setProfileLoaded] = useState(false)
-
-  useEffect(() => {
-    if (profile && !profileLoaded) {
-      setTitles(parseJsonArray(profile.target_titles))
-      setIndustries(parseJsonArray(profile.target_industries))
-      setProfileLoaded(true)
-    }
-  }, [profile, profileLoaded])
-
-  const saveTargets = async () => {
-    setTargetsSaving(true)
-    try {
-      await api.patch('/profile', {
-        target_titles: JSON.stringify(titles),
-        target_industries: JSON.stringify(industries),
-      })
-      setTargetsDirty(false)
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
-    } finally {
-      setTargetsSaving(false)
-    }
-  }
+  const titles     = parseJsonArray(profile?.target_titles)
+  const industries = parseJsonArray(profile?.target_industries)
 
   // Latest Jobs state
   const [page, setPage] = useState(1)
@@ -228,30 +201,29 @@ export default function ResearchPanel() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* ── Targeting ── */}
+      {/* ── Targeting (read-only) ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-800">Targeting</span>
-          <button
-            onClick={saveTargets}
-            disabled={!targetsDirty || targetsSaving}
-            className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-          >
-            {targetsSaving ? 'Saving…' : 'Save'}
-          </button>
+          <a href="#profile" className="text-xs text-indigo-500 hover:underline">Edit in Profile →</a>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Target Job Titles</label>
-          <TagInput tags={titles} onChange={next => { setTitles(next); setTargetsDirty(true) }} placeholder="e.g. Product Manager" />
+          <p className="text-xs font-medium text-gray-500 mb-1">Job Titles</p>
+          {titles.length === 0
+            ? <p className="text-xs text-gray-400 italic">None set — <a href="#profile" className="underline">add in Profile</a></p>
+            : <div className="flex flex-wrap gap-1">
+                {titles.map(t => <span key={t} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md">{t}</span>)}
+              </div>
+          }
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Target Industries</label>
-          <TagInput
-            tags={industries}
-            onChange={next => { setIndustries(next); setTargetsDirty(true) }}
-            placeholder="e.g. Banking & Finance"
-            colorCls="bg-purple-50 text-purple-700"
-          />
+          <p className="text-xs font-medium text-gray-500 mb-1">Industries</p>
+          {industries.length === 0
+            ? <p className="text-xs text-gray-400 italic">None set — <a href="#profile" className="underline">add in Profile</a></p>
+            : <div className="flex flex-wrap gap-1">
+                {industries.map(i => <span key={i} className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md">{i}</span>)}
+              </div>
+          }
         </div>
       </div>
 

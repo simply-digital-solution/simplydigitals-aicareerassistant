@@ -150,7 +150,11 @@ describe('LatestJobs — job card', () => {
   it('renders industry tags', async () => {
     setupApiMocks([makeJob({ inferred_industries: JSON.stringify(['Technology & Software']) })])
     wrap()
-    expect(await screen.findByText('Technology & Software')).toBeInTheDocument()
+    // May appear in both the Targeting chip and the job card — either is fine
+    const matches = await screen.findAllByText('Technology & Software')
+    expect(matches.length).toBeGreaterThan(0)
+    // The teal job-card chip specifically
+    expect(matches.some(el => el.className.includes('teal'))).toBe(true)
   })
 
   it('renders keyword chips', async () => {
