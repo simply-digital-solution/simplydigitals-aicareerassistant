@@ -51,7 +51,7 @@ def _build_user_message(
     if seniority:
         lines.append(f"- Seniority: {seniority}")
     lines.append(f"- Years experience: {profile.get('background', {}).get('years_experience', 'unknown')}")
-    lines.append(f"- Core skills: {', '.join(core_skills[:15]) if core_skills else 'none specified'}")
+    lines.append(f"- Core skills: {', '.join(core_skills[:50]) if core_skills else 'none specified'}")
     lines.append(f"- Location: {location}")
     lines.append(f"- Remote preference: {remote_pref}")
     lines.append(f"- Employment type: {employment_type}")
