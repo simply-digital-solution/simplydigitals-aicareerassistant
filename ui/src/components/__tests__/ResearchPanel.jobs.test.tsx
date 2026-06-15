@@ -303,50 +303,80 @@ describe('LatestJobs — feedback', () => {
     })
   })
 
-  it('thumbs-down shows reason picker instead of saving immediately', async () => {
+  it('thumbs-down shows reason input instead of saving immediately', async () => {
     setupApiMocks([makeJob()])
     wrap()
 
-    const thumbDown = await screen.findByTitle('Not relevant')
-    fireEvent.click(thumbDown)
+    fireEvent.click(await screen.findByTitle('Not relevant'))
 
     expect(await screen.findByText('Why not relevant?')).toBeInTheDocument()
-    expect(screen.getByText('Wrong industry')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/select or type a reason/i)).toBeInTheDocument()
     // API should NOT have been called yet
     expect(vi.mocked(api.post)).not.toHaveBeenCalled()
   })
 
-  it('selecting a reason chip saves feedback with reason', async () => {
-    vi.mocked(api.post).mockResolvedValue({ data: { status: 'saved' } })
-    setupApiMocks([makeJob()])
-    wrap()
-
-    const thumbDown = await screen.findByTitle('Not relevant')
-    fireEvent.click(thumbDown)
-
-    const chip = await screen.findByText('Wrong industry')
-    fireEvent.click(chip)
-
-    await waitFor(() => {
-      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/research/feedback', expect.objectContaining({
-        relevance: 'not_relevant',
-        reason:    'Wrong industry',
-        job_url:   'https://www.mycareersfuture.gov.sg/job/abc123',
-      }))
-    })
-  })
-
-  it('reason picker disappears after selecting a reason', async () => {
+  it('typing a custom reason and pressing Enter saves feedback', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { status: 'saved' } })
     setupApiMocks([makeJob()])
     wrap()
 
     fireEvent.click(await screen.findByTitle('Not relevant'))
-    fireEvent.click(await screen.findByText('Wrong industry'))
+    const input = await screen.findByPlaceholderText(/select or type a reason/i)
+    fireEvent.change(input, { target: { value: 'Salary too low' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/research/feedback', expect.objectContaining({
+        relevance: 'not_relevant',
+        reason:    'Salary too low',
+        job_url:   'https://www.mycareersfuture.gov.sg/job/abc123',
+      }))
+    })
+  })
+
+  it('selecting a preset reason via onChange saves feedback', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { status: 'saved' } })
+    setupApiMocks([makeJob()])
+    wrap()
+
+    fireEvent.click(await screen.findByTitle('Not relevant'))
+    const input = await screen.findByPlaceholderText(/select or type a reason/i)
+    fireEvent.change(input, { target: { value: 'Wrong industry' } })
+
+    await waitFor(() => {
+      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/research/feedback', expect.objectContaining({
+        relevance: 'not_relevant',
+        reason:    'Wrong industry',
+      }))
+    })
+  })
+
+  it('reason picker disappears after submitting', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { status: 'saved' } })
+    setupApiMocks([makeJob()])
+    wrap()
+
+    fireEvent.click(await screen.findByTitle('Not relevant'))
+    const input = await screen.findByPlaceholderText(/select or type a reason/i)
+    fireEvent.change(input, { target: { value: 'Wrong industry' } })
 
     await waitFor(() => {
       expect(screen.queryByText('Why not relevant?')).not.toBeInTheDocument()
     })
+  })
+
+  it('Escape key closes the reason picker', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    fireEvent.click(await screen.findByTitle('Not relevant'))
+    const input = await screen.findByPlaceholderText(/select or type a reason/i)
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Why not relevant?')).not.toBeInTheDocument()
+    })
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled()
   })
 
   it('saved reason label appears on card after selection', async () => {
@@ -355,7 +385,8 @@ describe('LatestJobs — feedback', () => {
     wrap()
 
     fireEvent.click(await screen.findByTitle('Not relevant'))
-    fireEvent.click(await screen.findByText('Wrong industry'))
+    const input = await screen.findByPlaceholderText(/select or type a reason/i)
+    fireEvent.change(input, { target: { value: 'Wrong industry' } })
 
     expect(await screen.findByText('👎 Wrong industry')).toBeInTheDocument()
   })

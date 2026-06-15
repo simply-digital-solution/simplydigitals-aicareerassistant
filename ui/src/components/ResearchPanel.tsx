@@ -192,16 +192,33 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
       {pickingReason && (
         <div className="pt-1">
           <p className="text-xs text-gray-500 mb-1.5">Why not relevant?</p>
-          <div className="flex flex-wrap gap-1.5">
-            {NOT_RELEVANT_REASONS.map(r => (
-              <button
-                key={r}
-                onClick={() => handleReasonSelect(r)}
-                className="text-xs border border-red-300 text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-full transition-colors"
-              >
-                {r}
-              </button>
-            ))}
+          <div className="flex gap-2">
+            <input
+              id={`reason-input-${job.id}`}
+              list={`reason-list-${job.id}`}
+              placeholder="Select or type a reason…"
+              autoFocus
+              className="text-xs border border-red-300 rounded-lg px-3 py-1.5 flex-1 focus:outline-none focus:ring-2 focus:ring-red-300 bg-white"
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  const val = (e.target as HTMLInputElement).value.trim()
+                  if (val) handleReasonSelect(val)
+                }
+                if (e.key === 'Escape') setPickingReason(false)
+              }}
+              onChange={e => {
+                const val = e.target.value.trim()
+                if (NOT_RELEVANT_REASONS.includes(val)) handleReasonSelect(val)
+              }}
+            />
+            <datalist id={`reason-list-${job.id}`}>
+              {NOT_RELEVANT_REASONS.map(r => <option key={r} value={r} />)}
+            </datalist>
+            <button
+              onClick={() => setPickingReason(false)}
+              className="text-xs text-gray-400 hover:text-gray-600 px-2"
+              aria-label="Cancel"
+            >✕</button>
           </div>
         </div>
       )}
