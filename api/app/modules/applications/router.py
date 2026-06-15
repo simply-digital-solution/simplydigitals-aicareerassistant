@@ -14,7 +14,7 @@ from .schemas import ApplicationCreate, ApplicationResponse, ApplicationUpdate, 
 
 router = APIRouter(prefix="/api/v1/applications", tags=["applications"])
 
-VALID_STATUSES = {"researching", "applied", "interviewing", "offered", "rejected", "withdrawn", "archived"}
+VALID_STATUSES = {"selected", "applied", "interviewing", "offered", "rejected", "withdrawn", "archived"}
 
 
 @router.get("/", response_model=list[ApplicationResponse])
@@ -98,7 +98,7 @@ async def get_pipeline(
 
     board: dict[str, list] = {s: [] for s in VALID_STATUSES}
     for app in apps:
-        status = app.status if app.status in VALID_STATUSES else "researching"
+        status = app.status if app.status in VALID_STATUSES else "selected"
         board[status].append(ApplicationResponse.model_validate(app))
 
     return board

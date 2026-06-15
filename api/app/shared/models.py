@@ -71,8 +71,8 @@ class Application(Base):
     jd_summary = Column(Text)             # Haiku-generated 200-token summary; used by all subsequent agents
     source_url = Column(String(1000))
     source = Column(String(100))          # linkedin | indeed | greenhouse | rss | manual
-    status = Column(String(50), default="researching", index=True)
-    # researching | applied | interviewing | offered | rejected | withdrawn | archived
+    status = Column(String(50), default="selected", index=True)
+    # selected | applied | interviewing | offered | rejected | withdrawn | archived
     fit_score = Column(Float)             # 0.0–1.0
     deadline = Column(Date)
     applied_at = Column(Date)

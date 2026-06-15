@@ -4,7 +4,7 @@ import { applicationsApi } from '../api/client'
 import type { Application, PipelineBoard } from '../api/client'
 
 const COLUMNS: { key: string; label: string; color: string }[] = [
-  { key: 'researching', label: 'Selected', color: 'bg-gray-100 border-gray-300' },
+  { key: 'selected', label: 'Selected', color: 'bg-gray-100 border-gray-300' },
   { key: 'applied', label: 'Applied', color: 'bg-blue-50 border-blue-300' },
   { key: 'interviewing', label: 'Interviewing', color: 'bg-yellow-50 border-yellow-300' },
   { key: 'offered', label: 'Offered', color: 'bg-green-50 border-green-300' },
