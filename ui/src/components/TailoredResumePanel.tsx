@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Document, Packer, Paragraph, TextRun, HeadingLevel,
-  AlignmentType, BorderStyle, TableRow, TableCell, Table,
-  WidthType,
+  Document, Packer, Paragraph, TextRun,
+  AlignmentType, BorderStyle,
 } from 'docx'
 import { researchApi } from '../api/client'
 import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExperience } from '../api/client'
@@ -14,50 +13,79 @@ interface TailoredResumePanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// .docx generation
+// .docx generation — matches the uploaded PDF template exactly
+//
+// Measurements are in twentieths of a point (twips): 1pt = 20 twips
+// Font sizes are in half-points: 11pt = 22, 28pt = 56, 10pt = 20
+// Colours are 6-digit hex without '#'
+// HEADING_BLUE matches the blue used in the PDF (#1F5C9E)
 // ---------------------------------------------------------------------------
+
+const HEADING_BLUE = '1F5C9E'
+const BODY_FONT   = 'Calibri'
+const BODY_SIZE   = 22   // 11pt in half-points
+const PAGE_WIDTH  = 9360 // usable width in twips (A4 minus 1" margins each side)
+
+function run(text: string, opts: ConstructorParameters<typeof TextRun>[0] = {}): TextRun {
+  return new TextRun({ font: BODY_FONT, size: BODY_SIZE, text, ...opts })
+}
 
 function sectionHeading(title: string): Paragraph {
   return new Paragraph({
-    text: title.toUpperCase(),
-    heading: HeadingLevel.HEADING_2,
-    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '888888' } },
-    spacing: { before: 240, after: 120 },
+    children: [
+      run(title.toUpperCase(), {
+        bold: false,
+        color: HEADING_BLUE,
+        size: BODY_SIZE,
+        font: BODY_FONT,
+      }),
+    ],
+    border: {
+      bottom: { style: BorderStyle.SINGLE, size: 6, color: HEADING_BLUE, space: 1 },
+    },
+    spacing: { before: 280, after: 100 },
   })
 }
 
 function experienceBlock(entry: GeneratedResumeExperience): Paragraph[] {
-  return [
-    new Paragraph({
-      children: [
-        new TextRun({ text: entry.title, bold: true }),
-        new TextRun({ text: `  ${entry.company}`, italics: true, color: '555555' }),
-        new TextRun({ text: `\t${entry.dates}`, color: '888888' }),
-      ],
-      spacing: { before: 120, after: 40 },
-      tabStops: [{ type: 'right' as const, position: 9000 }],
+  // Job title (bold) + italic company + right-aligned dates on one line via tab stop
+  const titleLine = new Paragraph({
+    children: [
+      run(entry.title, { bold: true }),
+      run('  '),
+      run(entry.company, { italics: true, color: '555555' }),
+      run('\t'),
+      run(entry.dates, { color: '888888' }),
+    ],
+    tabStops: [{ type: 'right' as const, position: PAGE_WIDTH }],
+    spacing: { before: 120, after: 40 },
+  })
+
+  const bullets = entry.bullets.map(
+    b => new Paragraph({
+      children: [run(b)],
+      bullet: { level: 0 },
+      spacing: { before: 20, after: 20 },
     }),
-    ...entry.bullets.map(
-      b => new Paragraph({
-        text: b,
-        bullet: { level: 0 },
-        spacing: { before: 40, after: 40 },
-      }),
-    ),
-  ]
+  )
+
+  return [titleLine, ...bullets]
 }
 
 export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''): Promise<void> {
   const children: Paragraph[] = [
+    // Candidate name — large, centered, bold
     new Paragraph({
-      text: resume.name,
-      heading: HeadingLevel.TITLE,
+      children: [
+        run(resume.name, { bold: true, size: 56, font: BODY_FONT }),  // 28pt
+      ],
       alignment: AlignmentType.CENTER,
-      spacing: { after: 80 },
+      spacing: { after: 60 },
     }),
+    // Headline — italic, centered, grey
     ...(resume.headline
       ? [new Paragraph({
-          children: [new TextRun({ text: resume.headline, italics: true, color: '555555' })],
+          children: [run(resume.headline, { italics: true, color: '555555' })],
           alignment: AlignmentType.CENTER,
           spacing: { after: 200 },
         })]
@@ -66,6 +94,7 @@ export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''
 
   for (const section of resume.sections) {
     children.push(sectionHeading(section.title))
+
     if (section.section_type === 'experience') {
       for (const entry of section.experience) {
         children.push(...experienceBlock(entry))
@@ -74,7 +103,7 @@ export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''
       for (const line of section.content) {
         children.push(
           new Paragraph({
-            text: line,
+            children: [run(line)],
             spacing: { before: 40, after: 40 },
           }),
         )
@@ -83,15 +112,20 @@ export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''
   }
 
   const doc = new Document({
-    sections: [{ children }],
-    styles: {
-      paragraphStyles: [
-        {
-          id: 'Normal',
-          name: 'Normal',
-          run: { font: 'Calibri', size: 22 },
+    sections: [{
+      properties: {
+        page: {
+          margin: { top: 720, bottom: 720, left: 1080, right: 1080 },  // 0.5" top/bottom, 0.75" sides
         },
-      ],
+      },
+      children,
+    }],
+    styles: {
+      default: {
+        document: {
+          run: { font: BODY_FONT, size: BODY_SIZE },
+        },
+      },
     },
   })
 
