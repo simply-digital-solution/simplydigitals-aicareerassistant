@@ -5,8 +5,7 @@ All external calls (MCF scraper, DB) are mocked so tests run without a live
 database or network connection.
 
 Per-job execute() call sequence (after profile select):
-  1. SELECT 1 ... (dedup check) → fetchone() returns None (no dup) or a row
-  2. INSERT ...                  → .rowcount
+  1. INSERT ... ON CONFLICT DO UPDATE ... → .rowcount (0 = dup unchanged, 1 = inserted/updated)
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -32,21 +31,8 @@ def _profile_exec(profile):
     return m
 
 
-def _no_dup_exec():
-    """Simulates the dedup SELECT finding no existing row."""
-    m = MagicMock()
-    m.fetchone.return_value = None
-    return m
-
-
-def _dup_exec():
-    """Simulates the dedup SELECT finding an existing row."""
-    m = MagicMock()
-    m.fetchone.return_value = (1,)
-    return m
-
-
-def _insert_exec(rowcount=1):
+def _upsert_exec(rowcount=1):
+    """Simulates the upsert INSERT ... ON CONFLICT DO UPDATE."""
     m = MagicMock()
     m.rowcount = rowcount
     return m
@@ -54,15 +40,17 @@ def _insert_exec(rowcount=1):
 
 def _make_job(url="https://www.mycareersfuture.gov.sg/job/abc123",
               title="Data Engineer", company="ACME",
-              inferred_industries=None, posted_at=None):
+              inferred_industries=None, posted_at=None,
+              mcf_uuid="abc123uuid"):
     return {
-        "url":   url,
-        "title": title,
-        "company": company,
-        "location": "Singapore",
-        "description": "Build data pipelines",
+        "url":                 url,
+        "title":               title,
+        "company":             company,
+        "location":            "Singapore",
+        "description":         "Build data pipelines",
         "inferred_industries": inferred_industries or [],
-        "posted_at": posted_at,
+        "posted_at":           posted_at,
+        "mcf_uuid":            mcf_uuid,
     }
 
 
@@ -104,8 +92,7 @@ async def test_inserts_new_job():
     db = AsyncMock()
     db.execute.side_effect = [
         _profile_exec(profile),  # SELECT profile
-        _no_dup_exec(),           # dedup SELECT → no existing row
-        _insert_exec(1),          # INSERT → 1 row
+        _upsert_exec(1),          # INSERT ON CONFLICT → 1 row inserted
     ]
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
@@ -117,7 +104,7 @@ async def test_inserts_new_job():
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_user — same title+company+date → duplicate, skipped
+# scrape_for_user — same mcf_uuid → upsert updates industries, rowcount=0
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -126,8 +113,7 @@ async def test_same_day_duplicate_is_skipped():
     db = AsyncMock()
     db.execute.side_effect = [
         _profile_exec(profile),  # SELECT profile
-        _dup_exec(),              # dedup SELECT → existing row found
-        # INSERT should NOT be called
+        _upsert_exec(0),          # ON CONFLICT → same industries, nothing changed
     ]
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
@@ -135,12 +121,11 @@ async def test_same_day_duplicate_is_skipped():
         inserted = await scrape_for_user(user_id=1, db=db)
 
     assert inserted == 0
-    # Only 2 execute calls — the INSERT was never issued
     assert db.execute.call_count == 2
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_user — same title+company but different date → kept
+# scrape_for_user — existing job with changed industries → upsert updates it
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -149,11 +134,10 @@ async def test_different_date_not_duplicate():
     db = AsyncMock()
     db.execute.side_effect = [
         _profile_exec(profile),  # SELECT profile
-        _no_dup_exec(),           # dedup SELECT → no row for this date
-        _insert_exec(1),          # INSERT → inserted
+        _upsert_exec(1),          # INSERT ON CONFLICT → inserted or updated
     ]
 
-    job = _make_job(posted_at="2026-06-15T10:00:00Z")  # different date from any existing
+    job = _make_job(posted_at="2026-06-15T10:00:00Z", mcf_uuid="newuuid456")
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
                AsyncMock(return_value=[job])):
@@ -215,8 +199,7 @@ async def test_industry_filter_passes_matching():
     db = AsyncMock()
     db.execute.side_effect = [
         _profile_exec(profile),
-        _no_dup_exec(),
-        _insert_exec(1),
+        _upsert_exec(1),
     ]
 
     job = _make_job(inferred_industries=["Banking & Finance"])  # fuzzy match ≥0.80

@@ -76,22 +76,9 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
             job_company = job.get("company", "")
             posted_date = posted_at.date().isoformat() if posted_at else None
 
-            # Deduplicate: skip if same title+company+date already stored for this user
-            dup = await db.execute(
-                text("""
-                    SELECT 1 FROM job_postings
-                    WHERE user_id = :uid
-                      AND title   = :title
-                      AND company = :company
-                      AND date(posted_at) = :posted_date
-                    LIMIT 1
-                """),
-                {"uid": user_id, "title": job_title, "company": job_company,
-                 "posted_date": posted_date},
-            )
-            if dup.fetchone():
-                continue
+            industries_json = json.dumps(job.get("inferred_industries") or [])
 
+            # Upsert: insert new jobs; update industries on existing ones (keeps scoring intact)
             row = await db.execute(
                 text("""
                     INSERT INTO job_postings
@@ -100,6 +87,10 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                     VALUES
                         (:user_id, :uuid, :title, :company, :url, :location,
                          :description, :industries, :posted_at, :scraped_at, 0)
+                    ON CONFLICT (user_id, mcf_uuid) DO UPDATE SET
+                        inferred_industries = excluded.inferred_industries,
+                        scraped_at          = excluded.scraped_at
+                    WHERE excluded.inferred_industries != job_postings.inferred_industries
                 """),
                 {
                     "user_id":     user_id,
@@ -109,7 +100,7 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                     "url":         job.get("url", ""),
                     "location":    job.get("location", ""),
                     "description": job.get("description", ""),
-                    "industries":  json.dumps(job.get("inferred_industries") or []),
+                    "industries":  industries_json,
                     "posted_at":   posted_at.isoformat() if posted_at else None,
                     "scraped_at":  now.isoformat(),
                 },
