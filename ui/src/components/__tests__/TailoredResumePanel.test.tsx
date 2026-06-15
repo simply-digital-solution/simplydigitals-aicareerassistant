@@ -79,11 +79,11 @@ function notFoundError() {
   return err
 }
 
-function renderPanel(jobId = 1) {
+function renderPanel(jobId = 1, company = 'ACME Corp') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <TailoredResumePanel jobId={jobId} />
+      <TailoredResumePanel jobId={jobId} company={company} />
     </QueryClientProvider>,
   )
 }
@@ -208,20 +208,29 @@ describe('downloadAsDocx', () => {
     const anchorStub = { href: '', download: '', click: clickSpy } as unknown as HTMLAnchorElement
     vi.spyOn(document, 'createElement').mockReturnValueOnce(anchorStub)
 
-    await downloadAsDocx(makeResumeOutput())
+    await downloadAsDocx(makeResumeOutput(), 'ACME Corp')
 
     expect(Packer.toBlob).toHaveBeenCalled()
     expect(global.URL.createObjectURL).toHaveBeenCalled()
     expect(clickSpy).toHaveBeenCalled()
-    expect(anchorStub.download).toMatch(/Jane_Doe.*\.docx$/)
+    expect(anchorStub.download).toMatch(/Jane_Doe_ACME_Corp_resume\.docx$/)
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
   })
 
-  it('sets the filename from the candidate name', async () => {
+  it('sets the filename from candidate name and company', async () => {
     const anchorStub = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement
     vi.spyOn(document, 'createElement').mockReturnValueOnce(anchorStub)
 
-    await downloadAsDocx(makeResumeOutput('John Smith'))
+    await downloadAsDocx(makeResumeOutput('John Smith'), 'Standard Chartered Bank')
+
+    expect(anchorStub.download).toBe('John_Smith_Standard_Chartered_Bank_resume.docx')
+  })
+
+  it('omits company from filename when company is empty', async () => {
+    const anchorStub = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement
+    vi.spyOn(document, 'createElement').mockReturnValueOnce(anchorStub)
+
+    await downloadAsDocx(makeResumeOutput('John Smith'), '')
 
     expect(anchorStub.download).toBe('John_Smith_resume.docx')
   })

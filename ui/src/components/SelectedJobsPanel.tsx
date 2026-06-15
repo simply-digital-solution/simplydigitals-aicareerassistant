@@ -89,7 +89,7 @@ export default function SelectedJobsPanel() {
                   onArchive={(id) => archiveMutation.mutate(id)}
                   onRescore={(id) => rescoreMutation.mutate(id)}
                 />
-                <TailoredResumePanel jobId={job.id} />
+                <TailoredResumePanel jobId={job.id} company={job.company} />
               </div>
             ))}
           </div>

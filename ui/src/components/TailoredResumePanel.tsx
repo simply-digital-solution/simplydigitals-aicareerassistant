@@ -10,6 +10,7 @@ import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExpe
 
 interface TailoredResumePanelProps {
   jobId: number
+  company: string
 }
 
 // ---------------------------------------------------------------------------
@@ -46,7 +47,7 @@ function experienceBlock(entry: GeneratedResumeExperience): Paragraph[] {
   ]
 }
 
-export async function downloadAsDocx(resume: GeneratedResumeOutput): Promise<void> {
+export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''): Promise<void> {
   const children: Paragraph[] = [
     new Paragraph({
       text: resume.name,
@@ -98,7 +99,9 @@ export async function downloadAsDocx(resume: GeneratedResumeOutput): Promise<voi
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${resume.name.replace(/\s+/g, '_')}_resume.docx`
+  const namePart = resume.name.replace(/\s+/g, '_')
+  const companyPart = company ? `_${company.replace(/\s+/g, '_')}` : ''
+  a.download = `${namePart}${companyPart}_resume.docx`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -165,7 +168,7 @@ function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
 // Main panel
 // ---------------------------------------------------------------------------
 
-export default function TailoredResumePanel({ jobId }: TailoredResumePanelProps) {
+export default function TailoredResumePanel({ jobId, company }: TailoredResumePanelProps) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -194,7 +197,7 @@ export default function TailoredResumePanel({ jobId }: TailoredResumePanelProps)
     if (!resume) return
     setDownloading(true)
     try {
-      await downloadAsDocx(resume.resume)
+      await downloadAsDocx(resume.resume, company)
     } finally {
       setDownloading(false)
     }
