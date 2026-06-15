@@ -127,8 +127,8 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore
         <div className="flex items-center gap-2 shrink-0">
           {!!job.scored && job.fit_score !== null
             ? <FitBadge score={job.fit_score} />
-            : job.score_error
-            ? <span className="text-xs text-red-400 italic" title={job.score_error}>⚠ Score failed</span>
+            : (job.score_error || (job.scored && job.fit_score === null))
+            ? <span className="text-xs text-red-400 italic" title={job.score_error ?? 'Score incomplete'}>⚠ Something went wrong. Click Re-score</span>
             : <span className="text-xs text-gray-400 italic">Scoring…</span>
           }
           <button title="Relevant" disabled={saving} onClick={handleThumbUp}
@@ -396,6 +396,7 @@ export default function ResearchPanel() {
   const [filterDays, setFilterDays] = useState(0)
   const [filterScore, setFilterScore] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
+  const [pendingRescore, setPendingRescore] = useState<Set<number>>(new Set())
 
   const params = new URLSearchParams({
     page: String(page),
@@ -407,6 +408,7 @@ export default function ResearchPanel() {
   const { data, isLoading } = useQuery<StoredJobsResponse>({
     queryKey: ['stored-jobs', page, filterRole, filterDays],
     queryFn: () => api.get<StoredJobsResponse>(`/research/jobs?${params}`).then(r => r.data),
+    refetchInterval: pendingRescore.size > 0 ? 8000 : false,
   })
 
   // Role options come from the user's target titles in their profile
@@ -429,8 +431,26 @@ export default function ResearchPanel() {
 
   const rescoreMutation = useMutation({
     mutationFn: (id: number) => researchApi.rescoreJob(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stored-jobs'] }),
+    onSuccess: (_data, id) => {
+      setPendingRescore(prev => new Set([...prev, id]))
+      queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
+    },
   })
+
+  // Remove jobs from pendingRescore once they come back with a score or error
+  useEffect(() => {
+    if (!data || pendingRescore.size === 0) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPendingRescore(prev => {
+      const stillPending = new Set<number>()
+      for (const id of prev) {
+        const job = data.jobs.find(j => j.id === id)
+        if (!job || (job.scored && job.fit_score !== null) || job.score_error) continue
+        stillPending.add(id)
+      }
+      return stillPending.size !== prev.size ? stillPending : prev
+    })
+  }, [data, pendingRescore.size])
 
   const handleRefresh = async () => {
     setRefreshing(true)

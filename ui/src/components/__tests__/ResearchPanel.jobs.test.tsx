@@ -192,10 +192,10 @@ describe('LatestJobs — job card', () => {
 // ---------------------------------------------------------------------------
 
 describe('LatestJobs — score error state', () => {
-  it('shows "Score failed" label when score_error is set', async () => {
+  it('shows error label when score_error is set', async () => {
     setupApiMocks([makeJob({ scored: false, fit_score: null, score_error: 'RuntimeError: connection refused' })])
     wrap()
-    expect(await screen.findByText(/score failed/i)).toBeInTheDocument()
+    expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
   })
 
   it('shows re-score button when score_error is set', async () => {
@@ -207,7 +207,26 @@ describe('LatestJobs — score error state', () => {
   it('does not show "Scoring…" when score_error is set', async () => {
     setupApiMocks([makeJob({ scored: false, fit_score: null, score_error: 'parse failed' })])
     wrap()
-    await screen.findByText(/score failed/i)
+    await screen.findByText(/something went wrong/i)
+    expect(screen.queryByText(/scoring…/i)).not.toBeInTheDocument()
+  })
+
+  it('shows error label for legacy scored=1 fit_score=null score_error=null state', async () => {
+    setupApiMocks([makeJob({ scored: true, fit_score: null, score_error: null })])
+    wrap()
+    expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
+  })
+
+  it('shows re-score button for legacy scored=1 fit_score=null state', async () => {
+    setupApiMocks([makeJob({ scored: true, fit_score: null, score_error: null })])
+    wrap()
+    expect(await screen.findByRole('button', { name: /re-score/i })).toBeInTheDocument()
+  })
+
+  it('does not show "Scoring…" for legacy scored=1 fit_score=null state', async () => {
+    setupApiMocks([makeJob({ scored: true, fit_score: null, score_error: null })])
+    wrap()
+    await screen.findByText(/something went wrong/i)
     expect(screen.queryByText(/scoring…/i)).not.toBeInTheDocument()
   })
 })
@@ -640,6 +659,29 @@ describe('LatestJobs — re-score button', () => {
 
     await waitFor(() => {
       expect(vi.mocked(clientModule.researchApi.rescoreJob)).toHaveBeenCalledWith(5)
+    })
+  })
+
+  it('adds job to pendingRescore on re-score click (triggers polling)', async () => {
+    vi.mocked(clientModule.researchApi.rescoreJob).mockResolvedValue({} as never)
+    // After rescore, next fetch returns job still unscored (scored=0)
+    const unscoredJob = makeJob({ id: 7, scored: false, fit_score: null, score_error: null })
+    vi.mocked(api.get).mockImplementation((path: string) => {
+      if (path === '/profile')            return makeProfileResponse() as ReturnType<typeof api.get>
+      if (path === '/research/feedback')  return Promise.resolve({ data: { feedback: [] } }) as ReturnType<typeof api.get>
+      if (path.startsWith('/research/jobs')) return makeJobsResponse([unscoredJob]) as ReturnType<typeof api.get>
+      return Promise.resolve({ data: {} }) as ReturnType<typeof api.get>
+    })
+    // First render with scored job so re-score button is visible
+    vi.mocked(api.get).mockImplementationOnce(() => makeProfileResponse() as ReturnType<typeof api.get>)
+    setupApiMocks([makeJob({ id: 7, scored: true, fit_score: 0.75 })])
+    wrap()
+
+    const btn = await screen.findByRole('button', { name: /re-score/i })
+    fireEvent.click(btn)
+
+    await waitFor(() => {
+      expect(vi.mocked(clientModule.researchApi.rescoreJob)).toHaveBeenCalledWith(7)
     })
   })
 })
