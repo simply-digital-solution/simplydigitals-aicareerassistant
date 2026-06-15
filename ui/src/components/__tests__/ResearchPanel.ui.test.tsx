@@ -110,9 +110,9 @@ describe('Latest Jobs section', () => {
     expect(await screen.findByRole('button', { name: /refresh/i })).toBeInTheDocument()
   })
 
-  it('renders role filter dropdown', async () => {
+  it('renders role filter input', async () => {
     wrap()
-    expect(await screen.findByRole('combobox', { name: /filter stored jobs by role/i })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: /filter stored jobs by role/i })).toBeInTheDocument()
   })
 
   it('renders date filter dropdown', async () => {

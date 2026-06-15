@@ -912,8 +912,8 @@ async def get_stored_jobs(
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
 
     if role:
-        where_clauses.append("title = :role")
-        params["role"] = role
+        where_clauses.append("title LIKE :role")
+        params["role"] = f"%{role}%"
 
     if days > 0:
         where_clauses.append(

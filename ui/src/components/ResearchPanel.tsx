@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ProfileData, StoredJobsResponse, StoredJob } from '../api/client'
 import api, { researchApi, applicationsApi } from '../api/client'
@@ -233,6 +233,74 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
   )
 }
 
+function RoleCombobox({ value, onChange, options }: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+}) {
+  const [inputValue, setInputValue] = useState(value)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Sync external clear (value reset to '')
+  useEffect(() => { if (value === '') setInputValue('') }, [value])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Debounce: fire onChange 300ms after the user stops typing
+  useEffect(() => {
+    const t = setTimeout(() => onChange(inputValue), 300)
+    return () => clearTimeout(t)
+  }, [inputValue])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filtered = options.filter(o => o.toLowerCase().includes(inputValue.toLowerCase()))
+
+  return (
+    <div ref={ref} className="relative">
+      <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-400">
+        <input
+          type="text"
+          value={inputValue}
+          placeholder="All roles"
+          aria-label="Filter stored jobs by role"
+          onChange={e => { setInputValue(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          className="text-sm px-3 py-1.5 outline-none w-44 bg-white"
+        />
+        {inputValue && (
+          <button
+            onClick={() => { setInputValue(''); onChange(''); setOpen(false) }}
+            className="pr-2 text-gray-400 hover:text-gray-600 text-base leading-none"
+            aria-label="Clear role filter"
+          >×</button>
+        )}
+      </div>
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {filtered.map(o => (
+            <li key={o}>
+              <button
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { setInputValue(o); onChange(o); setOpen(false) }}
+                className="w-full text-left text-sm px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700"
+              >
+                {o}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export default function ResearchPanel() {
   const queryClient = useQueryClient()
 
@@ -281,18 +349,12 @@ export default function ResearchPanel() {
     queryFn: () => api.get<StoredJobsResponse>(`/research/jobs?${params}`).then(r => r.data),
   })
 
-  const { data: allRolesData } = useQuery<StoredJobsResponse>({
-    queryKey: ['stored-jobs-all-roles'],
-    queryFn: () => api.get<StoredJobsResponse>('/research/jobs?per_page=200').then(r => r.data),
-  })
-  const roleOptions = Array.from(new Set((allRolesData?.jobs ?? []).map(j => j.title))).sort()
+  // Role options come from the user's target titles in their profile
+  const roleOptions = [...titles].sort()
 
   const archiveMutation = useMutation({
     mutationFn: (id: number) => researchApi.archiveJob(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
-      queryClient.invalidateQueries({ queryKey: ['stored-jobs-all-roles'] })
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stored-jobs'] }),
   })
 
   const saveMutation = useMutation({
@@ -310,7 +372,6 @@ export default function ResearchPanel() {
     try {
       await api.post('/research/scrape', {})
       await queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
-      await queryClient.invalidateQueries({ queryKey: ['stored-jobs-all-roles'] })
     } finally {
       setRefreshing(false)
     }
@@ -382,15 +443,11 @@ export default function ResearchPanel() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          <select
+          <RoleCombobox
             value={filterRole}
-            onChange={e => { setFilterRole(e.target.value); setPage(1) }}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            aria-label="Filter stored jobs by role"
-          >
-            <option value="">All roles</option>
-            {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
+            onChange={v => { setFilterRole(v); setPage(1) }}
+            options={roleOptions}
+          />
 
           <select
             value={filterDays}

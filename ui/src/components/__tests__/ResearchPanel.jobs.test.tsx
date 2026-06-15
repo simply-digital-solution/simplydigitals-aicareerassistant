@@ -90,8 +90,8 @@ beforeEach(() => {
 
 function setupApiMocks(jobs: StoredJob[] = [], total?: number) {
   vi.mocked(api.get).mockImplementation((path: string) => {
-    if (path === '/profile')             return makeProfileResponse() as ReturnType<typeof api.get>
-    if (path === '/research/feedback')   return Promise.resolve({ data: { feedback: [] } }) as ReturnType<typeof api.get>
+    if (path === '/profile')              return makeProfileResponse() as ReturnType<typeof api.get>
+    if (path === '/research/feedback')    return Promise.resolve({ data: { feedback: [] } }) as ReturnType<typeof api.get>
     if (path.startsWith('/research/jobs')) return makeJobsResponse(jobs, total) as ReturnType<typeof api.get>
     return Promise.resolve({ data: {} }) as ReturnType<typeof api.get>
   })
@@ -268,11 +268,11 @@ describe('LatestJobs — feedback', () => {
 // ---------------------------------------------------------------------------
 
 describe('LatestJobs — filters', () => {
-  it('renders role filter dropdown', async () => {
+  it('renders role filter text input', async () => {
     setupApiMocks([makeJob()])
     wrap()
-    const select = await screen.findByRole('combobox', { name: /filter stored jobs by role/i })
-    expect(select).toBeInTheDocument()
+    const input = await screen.findByRole('textbox', { name: /filter stored jobs by role/i })
+    expect(input).toBeInTheDocument()
   })
 
   it('renders date filter dropdown', async () => {
@@ -280,6 +280,56 @@ describe('LatestJobs — filters', () => {
     wrap()
     const select = await screen.findByRole('combobox', { name: /filter stored jobs by date/i })
     expect(select).toBeInTheDocument()
+  })
+
+  it('typing in role filter re-fetches with role param after debounce', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const input = await screen.findByRole('textbox', { name: /filter stored jobs by role/i })
+    fireEvent.change(input, { target: { value: 'Engineer' } })
+
+    // Wait for the 300ms debounce to fire naturally
+    await waitFor(() => {
+      const calls = vi.mocked(api.get).mock.calls.map(c => c[0] as string)
+      expect(calls.some(u => u.includes('role=Engineer'))).toBe(true)
+    }, { timeout: 1000 })
+  })
+
+  it('profile target titles appear as dropdown options', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const input = await screen.findByRole('textbox', { name: /filter stored jobs by role/i })
+    fireEvent.focus(input)
+
+    expect(await screen.findByRole('button', { name: 'Data Engineer' })).toBeInTheDocument()
+  })
+
+  it('selecting a dropdown option fills the input', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const input = await screen.findByRole('textbox', { name: /filter stored jobs by role/i })
+    fireEvent.focus(input)
+
+    const option = await screen.findByRole('button', { name: 'Data Engineer' })
+    fireEvent.click(option)
+
+    expect(input).toHaveValue('Data Engineer')
+  })
+
+  it('clear button resets the filter', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const input = await screen.findByRole('textbox', { name: /filter stored jobs by role/i })
+    fireEvent.change(input, { target: { value: 'Engineer' } })
+
+    const clearBtn = await screen.findByRole('button', { name: /clear role filter/i })
+    fireEvent.click(clearBtn)
+
+    expect(input).toHaveValue('')
   })
 
   it('changing date filter re-fetches with days param', async () => {
