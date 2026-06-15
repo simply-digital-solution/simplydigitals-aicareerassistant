@@ -16,6 +16,13 @@ const NOT_RELEVANT_REASONS = [
 ]
 
 const STORED_PAGE_SIZE = 10
+const SCORE_FILTERS = [
+  { label: 'All',  min: 0    },
+  { label: '50%+', min: 0.50 },
+  { label: '60%+', min: 0.60 },
+  { label: '70%+', min: 0.70 },
+  { label: '80%+', min: 0.80 },
+]
 const STORED_DATE_OPTIONS = [
   { label: 'All time', days: 0 },
   { label: 'Today', days: 1 },
@@ -335,6 +342,7 @@ export default function ResearchPanel() {
   const [page, setPage] = useState(1)
   const [filterRole, setFilterRole] = useState('')
   const [filterDays, setFilterDays] = useState(0)
+  const [filterScore, setFilterScore] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
   const params = new URLSearchParams({
@@ -378,6 +386,11 @@ export default function ResearchPanel() {
   }
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / STORED_PAGE_SIZE)) : 1
+
+  // Client-side score filter — unscored jobs always shown
+  const visibleJobs = (data?.jobs ?? []).filter(job =>
+    filterScore === 0 || !job.scored || job.fit_score === null || job.fit_score >= filterScore
+  )
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -430,7 +443,13 @@ export default function ResearchPanel() {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-800">
             Latest Jobs
-            {data && <span className="ml-2 text-xs font-normal text-gray-400">{data.total} total</span>}
+            {data && (
+              <span className="ml-2 text-xs font-normal text-gray-400">
+                {filterScore > 0
+                  ? `${visibleJobs.length} of ${data.total} total`
+                  : `${data.total} total`}
+              </span>
+            )}
           </h3>
           <button
             onClick={handleRefresh}
@@ -459,6 +478,23 @@ export default function ResearchPanel() {
               <option key={o.days} value={o.days}>{o.label}</option>
             ))}
           </select>
+
+          <div role="group" aria-label="Filter by fit score" className="flex items-center rounded-lg border border-gray-300 overflow-hidden">
+            {SCORE_FILTERS.map(f => (
+              <button
+                key={f.min}
+                onClick={() => setFilterScore(f.min)}
+                aria-pressed={filterScore === f.min}
+                className={`text-xs px-3 py-1.5 border-r border-gray-300 last:border-r-0 transition-colors ${
+                  filterScore === f.min
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Job list */}
@@ -473,9 +509,13 @@ export default function ResearchPanel() {
             <p>No jobs yet.</p>
             <p className="mt-1">Click <strong>↻ Refresh</strong> to scrape now, or wait for the 07:00 daily run.</p>
           </div>
+        ) : visibleJobs.length === 0 ? (
+          <div className="text-center py-10 text-sm text-gray-400">
+            <p>No jobs match the selected score filter.</p>
+          </div>
         ) : (
           <div className="space-y-3">
-            {data.jobs.map(job => (
+            {visibleJobs.map(job => (
               <StoredJobCard
                 key={job.id}
                 job={job}

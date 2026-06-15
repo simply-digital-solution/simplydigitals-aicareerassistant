@@ -344,6 +344,84 @@ describe('LatestJobs — filters', () => {
       expect(calls.some(u => u.includes('days=7'))).toBe(true)
     })
   })
+
+  it('renders score filter button group', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+    const group = await screen.findByRole('group', { name: /filter by fit score/i })
+    expect(group).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /all/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /50%\+/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /80%\+/i })).toBeInTheDocument()
+  })
+
+  it('"All" button is active by default', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+    await screen.findByRole('group', { name: /filter by fit score/i })
+    expect(screen.getByRole('button', { name: /all/i })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('hides scored job below threshold when score filter is set', async () => {
+    const lowJob = makeJob({ id: 1, title: 'Low Score Job', fit_score: 0.45, scored: true })
+    const highJob = makeJob({ id: 2, title: 'High Score Job', fit_score: 0.75, scored: true, company: 'Beta Corp', url: 'https://mcf.gov.sg/beta' })
+    setupApiMocks([lowJob, highJob])
+    wrap()
+
+    await screen.findByText('Low Score Job')
+    fireEvent.click(screen.getByRole('button', { name: /70%\+/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Low Score Job')).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('High Score Job')).toBeInTheDocument()
+  })
+
+  it('always shows unscored jobs regardless of score filter', async () => {
+    const unscoredJob = makeJob({ id: 3, title: 'Unscored Job', fit_score: null, scored: false })
+    setupApiMocks([unscoredJob])
+    wrap()
+
+    await screen.findByText('Unscored Job')
+    fireEvent.click(screen.getByRole('button', { name: /80%\+/i }))
+
+    expect(screen.getByText('Unscored Job')).toBeInTheDocument()
+  })
+
+  it('shows filtered count in header when score filter is active', async () => {
+    const lowJob = makeJob({ id: 1, fit_score: 0.45, scored: true })
+    const highJob = makeJob({ id: 2, fit_score: 0.85, scored: true, company: 'Beta Corp', url: 'https://mcf.gov.sg/beta' })
+    setupApiMocks([lowJob, highJob], 2)
+    wrap()
+
+    await screen.findByText('ACME Corp')
+    fireEvent.click(screen.getByRole('button', { name: /80%\+/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/1 of 2 total/i)).toBeInTheDocument()
+    })
+  })
+
+  it('shows total count without fraction when "All" is selected', async () => {
+    setupApiMocks([makeJob()], 1)
+    wrap()
+    await screen.findByText('ACME Corp')
+    expect(screen.getByText(/1 total/i)).toBeInTheDocument()
+    expect(screen.queryByText(/of 1 total/i)).not.toBeInTheDocument()
+  })
+
+  it('shows empty state message when all jobs are filtered out by score', async () => {
+    const lowJob = makeJob({ id: 1, title: 'Low Score Job', fit_score: 0.30, scored: true })
+    setupApiMocks([lowJob])
+    wrap()
+
+    await screen.findByText('Low Score Job')
+    fireEvent.click(screen.getByRole('button', { name: /80%\+/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/no jobs match the selected score filter/i)).toBeInTheDocument()
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------
