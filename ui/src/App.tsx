@@ -4,8 +4,6 @@ import { useAuth } from './hooks/useAuth'
 import LoginPage from './pages/LoginPage'
 import PipelineBoard from './components/PipelineBoard'
 import ResearchPanel from './components/ResearchPanel'
-import ResumePanel from './components/ResumePanel'
-import ApplicationPanel from './components/ApplicationPanel'
 import InterviewPanel from './components/InterviewPanel'
 import DraftsPanel from './components/DraftsPanel'
 import ProfilePanel from './components/ProfilePanel'
@@ -15,19 +13,17 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 })
 
-type Tab = 'Pipeline' | 'Research' | 'Resume' | 'Application' | 'Interview' | 'Drafts' | 'Profile'
+type Tab = 'Pipeline' | 'Research' | 'Interview' | 'Drafts' | 'Profile'
 
-const TABS: Tab[] = ['Pipeline', 'Research', 'Resume', 'Application', 'Interview', 'Drafts', 'Profile']
+const TABS: Tab[] = ['Pipeline', 'Research', 'Interview', 'Drafts', 'Profile']
 
 function TabContent({ tab }: { tab: Tab }) {
   switch (tab) {
-    case 'Pipeline':    return <PipelineBoard />
-    case 'Research':    return <ResearchPanel />
-    case 'Resume':      return <ResumePanel />
-    case 'Application': return <ApplicationPanel />
-    case 'Interview':   return <InterviewPanel />
-    case 'Drafts':      return <DraftsPanel />
-    case 'Profile':     return <ProfilePanel />
+    case 'Pipeline':  return <PipelineBoard />
+    case 'Research':  return <ResearchPanel />
+    case 'Interview': return <InterviewPanel />
+    case 'Drafts':    return <DraftsPanel />
+    case 'Profile':   return <ProfilePanel />
   }
 }
 
