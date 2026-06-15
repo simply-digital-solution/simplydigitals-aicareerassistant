@@ -898,13 +898,14 @@ async def get_stored_jobs(
     per_page: int = 20,
     role: str = "",
     days: int = 0,
+    min_score: float = 0.0,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Return paginated stored job postings for the current user.
     Ordered by posted_at DESC (most recent first).
-    Optionally filter by role title and/or recency (days).
+    Optionally filter by role title, recency (days), and minimum fit score.
     """
     offset = (page - 1) * per_page
 
@@ -920,10 +921,12 @@ async def get_stored_jobs(
         params["role"] = f"%{role}%"
 
     if days > 0:
-        where_clauses.append(
-            "posted_at >= datetime('now', :cutoff)"
-        )
+        where_clauses.append("posted_at >= datetime('now', :cutoff)")
         params["cutoff"] = f"-{days} days"
+
+    if min_score > 0:
+        where_clauses.append("(scored = 0 OR fit_score IS NULL OR fit_score >= :min_score)")
+        params["min_score"] = min_score
 
     where_sql = " AND ".join(where_clauses)
 

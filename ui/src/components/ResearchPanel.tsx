@@ -420,10 +420,11 @@ export default function ResearchPanel() {
     per_page: String(STORED_PAGE_SIZE),
     ...(filterRole ? { role: filterRole } : {}),
     ...(filterDays > 0 ? { days: String(filterDays) } : {}),
+    ...(filterScore > 0 ? { min_score: String(filterScore) } : {}),
   })
 
   const { data, isLoading } = useQuery<StoredJobsResponse>({
-    queryKey: ['stored-jobs', page, filterRole, filterDays],
+    queryKey: ['stored-jobs', page, filterRole, filterDays, filterScore],
     queryFn: () => api.get<StoredJobsResponse>(`/research/jobs?${params}`).then(r => r.data),
     refetchInterval: pendingRescore.size > 0 ? 8000 : false,
   })
@@ -486,10 +487,7 @@ export default function ResearchPanel() {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / STORED_PAGE_SIZE)) : 1
 
-  // Client-side score filter — unscored jobs always shown
-  const visibleJobs = (data?.jobs ?? []).filter(job =>
-    filterScore === 0 || !job.scored || job.fit_score === null || job.fit_score >= filterScore
-  )
+  const visibleJobs = data?.jobs ?? []
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -544,9 +542,7 @@ export default function ResearchPanel() {
             Latest Jobs
             {data && (
               <span className="ml-2 text-xs font-normal text-gray-400">
-                {filterScore > 0
-                  ? `${visibleJobs.length} of ${data.total} total`
-                  : `${data.total} total`}
+                {`${data.total} total`}
               </span>
             )}
           </h3>
@@ -582,7 +578,7 @@ export default function ResearchPanel() {
             {SCORE_FILTERS.map(f => (
               <button
                 key={f.min}
-                onClick={() => setFilterScore(f.min)}
+                onClick={() => { setFilterScore(f.min); setPage(1) }}
                 aria-pressed={filterScore === f.min}
                 className={`text-xs px-3 py-1.5 border-r border-gray-300 last:border-r-0 transition-colors ${
                   filterScore === f.min

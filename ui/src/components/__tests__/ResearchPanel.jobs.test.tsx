@@ -491,65 +491,39 @@ describe('LatestJobs — filters', () => {
     expect(screen.getByRole('button', { name: /all/i })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('hides scored job below threshold when score filter is set', async () => {
-    const lowJob = makeJob({ id: 1, title: 'Low Score Job', fit_score: 0.45, scored: true })
-    const highJob = makeJob({ id: 2, title: 'High Score Job', fit_score: 0.75, scored: true, company: 'Beta Corp', url: 'https://mcf.gov.sg/beta' })
-    setupApiMocks([lowJob, highJob])
+  it('passes min_score param to API when score filter is set', async () => {
+    setupApiMocks([makeJob()])
     wrap()
 
-    await screen.findByText('Low Score Job')
+    await screen.findByText('ACME Corp')
     fireEvent.click(screen.getByRole('button', { name: /70%\+/i }))
 
     await waitFor(() => {
-      expect(screen.queryByText('Low Score Job')).not.toBeInTheDocument()
+      const calls = vi.mocked(api.get).mock.calls.map(c => String(c[0]))
+      expect(calls.some(u => u.includes('min_score=0.7'))).toBe(true)
     })
-    expect(screen.getByText('High Score Job')).toBeInTheDocument()
   })
 
-  it('always shows unscored jobs regardless of score filter', async () => {
-    const unscoredJob = makeJob({ id: 3, title: 'Unscored Job', fit_score: null, scored: false })
-    setupApiMocks([unscoredJob])
-    wrap()
-
-    await screen.findByText('Unscored Job')
-    fireEvent.click(screen.getByRole('button', { name: /80%\+/i }))
-
-    expect(screen.getByText('Unscored Job')).toBeInTheDocument()
-  })
-
-  it('shows filtered count in header when score filter is active', async () => {
-    const lowJob = makeJob({ id: 1, fit_score: 0.45, scored: true })
-    const highJob = makeJob({ id: 2, fit_score: 0.85, scored: true, company: 'Beta Corp', url: 'https://mcf.gov.sg/beta' })
-    setupApiMocks([lowJob, highJob], 2)
+  it('does not pass min_score when "All" is selected', async () => {
+    setupApiMocks([makeJob()])
     wrap()
 
     await screen.findByText('ACME Corp')
-    fireEvent.click(screen.getByRole('button', { name: /80%\+/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/1 of 2 total/i)).toBeInTheDocument()
-    })
+    // All is default — no min_score param should be sent
+    const calls = vi.mocked(api.get).mock.calls.map(c => String(c[0]))
+    expect(calls.every(u => !u.includes('min_score'))).toBe(true)
   })
 
-  it('shows total count without fraction when "All" is selected', async () => {
-    setupApiMocks([makeJob()], 1)
+  it('shows server-returned total in header', async () => {
+    setupApiMocks([makeJob()], 42)
     wrap()
-    await screen.findByText('ACME Corp')
-    expect(screen.getByText(/1 total/i)).toBeInTheDocument()
-    expect(screen.queryByText(/of 1 total/i)).not.toBeInTheDocument()
+    expect(await screen.findByText(/42 total/i)).toBeInTheDocument()
   })
 
-  it('shows empty state message when all jobs are filtered out by score', async () => {
-    const lowJob = makeJob({ id: 1, title: 'Low Score Job', fit_score: 0.30, scored: true })
-    setupApiMocks([lowJob])
+  it('shows empty state when server returns no jobs for filter', async () => {
+    setupApiMocks([], 0)
     wrap()
-
-    await screen.findByText('Low Score Job')
-    fireEvent.click(screen.getByRole('button', { name: /80%\+/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/no jobs match the selected score filter/i)).toBeInTheDocument()
-    })
+    expect(await screen.findByText(/no jobs yet/i)).toBeInTheDocument()
   })
 })
 
