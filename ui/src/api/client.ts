@@ -208,10 +208,16 @@ export const approvalsApi = {
   reject: (id: number) => api.post(`/approvals/${id}/reject`),
 }
 
+export interface SelectedJobsResponse {
+  total: number
+  jobs: (StoredJob & { application_id: number })[]
+}
+
 // Research (stored jobs) API
 export const researchApi = {
   getJobs: (params: { page?: number; per_page?: number; role?: string; days?: number }) =>
     api.get<StoredJobsResponse>('/research/jobs', { params }),
+  getSelectedJobs: () => api.get<SelectedJobsResponse>('/research/jobs/selected'),
   archiveJob: (id: number) => api.post(`/research/jobs/${id}/archive`),
   rescoreJob: (id: number) => api.post(`/research/jobs/${id}/rescore`),
 }

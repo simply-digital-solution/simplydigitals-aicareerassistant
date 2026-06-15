@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ProfileData, StoredJobsResponse, StoredJob, ScoreCategory } from '../api/client'
 import api, { researchApi, applicationsApi } from '../api/client'
 
-type FeedbackEntry = { relevance: 'relevant' | 'not_relevant'; reason?: string }
+export type FeedbackEntry = { relevance: 'relevant' | 'not_relevant'; reason?: string }
 type FeedbackMap = Record<string, FeedbackEntry>
 
 const NOT_RELEVANT_REASONS = [
@@ -44,12 +44,12 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
-function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore }: {
+export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore }: {
   job: StoredJob
   feedback?: FeedbackEntry
   onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant', reason?: string) => void
   onArchive: (id: number) => void
-  onSave: (job: StoredJob) => void
+  onSave?: (job: StoredJob) => void
   onRescore: (id: number) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -101,7 +101,7 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore
   }
 
   const handleSave = () => {
-    if (saved) return
+    if (saved || !onSave) return
     onSave(job)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -139,7 +139,7 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore
             className={`text-base leading-none px-1.5 py-0.5 rounded transition-colors ${
               feedback?.relevance === 'not_relevant' ? 'bg-red-200 text-red-600' : pickingReason ? 'bg-red-100 text-red-500' : 'hover:bg-red-100 text-gray-400 hover:text-red-500'
             } disabled:opacity-40`}>👎</button>
-          <button
+          {onSave && <button
             title="Save to Selected"
             onClick={handleSave}
             disabled={saved}
@@ -162,7 +162,7 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore
                 </svg>
               )
             }
-          </button>
+          </button>}
           <button
             title="Archive job"
             onClick={() => onArchive(job.id)}
@@ -421,12 +421,17 @@ export default function ResearchPanel() {
 
   const saveMutation = useMutation({
     mutationFn: (job: StoredJob) => applicationsApi.create({
-      company_name: job.company,
-      role_title:   job.title,
-      source_url:   job.url,
-      status:       'selected',
+      company_name:   job.company,
+      role_title:     job.title,
+      source_url:     job.url,
+      status:         'selected',
+      job_posting_id: job.id,
     }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kanban'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['selected-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['kanban'] })
+    },
   })
 
   const rescoreMutation = useMutation({

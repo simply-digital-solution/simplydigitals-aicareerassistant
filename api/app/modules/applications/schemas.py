@@ -9,8 +9,10 @@ class ApplicationCreate(BaseModel):
     job_description: Optional[str] = None
     source_url: Optional[str] = None
     source: Optional[str] = "manual"
+    status: Optional[str] = "selected"
     deadline: Optional[date] = None
     notes: Optional[str] = None
+    job_posting_id: Optional[int] = None
 
 
 class ApplicationUpdate(BaseModel):
@@ -38,6 +40,7 @@ class ApplicationResponse(BaseModel):
     deadline: Optional[date]
     applied_at: Optional[date]
     notes: Optional[str]
+    job_posting_id: Optional[int]
     created_at: datetime
     updated_at: datetime
 

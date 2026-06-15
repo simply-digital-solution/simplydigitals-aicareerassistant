@@ -721,10 +721,11 @@ describe('LatestJobs — save to selected button', () => {
 
     await waitFor(() => {
       expect(vi.mocked(clientModule.applicationsApi.create)).toHaveBeenCalledWith({
-        company_name: 'ACME Corp',
-        role_title:   'Data Engineer',
-        source_url:   'https://www.mycareersfuture.gov.sg/job/abc123',
-        status:       'selected',
+        company_name:   'ACME Corp',
+        role_title:     'Data Engineer',
+        source_url:     'https://www.mycareersfuture.gov.sg/job/abc123',
+        status:         'selected',
+        job_posting_id: 3,
       })
     })
   })

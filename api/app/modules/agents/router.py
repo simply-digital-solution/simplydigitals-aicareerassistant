@@ -908,7 +908,11 @@ async def get_stored_jobs(
     """
     offset = (page - 1) * per_page
 
-    where_clauses = ["user_id = :uid", "archived = 0"]
+    where_clauses = [
+        "user_id = :uid",
+        "archived = 0",
+        "id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND status = 'selected' AND job_posting_id IS NOT NULL)",
+    ]
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
 
     if role:
@@ -943,6 +947,36 @@ async def get_stored_jobs(
     )
     jobs = [dict(r) for r in rows.mappings()]
     return {"total": total, "page": page, "per_page": per_page, "jobs": jobs}
+
+
+@router.get("/research/jobs/selected")
+async def get_selected_jobs(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return job postings the user has saved to Selected Jobs.
+    Joins job_postings with applications where status='selected'.
+    """
+    rows = await db.execute(
+        text("""
+            SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
+                   jp.scoring_breakdown, jp.score_error, jp.scored_at, jp.archived,
+                   a.id AS application_id
+            FROM job_postings jp
+            JOIN applications a
+              ON a.job_posting_id = jp.id
+             AND a.user_id = :uid
+             AND a.status = 'selected'
+            WHERE jp.user_id = :uid
+            ORDER BY a.created_at DESC
+        """),
+        {"uid": current_user.id},
+    )
+    jobs = [dict(r) for r in rows.mappings()]
+    return {"total": len(jobs), "jobs": jobs}
 
 
 @router.post("/research/jobs/{job_id}/archive", status_code=204)
