@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ProfileData, StoredJobsResponse, StoredJob } from '../api/client'
-import api, { researchApi } from '../api/client'
+import api, { researchApi, applicationsApi } from '../api/client'
 
 type FeedbackMap = Record<string, 'relevant' | 'not_relevant'>
 
@@ -27,14 +27,16 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
-function StoredJobCard({ job, feedback, onFeedback, onArchive }: {
+function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
   job: StoredJob
   feedback?: 'relevant' | 'not_relevant'
   onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant') => void
   onArchive: (id: number) => void
+  onSave: (job: StoredJob) => void
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const industries = parseJsonArray(job.inferred_industries)
   const keywords   = parseJsonArray(job.key_keywords)
   const reasons    = parseJsonArray(job.reasons)
@@ -56,6 +58,13 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive }: {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleSave = () => {
+    if (saved) return
+    onSave(job)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
   const postedLabel = job.posted_at
@@ -85,6 +94,30 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive }: {
             className={`text-base leading-none px-1.5 py-0.5 rounded transition-colors ${
               feedback === 'not_relevant' ? 'bg-red-200 text-red-600' : 'hover:bg-red-100 text-gray-400 hover:text-red-500'
             } disabled:opacity-40`}>👎</button>
+          <button
+            title="Save to Selected"
+            onClick={handleSave}
+            disabled={saved}
+            aria-label="Save to Selected"
+            className={`rounded p-0.5 transition-colors leading-none ${
+              saved
+                ? 'text-indigo-500'
+                : 'text-gray-300 hover:text-indigo-400 hover:bg-indigo-50'
+            }`}
+          >
+            {saved
+              ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+                </svg>
+              )
+              : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+                </svg>
+              )
+            }
+          </button>
           <button
             title="Archive job"
             onClick={() => onArchive(job.id)}
@@ -208,6 +241,16 @@ export default function ResearchPanel() {
     },
   })
 
+  const saveMutation = useMutation({
+    mutationFn: (job: StoredJob) => applicationsApi.create({
+      company_name: job.company,
+      role_title:   job.title,
+      source_url:   job.url,
+      status:       'selected',
+    }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kanban'] }),
+  })
+
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
@@ -328,6 +371,7 @@ export default function ResearchPanel() {
                 feedback={feedbackMap[job.url]}
                 onFeedback={handleFeedback}
                 onArchive={(id) => archiveMutation.mutate(id)}
+                onSave={(j) => saveMutation.mutate(j)}
               />
             ))}
           </div>

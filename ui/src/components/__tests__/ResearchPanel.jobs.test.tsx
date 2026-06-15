@@ -24,6 +24,11 @@ vi.mock('../../api/client', () => ({
     getJobs:    vi.fn(),
     archiveJob: vi.fn(),
   },
+  applicationsApi: {
+    kanban:  vi.fn(),
+    move:    vi.fn(),
+    create:  vi.fn(),
+  },
 }))
 
 // ---------------------------------------------------------------------------
@@ -80,6 +85,7 @@ function wrap() {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(clientModule.researchApi.archiveJob).mockResolvedValue({ data: {} } as ReturnType<typeof clientModule.researchApi.archiveJob>)
+  vi.mocked(clientModule.applicationsApi.create).mockResolvedValue({ data: {} } as ReturnType<typeof clientModule.applicationsApi.create>)
 })
 
 function setupApiMocks(jobs: StoredJob[] = [], total?: number) {
@@ -343,5 +349,59 @@ describe('LatestJobs — archive button', () => {
     await waitFor(() => {
       expect(vi.mocked(clientModule.researchApi.archiveJob)).toHaveBeenCalledWith(7)
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Save to Selected button
+// ---------------------------------------------------------------------------
+
+describe('LatestJobs — save to selected button', () => {
+  it('renders a Save to Selected button on each job card', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const saveBtn = await screen.findByRole('button', { name: /save to selected/i })
+    expect(saveBtn).toBeInTheDocument()
+  })
+
+  it('Save to Selected button has tooltip title "Save to Selected"', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const saveBtn = await screen.findByRole('button', { name: /save to selected/i })
+    expect(saveBtn).toHaveAttribute('title', 'Save to Selected')
+  })
+
+  it('clicking Save to Selected calls applicationsApi.create with correct fields', async () => {
+    setupApiMocks([makeJob({
+      id:      3,
+      title:   'Data Engineer',
+      company: 'ACME Corp',
+      url:     'https://www.mycareersfuture.gov.sg/job/abc123',
+    })])
+    wrap()
+
+    const saveBtn = await screen.findByRole('button', { name: /save to selected/i })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => {
+      expect(vi.mocked(clientModule.applicationsApi.create)).toHaveBeenCalledWith({
+        company_name: 'ACME Corp',
+        role_title:   'Data Engineer',
+        source_url:   'https://www.mycareersfuture.gov.sg/job/abc123',
+        status:       'selected',
+      })
+    })
+  })
+
+  it('button shows checkmark and is disabled after saving', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const saveBtn = await screen.findByRole('button', { name: /save to selected/i })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => expect(saveBtn).toBeDisabled())
   })
 })
