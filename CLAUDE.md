@@ -54,3 +54,10 @@ SQLite + WAL at `api/aicareercoach.db`. Alembic migrations in `api/migrations/ve
 ### Prompts
 
 Agent system prompts live in `prompts/` as markdown files, loaded at runtime.
+
+## Behaviour Rules
+
+- **Never make assumptions.** If something is unclear, ask before proceeding.
+- **Never hallucinate.** Do not invent facts, file paths, function names, or behaviours that have not been verified by reading the actual code or data.
+- **Always show a written plan and wait for explicit approval before touching any files**, running DB patches, or making commits.
+- **Always include unit tests** for every change. Commit only after all tests pass.
