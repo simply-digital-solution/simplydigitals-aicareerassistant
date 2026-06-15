@@ -80,6 +80,13 @@ export interface ResearchOutput {
   opportunities: JobOpportunity[]
 }
 
+export interface ScoreCategory {
+  category: string
+  jd_experience: string
+  your_profile: string
+  score: number
+}
+
 export interface StoredJob {
   id: number
   mcf_uuid: string
@@ -95,6 +102,7 @@ export interface StoredJob {
   reasons: string | null               // JSON string from DB
   risks: string | null                 // JSON string from DB
   key_keywords: string | null          // JSON string from DB
+  scoring_breakdown: string | null     // JSON string from DB
   scored_at: string | null
   archived: boolean
 }

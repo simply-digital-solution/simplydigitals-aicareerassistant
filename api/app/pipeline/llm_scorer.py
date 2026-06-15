@@ -104,6 +104,7 @@ async def score_next_job(db: AsyncSession) -> bool:
             db=db,
             user_id=user_id,
             feedback_examples=feedback_examples,
+            full_description=True,
         )
     except Exception as exc:
         logger.error("llm_scorer: agent failed for job_id=%d: %s", job_id, exc)
@@ -125,15 +126,17 @@ async def score_next_job(db: AsyncSession) -> bool:
         return True
 
     opp = result.opportunities[0]
+    breakdown = [b.model_dump() for b in opp.scoring_breakdown] if opp.scoring_breakdown else []
     await db.execute(
         text("""
             UPDATE job_postings SET
-                scored      = 1,
-                fit_score   = :fit_score,
-                reasons     = :reasons,
-                risks       = :risks,
-                key_keywords = :keywords,
-                scored_at   = :now
+                scored             = 1,
+                fit_score          = :fit_score,
+                reasons            = :reasons,
+                risks              = :risks,
+                key_keywords       = :keywords,
+                scoring_breakdown  = :breakdown,
+                scored_at          = :now
             WHERE id = :id
         """),
         {
@@ -141,6 +144,7 @@ async def score_next_job(db: AsyncSession) -> bool:
             "reasons":   json.dumps(opp.reasons),
             "risks":     json.dumps(opp.risks),
             "keywords":  json.dumps(opp.key_keywords),
+            "breakdown": json.dumps(breakdown),
             "now":       datetime.now(timezone.utc).isoformat(),
             "id":        job_id,
         },

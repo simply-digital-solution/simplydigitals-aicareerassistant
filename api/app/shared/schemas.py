@@ -10,6 +10,13 @@ class AgentBaseModel(BaseModel):
 # Agent 1 — Role & Market Research
 # ---------------------------------------------------------------------------
 
+class ScoreCategory(AgentBaseModel):
+    category: str
+    jd_experience: str
+    your_profile: str
+    score: int = Field(ge=1, le=10)
+
+
 class JobOpportunity(AgentBaseModel):
     role: str
     company: str
@@ -19,6 +26,7 @@ class JobOpportunity(AgentBaseModel):
     risks: list[str] = Field(min_length=1, max_length=5)
     key_keywords: list[str] = Field(min_length=1, max_length=10)
     inferred_industries: list[str] = Field(default_factory=list)
+    scoring_breakdown: list[ScoreCategory] = Field(default_factory=list)
 
 
 class ResearchOutput(AgentBaseModel):

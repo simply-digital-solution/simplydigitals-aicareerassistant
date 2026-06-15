@@ -356,6 +356,7 @@ class JobPosting(Base):
     reasons = Column(Text)                      # JSON array
     risks = Column(Text)                        # JSON array
     key_keywords = Column(Text)                 # JSON array
+    scoring_breakdown = Column(Text)            # JSON array of ScoreCategory
     scored_at = Column(DateTime(timezone=True))
 
 

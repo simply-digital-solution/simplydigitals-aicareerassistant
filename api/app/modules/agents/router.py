@@ -933,7 +933,7 @@ async def get_stored_jobs(
         text(f"""
             SELECT id, mcf_uuid, title, company, url, location,
                    inferred_industries, posted_at, scraped_at,
-                   scored, fit_score, reasons, risks, key_keywords, scored_at
+                   scored, fit_score, reasons, risks, key_keywords, scoring_breakdown, scored_at
             FROM job_postings
             WHERE {where_sql}
             ORDER BY posted_at DESC, scraped_at DESC

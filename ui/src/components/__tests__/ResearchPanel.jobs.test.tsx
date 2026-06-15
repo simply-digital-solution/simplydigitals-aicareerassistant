@@ -51,6 +51,7 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob {
     reasons:              JSON.stringify(['Python skills match']),
     risks:                JSON.stringify(['No cloud experience stated']),
     key_keywords:         JSON.stringify(['Python', 'Spark']),
+    scoring_breakdown:    null,
     scored_at:            '2026-06-11T08:00:00Z',
     archived:             false,
     ...overrides,
@@ -181,6 +182,57 @@ describe('LatestJobs — job card', () => {
     wrap()
     const link = await screen.findByText(/view posting/i)
     expect(link).toHaveAttribute('href', 'https://www.mycareersfuture.gov.sg/job/abc123')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Score breakdown table
+// ---------------------------------------------------------------------------
+
+describe('LatestJobs — score breakdown', () => {
+  const breakdown = JSON.stringify([
+    { category: 'Technical Skills',    jd_experience: 'Python, SQL', your_profile: 'Python, PostgreSQL', score: 9 },
+    { category: 'Experience Level',    jd_experience: '5+ yrs backend', your_profile: '6 yrs backend',   score: 8 },
+    { category: 'Domain / Industry',   jd_experience: 'FinTech',        your_profile: 'EdTech',           score: 5 },
+    { category: 'Seniority',           jd_experience: 'Senior Engineer', your_profile: 'Senior Engineer', score: 10 },
+    { category: 'Location & Work Mode','jd_experience': 'On-site SG',    your_profile: 'SG, prefer hybrid', score: 7 },
+  ])
+
+  it('breakdown table is not visible before expanding details', async () => {
+    setupApiMocks([makeJob({ scoring_breakdown: breakdown })])
+    wrap()
+    await screen.findByText('ACME Corp')
+    expect(screen.queryByText('Score Breakdown')).not.toBeInTheDocument()
+  })
+
+  it('breakdown table appears after clicking Show details', async () => {
+    setupApiMocks([makeJob({ scoring_breakdown: breakdown })])
+    wrap()
+    const toggle = await screen.findByRole('button', { name: /show details/i })
+    fireEvent.click(toggle)
+    expect(screen.getByText('Score Breakdown')).toBeInTheDocument()
+    expect(screen.getByText('Technical Skills')).toBeInTheDocument()
+    expect(screen.getByText('Python, SQL')).toBeInTheDocument()
+    expect(screen.getByText('Python, PostgreSQL')).toBeInTheDocument()
+    expect(screen.getByText('9/10')).toBeInTheDocument()
+  })
+
+  it('renders all 5 category rows', async () => {
+    setupApiMocks([makeJob({ scoring_breakdown: breakdown })])
+    wrap()
+    fireEvent.click(await screen.findByRole('button', { name: /show details/i }))
+    expect(screen.getByText('Technical Skills')).toBeInTheDocument()
+    expect(screen.getByText('Experience Level')).toBeInTheDocument()
+    expect(screen.getByText('Domain / Industry')).toBeInTheDocument()
+    expect(screen.getByText('Seniority')).toBeInTheDocument()
+    expect(screen.getByText('Location & Work Mode')).toBeInTheDocument()
+  })
+
+  it('does not render breakdown section when scoring_breakdown is null', async () => {
+    setupApiMocks([makeJob({ scoring_breakdown: null })])
+    wrap()
+    fireEvent.click(await screen.findByRole('button', { name: /show details/i }))
+    expect(screen.queryByText('Score Breakdown')).not.toBeInTheDocument()
   })
 })
 

@@ -65,12 +65,20 @@ def _make_job_row(job_id=1, user_id=42,
     }
 
 
-def _make_opportunity(fit_score=0.85, reasons=None, risks=None, keywords=None):
+def _make_score_category(category="Technical Skills", jd_experience="Python, SQL",
+                          your_profile="Python, PostgreSQL", score=8):
+    from app.shared.schemas import ScoreCategory
+    return ScoreCategory(category=category, jd_experience=jd_experience,
+                         your_profile=your_profile, score=score)
+
+
+def _make_opportunity(fit_score=0.85, reasons=None, risks=None, keywords=None, breakdown=None):
     opp = MagicMock()
-    opp.fit_score    = fit_score
-    opp.reasons      = reasons   or ["Strong ML skills match"]
-    opp.risks        = risks     or ["No Python 3.11 mentioned"]
-    opp.key_keywords = keywords  or ["PyTorch", "SQL"]
+    opp.fit_score       = fit_score
+    opp.reasons         = reasons   or ["Strong ML skills match"]
+    opp.risks           = risks     or ["No Python 3.11 mentioned"]
+    opp.key_keywords    = keywords  or ["PyTorch", "SQL"]
+    opp.scoring_breakdown = breakdown if breakdown is not None else []
     return opp
 
 
@@ -367,3 +375,75 @@ async def test_no_feedback_passes_empty_string_to_agent():
         await score_next_job(db)
 
     assert captured_kwargs.get("feedback_examples") == ""
+
+
+# ---------------------------------------------------------------------------
+# full_description=True is passed to the agent
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_full_description_flag_passed_to_agent():
+    job_row = _make_job_row()
+    db = _db_with_job(job_row)
+
+    opp    = _make_opportunity()
+    result = _make_research_result(opp)
+
+    captured_kwargs: dict = {}
+
+    async def fake_agent(profile, job_postings, **kwargs):
+        captured_kwargs.update(kwargs)
+        return result, {}
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
+    ):
+        await score_next_job(db)
+
+    assert captured_kwargs.get("full_description") is True
+
+
+# ---------------------------------------------------------------------------
+# scoring_breakdown is JSON-encoded in the UPDATE
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_scoring_breakdown_json_encoded_in_update():
+    job_row = _make_job_row()
+    db      = _db_with_job(job_row)
+
+    cat = _make_score_category(category="Technical Skills", jd_experience="Python, SQL",
+                                your_profile="Python, PostgreSQL", score=8)
+    opp    = _make_opportunity(breakdown=[cat])
+    result = _make_research_result(opp)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_job(db)
+
+    params = db.execute.call_args_list[2].args[1]
+    breakdown = json.loads(params["breakdown"])
+    assert len(breakdown) == 1
+    assert breakdown[0]["category"] == "Technical Skills"
+    assert breakdown[0]["score"] == 8
+
+
+@pytest.mark.asyncio
+async def test_scoring_breakdown_empty_list_when_not_provided():
+    job_row = _make_job_row()
+    db      = _db_with_job(job_row)
+
+    opp    = _make_opportunity(breakdown=[])
+    result = _make_research_result(opp)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_job(db)
+
+    params = db.execute.call_args_list[2].args[1]
+    assert json.loads(params["breakdown"]) == []

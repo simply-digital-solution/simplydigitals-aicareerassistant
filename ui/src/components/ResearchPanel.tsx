@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { ProfileData, StoredJobsResponse, StoredJob } from '../api/client'
+import type { ProfileData, StoredJobsResponse, StoredJob, ScoreCategory } from '../api/client'
 import api, { researchApi, applicationsApi } from '../api/client'
 
 type FeedbackEntry = { relevance: 'relevant' | 'not_relevant'; reason?: string }
@@ -59,6 +59,7 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
   const keywords   = parseJsonArray(job.key_keywords)
   const reasons    = parseJsonArray(job.reasons)
   const risks      = parseJsonArray(job.risks)
+  const breakdown: ScoreCategory[] = job.scoring_breakdown ? JSON.parse(job.scoring_breakdown) : []
 
   const borderCls =
     feedback?.relevance === 'relevant'     ? 'border-green-400 bg-green-50' :
@@ -206,25 +207,61 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
         </div>
       )}
 
-      {!!job.scored && (reasons.length > 0 || risks.length > 0) && (
+      {!!job.scored && (reasons.length > 0 || risks.length > 0 || breakdown.length > 0) && (
         <>
           <button onClick={() => setOpen(v => !v)} className="text-xs text-gray-400 hover:text-gray-600">
             {open ? 'Hide details ▲' : 'Show details ▼'}
           </button>
           {open && (
-            <div className="grid grid-cols-2 gap-3 pt-2 text-sm">
-              <div>
-                <p className="font-medium text-green-700 mb-1">Reasons</p>
-                <ul className="space-y-0.5">
-                  {reasons.map((r, i) => <li key={i} className="text-gray-600">✓ {r}</li>)}
-                </ul>
-              </div>
-              <div>
-                <p className="font-medium text-red-600 mb-1">Risks</p>
-                <ul className="space-y-0.5">
-                  {risks.map((r, i) => <li key={i} className="text-gray-600">⚠ {r}</li>)}
-                </ul>
-              </div>
+            <div className="space-y-3 pt-2">
+              {(reasons.length > 0 || risks.length > 0) && (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="font-medium text-green-700 mb-1">Reasons</p>
+                    <ul className="space-y-0.5">
+                      {reasons.map((r, i) => <li key={i} className="text-gray-600">✓ {r}</li>)}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-medium text-red-600 mb-1">Risks</p>
+                    <ul className="space-y-0.5">
+                      {risks.map((r, i) => <li key={i} className="text-gray-600">⚠ {r}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {breakdown.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Score Breakdown</p>
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500">
+                        <th className="text-left py-1 px-2 font-medium border border-gray-200 w-1/4">Category</th>
+                        <th className="text-left py-1 px-2 font-medium border border-gray-200 w-5/12">JD Requires</th>
+                        <th className="text-left py-1 px-2 font-medium border border-gray-200 w-5/12">Your Profile</th>
+                        <th className="text-center py-1 px-2 font-medium border border-gray-200 w-12">Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {breakdown.map((row) => {
+                        const scoreCls =
+                          row.score >= 8 ? 'text-green-700 font-semibold' :
+                          row.score >= 5 ? 'text-amber-600 font-semibold' :
+                          'text-red-600 font-semibold'
+                        return (
+                          <tr key={row.category} className="even:bg-gray-50">
+                            <td className="py-1 px-2 border border-gray-200 text-gray-700">{row.category}</td>
+                            <td className="py-1 px-2 border border-gray-200 text-gray-600">{row.jd_experience}</td>
+                            <td className="py-1 px-2 border border-gray-200 text-gray-600">{row.your_profile}</td>
+                            <td className={`py-1 px-2 border border-gray-200 text-center ${scoreCls}`}>{row.score}/10</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </>

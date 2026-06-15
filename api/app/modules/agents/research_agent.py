@@ -29,6 +29,7 @@ def _build_user_message(
     job_postings: list[dict],
     search_filters: dict[str, Any],
     feedback_examples: str = "",
+    full_description: bool = False,
 ) -> str:
     excluded = search_filters.get("excluded_companies") or profile.get('rules', {}).get('excluded_companies', [])
     salary_floor = search_filters.get("salary_floor") or profile.get('compensation', {}).get('min_base', 'N/A')
@@ -62,11 +63,14 @@ def _build_user_message(
     for i, job in enumerate(postings, 1):
         inferred = job.get("inferred_industries") or []
         industry_line = f"Industry: {', '.join(inferred)}\n" if inferred else ""
+        desc = str(job.get('description', ''))
+        desc_text = desc if full_description else desc[:DESC_SNIPPET_CHARS]
+        desc_label = "Description" if full_description else "Snippet"
         postings_block += (
             f"\n[{i}] {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}\n"
             f"URL: {job.get('url', '')}\n"
             f"{industry_line}"
-            f"Snippet: {str(job.get('description', ''))[:DESC_SNIPPET_CHARS]}\n"
+            f"{desc_label}: {desc_text}\n"
         )
 
     feedback_block = f"\n{feedback_examples}\n" if feedback_examples else ""
@@ -89,6 +93,7 @@ async def run_research_agent(
     application_id: Optional[int] = None,
     stream_callback: Optional[callable] = None,
     feedback_examples: str = "",
+    full_description: bool = False,
 ) -> tuple[ResearchOutput | AgentError, dict]:
     """
     Run the research agent against a list of job postings.
@@ -97,7 +102,9 @@ async def run_research_agent(
     """
     client = get_claude_client()
     system_prompt = _load_system_prompt()
-    user_message = _build_user_message(profile, job_postings, search_filters or {}, feedback_examples)
+    user_message = _build_user_message(
+        profile, job_postings, search_filters or {}, feedback_examples, full_description
+    )
 
     return await client.run_agent(
         agent_name=AGENT_NAME,
