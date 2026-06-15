@@ -23,6 +23,42 @@ SLEEP_BETWEEN_JOBS = 30       # seconds between scoring each job
 SLEEP_QUEUE_EMPTY  = 300      # seconds to wait when no unscored jobs remain
 
 
+async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
+    """
+    Fetch up to 5 relevant and 5 not_relevant feedback rows for the user and
+    format them as few-shot examples for the LLM prompt.
+    Returns an empty string when the user has no feedback yet.
+    """
+    rows = await db.execute(
+        text("""
+            SELECT job_title, company, relevance
+            FROM job_feedback
+            WHERE user_id = :uid
+            ORDER BY created_at DESC
+            LIMIT 10
+        """),
+        {"uid": user_id},
+    )
+    feedback = rows.mappings().all()
+    if not feedback:
+        return ""
+
+    relevant     = [f for f in feedback if f["relevance"] == "relevant"][:5]
+    not_relevant = [f for f in feedback if f["relevance"] == "not_relevant"][:5]
+
+    lines = ["User feedback on past jobs (use as calibration signal for scoring):"]
+    if relevant:
+        lines.append("Jobs marked RELEVANT (good fit for this user):")
+        for f in relevant:
+            lines.append(f"  + {f['job_title']} at {f['company']}")
+    if not_relevant:
+        lines.append("Jobs marked NOT RELEVANT (poor fit for this user):")
+        for f in not_relevant:
+            lines.append(f"  - {f['job_title']} at {f['company']}")
+
+    return "\n".join(lines)
+
+
 async def score_next_job(db: AsyncSession) -> bool:
     """
     Pick one unscored job (oldest posted_at first), score it, write back.
@@ -49,6 +85,8 @@ async def score_next_job(db: AsyncSession) -> bool:
 
     profile = await _load_profile(db, user_id)
 
+    feedback_examples = await _build_feedback_examples(db, user_id)
+
     job_dict = {
         "title":               job_row["title"],
         "company":             job_row["company"],
@@ -64,6 +102,7 @@ async def score_next_job(db: AsyncSession) -> bool:
             search_filters={},
             db=db,
             user_id=user_id,
+            feedback_examples=feedback_examples,
         )
     except Exception as exc:
         logger.error("llm_scorer: agent failed for job_id=%d: %s", job_id, exc)

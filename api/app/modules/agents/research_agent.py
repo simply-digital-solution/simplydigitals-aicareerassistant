@@ -24,7 +24,12 @@ MAX_JOBS_TO_SCORE = 10   # MCF structured fields are ~100 tokens/job — 10 fits
 DESC_SNIPPET_CHARS = 300  # fallback for non-MCF sources that return prose descriptions
 
 
-def _build_user_message(profile: dict[str, Any], job_postings: list[dict], search_filters: dict[str, Any]) -> str:
+def _build_user_message(
+    profile: dict[str, Any],
+    job_postings: list[dict],
+    search_filters: dict[str, Any],
+    feedback_examples: str = "",
+) -> str:
     excluded = search_filters.get("excluded_companies") or profile.get('rules', {}).get('excluded_companies', [])
     salary_floor = search_filters.get("salary_floor") or profile.get('compensation', {}).get('min_base', 'N/A')
     salary_currency = search_filters.get("salary_currency") or profile.get('compensation', {}).get('currency', '')
@@ -64,8 +69,11 @@ def _build_user_message(profile: dict[str, Any], job_postings: list[dict], searc
             f"Snippet: {str(job.get('description', ''))[:DESC_SNIPPET_CHARS]}\n"
         )
 
+    feedback_block = f"\n{feedback_examples}\n" if feedback_examples else ""
+
     return (
         f"{profile_block}\n"
+        f"{feedback_block}"
         f"{postings_block}\n\n"
         f"Return a JSON object with an \"opportunities\" array containing exactly {len(postings)} items, "
         f"one per posting above. Do not omit any posting."
@@ -80,6 +88,7 @@ async def run_research_agent(
     user_id: Optional[int] = None,
     application_id: Optional[int] = None,
     stream_callback: Optional[callable] = None,
+    feedback_examples: str = "",
 ) -> tuple[ResearchOutput | AgentError, dict]:
     """
     Run the research agent against a list of job postings.
@@ -88,7 +97,7 @@ async def run_research_agent(
     """
     client = get_claude_client()
     system_prompt = _load_system_prompt()
-    user_message = _build_user_message(profile, job_postings, search_filters or {})
+    user_message = _build_user_message(profile, job_postings, search_filters or {}, feedback_examples)
 
     return await client.run_agent(
         agent_name=AGENT_NAME,

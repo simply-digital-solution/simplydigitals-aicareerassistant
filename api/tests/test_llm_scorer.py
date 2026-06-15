@@ -2,22 +2,37 @@
 Unit tests for api/app/pipeline/llm_scorer.py
 
 All DB and agent calls are mocked — no live database or LLM needed.
+
+DB execute() call sequence inside score_next_job:
+  1. SELECT job_postings (job SELECT)
+  2. SELECT job_feedback (feedback examples)
+  3. UPDATE job_postings  (write score back)
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
-from app.pipeline.llm_scorer import score_next_job
+from app.pipeline.llm_scorer import score_next_job, _build_feedback_examples
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _db_with_job(job_row=None):
+def _feedback_exec(rows=None):
+    """Simulates the job_feedback SELECT."""
+    m = MagicMock()
+    m.mappings.return_value.all.return_value = rows or []
+    return m
+
+
+def _db_with_job(job_row=None, feedback_rows=None):
     """
-    Return a mock AsyncSession whose first execute() simulates a job SELECT.
-    Subsequent execute() calls simulate UPDATE commits.
+    Return a mock AsyncSession.
+    execute() side_effect sequence:
+      [0] job SELECT
+      [1] feedback SELECT
+      [2] UPDATE (only reached when a job was found)
     """
     db = AsyncMock()
 
@@ -27,8 +42,10 @@ def _db_with_job(job_row=None):
     else:
         select_result.mappings.return_value.first.return_value = job_row
 
-    update_result = MagicMock()
-    db.execute.side_effect = [select_result, update_result]
+    feedback_result = _feedback_exec(feedback_rows)
+    update_result   = MagicMock()
+
+    db.execute.side_effect = [select_result, feedback_result, update_result]
     return db
 
 
@@ -63,6 +80,10 @@ def _make_research_result(opp=None):
     return result
 
 
+def _make_feedback_row(job_title="Data Engineer", company="ACME", relevance="relevant"):
+    return {"job_title": job_title, "company": company, "relevance": relevance}
+
+
 # ---------------------------------------------------------------------------
 # Empty queue → returns False
 # ---------------------------------------------------------------------------
@@ -74,7 +95,7 @@ async def test_empty_queue_returns_false():
     had_work = await score_next_job(db)
 
     assert had_work is False
-    # No UPDATE should have been issued
+    # Only the job SELECT should have been issued — feedback query never reached
     db.execute.assert_called_once()
 
 
@@ -99,9 +120,9 @@ async def test_successful_score_writes_result():
     assert had_work is True
     db.commit.assert_called()
 
-    # Verify the UPDATE was executed with fit_score
-    update_call = db.execute.call_args_list[1]
-    params = update_call.args[1]   # second positional arg to execute()
+    # Verify the UPDATE was executed with fit_score (3rd execute call, index 2)
+    update_call = db.execute.call_args_list[2]
+    params = update_call.args[1]
     assert params["fit_score"] == 0.78
     assert params["id"] == 1
 
@@ -125,8 +146,8 @@ async def test_agent_exception_marks_job_scored():
     assert had_work is True
     db.commit.assert_called()
 
-    # Verify UPDATE was still issued (to avoid infinite retry)
-    assert db.execute.call_count == 2
+    # job SELECT + feedback SELECT + UPDATE = 3 calls
+    assert db.execute.call_count == 3
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +210,7 @@ async def test_inferred_industries_deserialized():
 
     captured_job = {}
 
-    async def fake_agent(profile, job_postings, search_filters, db, user_id):
+    async def fake_agent(profile, job_postings, **kwargs):
         captured_job.update(job_postings[0])
         return result, {}
 
@@ -220,7 +241,117 @@ async def test_score_fields_json_encoded_in_update():
     ):
         await score_next_job(db)
 
-    params = db.execute.call_args_list[1].args[1]
+    params = db.execute.call_args_list[2].args[1]
     assert json.loads(params["reasons"])  == ["r1"]
     assert json.loads(params["risks"])    == ["risk1"]
     assert json.loads(params["keywords"]) == ["k1", "k2"]
+
+
+# ---------------------------------------------------------------------------
+# Feedback examples — _build_feedback_examples helper
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_build_feedback_examples_empty_returns_empty_string():
+    db = AsyncMock()
+    feedback_result = _feedback_exec([])
+    db.execute.return_value = feedback_result
+
+    result = await _build_feedback_examples(db, user_id=1)
+
+    assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_build_feedback_examples_relevant_jobs_included():
+    db = AsyncMock()
+    db.execute.return_value = _feedback_exec([
+        _make_feedback_row("Data Engineer", "ACME", "relevant"),
+        _make_feedback_row("ML Engineer",   "Stripe", "relevant"),
+    ])
+
+    result = await _build_feedback_examples(db, user_id=1)
+
+    assert "RELEVANT" in result
+    assert "Data Engineer at ACME" in result
+    assert "ML Engineer at Stripe" in result
+
+
+@pytest.mark.asyncio
+async def test_build_feedback_examples_not_relevant_jobs_included():
+    db = AsyncMock()
+    db.execute.return_value = _feedback_exec([
+        _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant"),
+    ])
+
+    result = await _build_feedback_examples(db, user_id=1)
+
+    assert "NOT RELEVANT" in result
+    assert "Sales Manager at Telco Corp" in result
+
+
+@pytest.mark.asyncio
+async def test_build_feedback_examples_both_groups_included():
+    db = AsyncMock()
+    db.execute.return_value = _feedback_exec([
+        _make_feedback_row("Data Engineer", "ACME",      "relevant"),
+        _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant"),
+    ])
+
+    result = await _build_feedback_examples(db, user_id=1)
+
+    assert "RELEVANT" in result
+    assert "NOT RELEVANT" in result
+
+
+# ---------------------------------------------------------------------------
+# Feedback injected into agent call when present
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_feedback_examples_passed_to_agent():
+    job_row = _make_job_row()
+    db = _db_with_job(job_row, feedback_rows=[
+        _make_feedback_row("Data Engineer", "ACME", "relevant"),
+    ])
+
+    opp    = _make_opportunity()
+    result = _make_research_result(opp)
+
+    captured_kwargs: dict = {}
+
+    async def fake_agent(profile, job_postings, **kwargs):
+        captured_kwargs.update(kwargs)
+        return result, {}
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
+    ):
+        await score_next_job(db)
+
+    assert "feedback_examples" in captured_kwargs
+    assert "Data Engineer at ACME" in captured_kwargs["feedback_examples"]
+
+
+@pytest.mark.asyncio
+async def test_no_feedback_passes_empty_string_to_agent():
+    job_row = _make_job_row()
+    db = _db_with_job(job_row, feedback_rows=[])
+
+    opp    = _make_opportunity()
+    result = _make_research_result(opp)
+
+    captured_kwargs: dict = {}
+
+    async def fake_agent(profile, job_postings, **kwargs):
+        captured_kwargs.update(kwargs)
+        return result, {}
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
+    ):
+        await score_next_job(db)
+
+    assert captured_kwargs.get("feedback_examples") == ""
