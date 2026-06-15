@@ -62,8 +62,14 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
             posted_str = job.get("posted_at") or job.get("scraped_at")
             if posted_str:
                 try:
-                    posted_at = datetime.fromisoformat(posted_str.replace("Z", "+00:00"))
-                except ValueError:
+                    parsed = datetime.fromisoformat(posted_str.replace("Z", "+00:00"))
+                    # fromisoformat returns date when string is "YYYY-MM-DD" — promote to datetime
+                    if not hasattr(parsed, 'hour'):
+                        from datetime import date as _date
+                        posted_at = datetime(parsed.year, parsed.month, parsed.day, tzinfo=timezone.utc)
+                    else:
+                        posted_at = parsed
+                except (ValueError, AttributeError):
                     pass
 
             job_title   = job.get("title", "")

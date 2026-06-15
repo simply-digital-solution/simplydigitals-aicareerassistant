@@ -253,6 +253,9 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
 
         description = f"{structured_summary}\n\n{full_text}" if full_text else structured_summary
 
+        metadata = item.get("metadata") or {}
+        original_posting_date = metadata.get("originalPostingDate")  # "YYYY-MM-DD" plain date
+
         jobs.append({
             "title": item.get("title", ""),
             "company": company,
@@ -262,6 +265,7 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
             "inferred_industries": extract_industry_names(description),
             "source": "mycareersfuture",
             "scraped_at": _now_iso(),
+            "posted_at": original_posting_date,
         })
 
     return jobs
