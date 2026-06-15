@@ -53,6 +53,30 @@ class ResumeOutput(AgentBaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Agent 2b — Resume Generator (full tailored resume)
+# ---------------------------------------------------------------------------
+
+class GeneratedResumeExperience(AgentBaseModel):
+    title: str
+    company: str
+    dates: str
+    bullets: list[str]
+
+
+class GeneratedResumeSection(AgentBaseModel):
+    section_type: str   # summary | experience | skills | education | other
+    title: str          # heading as it appears in user's original resume
+    content: list[str] = Field(default_factory=list)           # paragraphs or bullet points
+    experience: list[GeneratedResumeExperience] = Field(default_factory=list)  # only for experience sections
+
+
+class GeneratedResumeOutput(AgentBaseModel):
+    name: str
+    headline: str
+    sections: list[GeneratedResumeSection]
+
+
+# ---------------------------------------------------------------------------
 # Agent 3 — Job Application Drafts
 # ---------------------------------------------------------------------------
 

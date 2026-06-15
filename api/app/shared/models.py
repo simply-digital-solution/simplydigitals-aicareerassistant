@@ -88,6 +88,22 @@ class Application(Base):
 
 
 # ---------------------------------------------------------------------------
+# Generated resumes
+# ---------------------------------------------------------------------------
+
+class GeneratedResume(Base):
+    __tablename__ = "generated_resumes"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    user_id        = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    job_posting_id = Column(Integer, ForeignKey("job_postings.id"), nullable=False)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=True)
+    resume_json    = Column(Text, nullable=False)
+    created_at     = Column(DateTime(timezone=True), default=_now)
+    updated_at     = Column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+# ---------------------------------------------------------------------------
 # Agent execution
 # ---------------------------------------------------------------------------
 

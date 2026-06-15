@@ -404,6 +404,8 @@ async def _load_profile(db: AsyncSession | None = None, user_id: int | None = No
         "target_titles": target_titles,
         "core_skills": skills,
         "industries": json.loads(p.target_industries) if p.target_industries else [],
+        "full_name": p.full_name or "",
+        "resume_text": p.resume_text or "",
     }
 
 
@@ -1031,6 +1033,111 @@ async def rescore_job(
         {"id": job_id, "uid": current_user.id},
     )
     await db.commit()
+
+
+@router.post("/research/jobs/{job_id}/generate-resume", status_code=201)
+async def generate_resume(
+    job_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate a tailored resume for a selected job using the candidate's
+    profile resume text. Saves result to generated_resumes (upsert by user+job).
+    """
+    from datetime import datetime, timezone
+    from app.modules.agents.resume_generate_agent import run_resume_generate_agent
+    from app.shared.schemas import AgentError
+
+    # Fetch job
+    job_row = await db.execute(
+        text("SELECT id, description FROM job_postings WHERE id = :id AND user_id = :uid"),
+        {"id": job_id, "uid": current_user.id},
+    )
+    job = job_row.mappings().first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    # Fetch profile
+    profile = await _load_profile(db, current_user.id)
+    resume_text = profile.get("resume_text") or ""
+    if not resume_text.strip():
+        raise HTTPException(422, "No resume found in profile. Please upload your resume first.")
+
+    candidate_name = profile.get("full_name") or ""
+
+    # Fetch linked application_id if exists
+    app_row = await db.execute(
+        text("""
+            SELECT id FROM applications
+            WHERE job_posting_id = :jid AND user_id = :uid AND status = 'selected'
+            LIMIT 1
+        """),
+        {"jid": job_id, "uid": current_user.id},
+    )
+    app = app_row.mappings().first()
+    application_id = app["id"] if app else None
+
+    result, _ = await run_resume_generate_agent(
+        resume_text=resume_text,
+        jd_text=job["description"] or "",
+        candidate_name=candidate_name,
+        db=db,
+        user_id=current_user.id,
+        application_id=application_id,
+    )
+
+    if isinstance(result, AgentError):
+        raise HTTPException(502, f"Resume generation failed: {result.error}")
+
+    now = datetime.now(timezone.utc).isoformat()
+    resume_json = result.model_dump_json()
+
+    await db.execute(
+        text("""
+            INSERT INTO generated_resumes
+                (user_id, job_posting_id, application_id, resume_json, created_at, updated_at)
+            VALUES
+                (:uid, :jid, :aid, :resume_json, :now, :now)
+            ON CONFLICT (user_id, job_posting_id) DO UPDATE SET
+                resume_json  = excluded.resume_json,
+                application_id = excluded.application_id,
+                updated_at   = excluded.updated_at
+        """),
+        {"uid": current_user.id, "jid": job_id, "aid": application_id,
+         "resume_json": resume_json, "now": now},
+    )
+    await db.commit()
+
+    return {"job_posting_id": job_id, "resume": result.model_dump()}
+
+
+@router.get("/research/jobs/{job_id}/resume")
+async def get_generated_resume(
+    job_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the previously generated resume for a job, or 404 if not yet generated."""
+    row = await db.execute(
+        text("""
+            SELECT resume_json, created_at, updated_at
+            FROM generated_resumes
+            WHERE user_id = :uid AND job_posting_id = :jid
+        """),
+        {"uid": current_user.id, "jid": job_id},
+    )
+    resume = row.mappings().first()
+    if not resume:
+        raise HTTPException(404, "No generated resume found for this job")
+
+    import json as _json
+    return {
+        "job_posting_id": job_id,
+        "resume": _json.loads(resume["resume_json"]),
+        "created_at": resume["created_at"],
+        "updated_at": resume["updated_at"],
+    }
 
 
 @router.post("/research/scrape")

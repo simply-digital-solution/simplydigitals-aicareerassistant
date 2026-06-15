@@ -213,6 +213,33 @@ export interface SelectedJobsResponse {
   jobs: (StoredJob & { application_id: number })[]
 }
 
+export interface GeneratedResumeExperience {
+  title: string
+  company: string
+  dates: string
+  bullets: string[]
+}
+
+export interface GeneratedResumeSection {
+  section_type: 'summary' | 'experience' | 'skills' | 'education' | 'other'
+  title: string
+  content: string[]
+  experience: GeneratedResumeExperience[]
+}
+
+export interface GeneratedResumeOutput {
+  name: string
+  headline: string
+  sections: GeneratedResumeSection[]
+}
+
+export interface GeneratedResumeResponse {
+  job_posting_id: number
+  resume: GeneratedResumeOutput
+  created_at?: string
+  updated_at?: string
+}
+
 // Research (stored jobs) API
 export const researchApi = {
   getJobs: (params: { page?: number; per_page?: number; role?: string; days?: number }) =>
@@ -220,6 +247,10 @@ export const researchApi = {
   getSelectedJobs: () => api.get<SelectedJobsResponse>('/research/jobs/selected'),
   archiveJob: (id: number) => api.post(`/research/jobs/${id}/archive`),
   rescoreJob: (id: number) => api.post(`/research/jobs/${id}/rescore`),
+  generateResume: (jobId: number) =>
+    api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/generate-resume`),
+  getGeneratedResume: (jobId: number) =>
+    api.get<GeneratedResumeResponse>(`/research/jobs/${jobId}/resume`),
 }
 
 // Budget API

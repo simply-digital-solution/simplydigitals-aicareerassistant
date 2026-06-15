@@ -4,6 +4,7 @@ import api, { researchApi } from '../api/client'
 import type { StoredJob } from '../api/client'
 import { StoredJobCard } from './ResearchPanel'
 import type { FeedbackEntry } from './ResearchPanel'
+import TailoredResumePanel from './TailoredResumePanel'
 
 type FeedbackMap = Record<string, FeedbackEntry>
 
@@ -80,14 +81,16 @@ export default function SelectedJobsPanel() {
         ) : (
           <div className="space-y-3">
             {jobs.map(job => (
-              <StoredJobCard
-                key={job.id}
-                job={job}
-                feedback={feedbackMap[job.url]}
-                onFeedback={handleFeedback}
-                onArchive={(id) => archiveMutation.mutate(id)}
-                onRescore={(id) => rescoreMutation.mutate(id)}
-              />
+              <div key={job.id}>
+                <StoredJobCard
+                  job={job}
+                  feedback={feedbackMap[job.url]}
+                  onFeedback={handleFeedback}
+                  onArchive={(id) => archiveMutation.mutate(id)}
+                  onRescore={(id) => rescoreMutation.mutate(id)}
+                />
+                <TailoredResumePanel jobId={job.id} />
+              </div>
             ))}
           </div>
         )}
