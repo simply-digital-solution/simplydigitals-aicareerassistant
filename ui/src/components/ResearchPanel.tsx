@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ProfileData, StoredJobsResponse, StoredJob } from '../api/client'
-import api from '../api/client'
+import api, { researchApi } from '../api/client'
 
 type FeedbackMap = Record<string, 'relevant' | 'not_relevant'>
 
@@ -27,10 +27,11 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
-function StoredJobCard({ job, feedback, onFeedback }: {
+function StoredJobCard({ job, feedback, onFeedback, onArchive }: {
   job: StoredJob
   feedback?: 'relevant' | 'not_relevant'
   onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant') => void
+  onArchive: (id: number) => void
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -84,6 +85,17 @@ function StoredJobCard({ job, feedback, onFeedback }: {
             className={`text-base leading-none px-1.5 py-0.5 rounded transition-colors ${
               feedback === 'not_relevant' ? 'bg-red-200 text-red-600' : 'hover:bg-red-100 text-gray-400 hover:text-red-500'
             } disabled:opacity-40`}>👎</button>
+          <button
+            title="Archive job"
+            onClick={() => onArchive(job.id)}
+            className="text-gray-300 hover:text-gray-500 hover:bg-gray-100 rounded p-0.5 transition-colors leading-none"
+            aria-label="Archive job"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path d="M2 3a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3Z" />
+              <path fillRule="evenodd" d="M3 7h14v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm5 3a1 1 0 0 0 0 2h4a1 1 0 1 0 0-2H8Z" clipRule="evenodd" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -187,6 +199,14 @@ export default function ResearchPanel() {
     queryFn: () => api.get<StoredJobsResponse>('/research/jobs?per_page=200').then(r => r.data),
   })
   const roleOptions = Array.from(new Set((allRolesData?.jobs ?? []).map(j => j.title))).sort()
+
+  const archiveMutation = useMutation({
+    mutationFn: (id: number) => researchApi.archiveJob(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['stored-jobs-all-roles'] })
+    },
+  })
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -307,6 +327,7 @@ export default function ResearchPanel() {
                 job={job}
                 feedback={feedbackMap[job.url]}
                 onFeedback={handleFeedback}
+                onArchive={(id) => archiveMutation.mutate(id)}
               />
             ))}
           </div>

@@ -905,7 +905,7 @@ async def get_stored_jobs(
     """
     offset = (page - 1) * per_page
 
-    where_clauses = ["user_id = :uid"]
+    where_clauses = ["user_id = :uid", "archived = 0"]
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
 
     if role:
@@ -940,6 +940,26 @@ async def get_stored_jobs(
     )
     jobs = [dict(r) for r in rows.mappings()]
     return {"total": total, "page": page, "per_page": per_page, "jobs": jobs}
+
+
+@router.post("/research/jobs/{job_id}/archive", status_code=204)
+async def archive_job(
+    job_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark a job posting as archived — it will no longer appear in the research panel."""
+    result = await db.execute(
+        text("SELECT id FROM job_postings WHERE id = :id AND user_id = :uid"),
+        {"id": job_id, "uid": current_user.id},
+    )
+    if not result.fetchone():
+        raise HTTPException(404, "Job not found")
+    await db.execute(
+        text("UPDATE job_postings SET archived = 1 WHERE id = :id AND user_id = :uid"),
+        {"id": job_id, "uid": current_user.id},
+    )
+    await db.commit()
 
 
 @router.post("/research/scrape")

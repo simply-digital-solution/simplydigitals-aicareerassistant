@@ -96,6 +96,7 @@ export interface StoredJob {
   risks: string | null                 // JSON string from DB
   key_keywords: string | null          // JSON string from DB
   scored_at: string | null
+  archived: boolean
 }
 
 export interface StoredJobsResponse {
@@ -196,6 +197,13 @@ export const approvalsApi = {
   edit: (id: number, edited_content: string) =>
     api.post(`/approvals/${id}/edit`, { edited_content }),
   reject: (id: number) => api.post(`/approvals/${id}/reject`),
+}
+
+// Research (stored jobs) API
+export const researchApi = {
+  getJobs: (params: { page?: number; per_page?: number; role?: string; days?: number }) =>
+    api.get<StoredJobsResponse>('/research/jobs', { params }),
+  archiveJob: (id: number) => api.post(`/research/jobs/${id}/archive`),
 }
 
 // Budget API

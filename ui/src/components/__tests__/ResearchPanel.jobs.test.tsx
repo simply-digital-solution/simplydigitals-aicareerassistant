@@ -7,7 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ResearchPanel from '../ResearchPanel'
-import api from '../../api/client'
+import api, * as clientModule from '../../api/client'
 import type { StoredJob } from '../../api/client'
 
 // ---------------------------------------------------------------------------
@@ -19,6 +19,10 @@ vi.mock('../../api/client', () => ({
     get:   vi.fn(),
     post:  vi.fn(),
     patch: vi.fn().mockResolvedValue({}),
+  },
+  researchApi: {
+    getJobs:    vi.fn(),
+    archiveJob: vi.fn(),
   },
 }))
 
@@ -43,6 +47,7 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob {
     risks:                JSON.stringify(['No cloud experience stated']),
     key_keywords:         JSON.stringify(['Python', 'Spark']),
     scored_at:            '2026-06-11T08:00:00Z',
+    archived:             false,
     ...overrides,
   }
 }
@@ -74,6 +79,7 @@ function wrap() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(clientModule.researchApi.archiveJob).mockResolvedValue({ data: {} } as ReturnType<typeof clientModule.researchApi.archiveJob>)
 })
 
 function setupApiMocks(jobs: StoredJob[] = [], total?: number) {
@@ -303,5 +309,39 @@ describe('LatestJobs — Refresh button', () => {
 
     expect(await screen.findByText(/scraping…/i)).toBeInTheDocument()
     resolve()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Archive button
+// ---------------------------------------------------------------------------
+
+describe('LatestJobs — archive button', () => {
+  it('renders an archive button on each job card', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const archiveBtn = await screen.findByRole('button', { name: /archive job/i })
+    expect(archiveBtn).toBeInTheDocument()
+  })
+
+  it('archive button has tooltip title "Archive job"', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const archiveBtn = await screen.findByRole('button', { name: /archive job/i })
+    expect(archiveBtn).toHaveAttribute('title', 'Archive job')
+  })
+
+  it('clicking archive button calls researchApi.archiveJob with the job id', async () => {
+    setupApiMocks([makeJob({ id: 7 })])
+    wrap()
+
+    const archiveBtn = await screen.findByRole('button', { name: /archive job/i })
+    fireEvent.click(archiveBtn)
+
+    await waitFor(() => {
+      expect(vi.mocked(clientModule.researchApi.archiveJob)).toHaveBeenCalledWith(7)
+    })
   })
 })
