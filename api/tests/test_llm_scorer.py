@@ -80,8 +80,8 @@ def _make_research_result(opp=None):
     return result
 
 
-def _make_feedback_row(job_title="Data Engineer", company="ACME", relevance="relevant"):
-    return {"job_title": job_title, "company": company, "relevance": relevance}
+def _make_feedback_row(job_title="Data Engineer", company="ACME", relevance="relevant", reason=None):
+    return {"job_title": job_title, "company": company, "relevance": relevance, "reason": reason}
 
 
 # ---------------------------------------------------------------------------
@@ -281,13 +281,25 @@ async def test_build_feedback_examples_relevant_jobs_included():
 async def test_build_feedback_examples_not_relevant_jobs_included():
     db = AsyncMock()
     db.execute.return_value = _feedback_exec([
-        _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant"),
+        _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant", reason=None),
     ])
 
     result = await _build_feedback_examples(db, user_id=1)
 
     assert "NOT RELEVANT" in result
     assert "Sales Manager at Telco Corp" in result
+
+
+@pytest.mark.asyncio
+async def test_build_feedback_examples_reason_included_in_output():
+    db = AsyncMock()
+    db.execute.return_value = _feedback_exec([
+        _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant", reason="Wrong industry"),
+    ])
+
+    result = await _build_feedback_examples(db, user_id=1)
+
+    assert "reason: Wrong industry" in result
 
 
 @pytest.mark.asyncio

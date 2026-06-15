@@ -205,7 +205,20 @@ describe('LatestJobs — feedback', () => {
     })
   })
 
-  it('calls POST /research/feedback with "not_relevant" on thumbs-down click', async () => {
+  it('thumbs-down shows reason picker instead of saving immediately', async () => {
+    setupApiMocks([makeJob()])
+    wrap()
+
+    const thumbDown = await screen.findByTitle('Not relevant')
+    fireEvent.click(thumbDown)
+
+    expect(await screen.findByText('Why not relevant?')).toBeInTheDocument()
+    expect(screen.getByText('Wrong industry')).toBeInTheDocument()
+    // API should NOT have been called yet
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled()
+  })
+
+  it('selecting a reason chip saves feedback with reason', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { status: 'saved' } })
     setupApiMocks([makeJob()])
     wrap()
@@ -213,11 +226,40 @@ describe('LatestJobs — feedback', () => {
     const thumbDown = await screen.findByTitle('Not relevant')
     fireEvent.click(thumbDown)
 
+    const chip = await screen.findByText('Wrong industry')
+    fireEvent.click(chip)
+
     await waitFor(() => {
       expect(vi.mocked(api.post)).toHaveBeenCalledWith('/research/feedback', expect.objectContaining({
         relevance: 'not_relevant',
+        reason:    'Wrong industry',
+        job_url:   'https://www.mycareersfuture.gov.sg/job/abc123',
       }))
     })
+  })
+
+  it('reason picker disappears after selecting a reason', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { status: 'saved' } })
+    setupApiMocks([makeJob()])
+    wrap()
+
+    fireEvent.click(await screen.findByTitle('Not relevant'))
+    fireEvent.click(await screen.findByText('Wrong industry'))
+
+    await waitFor(() => {
+      expect(screen.queryByText('Why not relevant?')).not.toBeInTheDocument()
+    })
+  })
+
+  it('saved reason label appears on card after selection', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: { status: 'saved' } })
+    setupApiMocks([makeJob()])
+    wrap()
+
+    fireEvent.click(await screen.findByTitle('Not relevant'))
+    fireEvent.click(await screen.findByText('Wrong industry'))
+
+    expect(await screen.findByText('👎 Wrong industry')).toBeInTheDocument()
   })
 })
 

@@ -3,7 +3,17 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ProfileData, StoredJobsResponse, StoredJob } from '../api/client'
 import api, { researchApi, applicationsApi } from '../api/client'
 
-type FeedbackMap = Record<string, 'relevant' | 'not_relevant'>
+type FeedbackEntry = { relevance: 'relevant' | 'not_relevant'; reason?: string }
+type FeedbackMap = Record<string, FeedbackEntry>
+
+const NOT_RELEVANT_REASONS = [
+  'Wrong industry',
+  'Wrong seniority',
+  'Too junior / too senior',
+  'Wrong location',
+  'Already applied',
+  'Company not a fit',
+]
 
 const STORED_PAGE_SIZE = 10
 const STORED_DATE_OPTIONS = [
@@ -29,32 +39,53 @@ function parseJsonArray(val: string | null | undefined): string[] {
 
 function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
   job: StoredJob
-  feedback?: 'relevant' | 'not_relevant'
-  onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant') => void
+  feedback?: FeedbackEntry
+  onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant', reason?: string) => void
   onArchive: (id: number) => void
   onSave: (job: StoredJob) => void
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [pickingReason, setPickingReason] = useState(false)
   const industries = parseJsonArray(job.inferred_industries)
   const keywords   = parseJsonArray(job.key_keywords)
   const reasons    = parseJsonArray(job.reasons)
   const risks      = parseJsonArray(job.risks)
 
   const borderCls =
-    feedback === 'relevant'     ? 'border-green-400 bg-green-50' :
-    feedback === 'not_relevant' ? 'border-red-300 bg-red-50 opacity-70' :
+    feedback?.relevance === 'relevant'     ? 'border-green-400 bg-green-50' :
+    feedback?.relevance === 'not_relevant' ? 'border-red-300 bg-red-50 opacity-70' :
     'border-gray-200'
 
-  const handleFeedback = async (rel: 'relevant' | 'not_relevant') => {
+  const handleThumbUp = async () => {
     if (saving) return
     setSaving(true)
+    setPickingReason(false)
     try {
       await api.post('/research/feedback', {
-        job_url: job.url, job_title: job.title, company: job.company, relevance: rel,
+        job_url: job.url, job_title: job.title, company: job.company, relevance: 'relevant',
       })
-      onFeedback(job.url, job.title, job.company, rel)
+      onFeedback(job.url, job.title, job.company, 'relevant')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleThumbDown = () => {
+    if (saving || feedback?.relevance === 'not_relevant') return
+    setPickingReason(true)
+  }
+
+  const handleReasonSelect = async (reason: string) => {
+    setSaving(true)
+    setPickingReason(false)
+    try {
+      await api.post('/research/feedback', {
+        job_url: job.url, job_title: job.title, company: job.company,
+        relevance: 'not_relevant', reason,
+      })
+      onFeedback(job.url, job.title, job.company, 'not_relevant', reason)
     } finally {
       setSaving(false)
     }
@@ -80,19 +111,22 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
             {job.company}
             {postedLabel && <span className="ml-2 text-xs text-gray-400">· {postedLabel}</span>}
           </p>
+          {feedback?.relevance === 'not_relevant' && feedback.reason && (
+            <p className="text-xs text-red-500 mt-0.5">👎 {feedback.reason}</p>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {!!job.scored && job.fit_score !== null
             ? <FitBadge score={job.fit_score} />
             : <span className="text-xs text-gray-400 italic">Scoring…</span>
           }
-          <button title="Relevant" disabled={saving} onClick={() => handleFeedback('relevant')}
+          <button title="Relevant" disabled={saving} onClick={handleThumbUp}
             className={`text-base leading-none px-1.5 py-0.5 rounded transition-colors ${
-              feedback === 'relevant' ? 'bg-green-200 text-green-700' : 'hover:bg-green-100 text-gray-400 hover:text-green-600'
+              feedback?.relevance === 'relevant' ? 'bg-green-200 text-green-700' : 'hover:bg-green-100 text-gray-400 hover:text-green-600'
             } disabled:opacity-40`}>👍</button>
-          <button title="Not relevant" disabled={saving} onClick={() => handleFeedback('not_relevant')}
+          <button title="Not relevant" disabled={saving} onClick={handleThumbDown}
             className={`text-base leading-none px-1.5 py-0.5 rounded transition-colors ${
-              feedback === 'not_relevant' ? 'bg-red-200 text-red-600' : 'hover:bg-red-100 text-gray-400 hover:text-red-500'
+              feedback?.relevance === 'not_relevant' ? 'bg-red-200 text-red-600' : pickingReason ? 'bg-red-100 text-red-500' : 'hover:bg-red-100 text-gray-400 hover:text-red-500'
             } disabled:opacity-40`}>👎</button>
           <button
             title="Save to Selected"
@@ -131,6 +165,23 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
           </button>
         </div>
       </div>
+
+      {pickingReason && (
+        <div className="pt-1">
+          <p className="text-xs text-gray-500 mb-1.5">Why not relevant?</p>
+          <div className="flex flex-wrap gap-1.5">
+            {NOT_RELEVANT_REASONS.map(r => (
+              <button
+                key={r}
+                onClick={() => handleReasonSelect(r)}
+                className="text-xs border border-red-300 text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-full transition-colors"
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {industries.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -186,17 +237,20 @@ export default function ResearchPanel() {
   const queryClient = useQueryClient()
 
   // Feedback — merge saved + optimistic local state
-  const { data: savedFeedback } = useQuery<{ job_url: string; relevance: 'relevant' | 'not_relevant' }[]>({
+  const { data: savedFeedback } = useQuery<{ job_url: string; relevance: 'relevant' | 'not_relevant'; reason?: string }[]>({
     queryKey: ['research-feedback'],
     queryFn: () => api.get('/research/feedback').then(r => r.data.feedback ?? []),
   })
   const [localFeedback, setLocalFeedback] = useState<FeedbackMap>({})
   const feedbackMap: FeedbackMap = {
-    ...(savedFeedback ?? []).reduce<FeedbackMap>((acc, f) => { acc[f.job_url] = f.relevance; return acc }, {}),
+    ...(savedFeedback ?? []).reduce<FeedbackMap>((acc, f) => {
+      acc[f.job_url] = { relevance: f.relevance, reason: f.reason }
+      return acc
+    }, {}),
     ...localFeedback,
   }
-  const handleFeedback = (url: string, _title: string, _company: string, relevance: 'relevant' | 'not_relevant') => {
-    setLocalFeedback(prev => ({ ...prev, [url]: relevance }))
+  const handleFeedback = (url: string, _title: string, _company: string, relevance: 'relevant' | 'not_relevant', reason?: string) => {
+    setLocalFeedback(prev => ({ ...prev, [url]: { relevance, reason } }))
     queryClient.invalidateQueries({ queryKey: ['research-feedback'] })
   }
 

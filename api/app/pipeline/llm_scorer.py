@@ -31,7 +31,7 @@ async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
     """
     rows = await db.execute(
         text("""
-            SELECT job_title, company, relevance
+            SELECT job_title, company, relevance, reason
             FROM job_feedback
             WHERE user_id = :uid
             ORDER BY created_at DESC
@@ -54,7 +54,8 @@ async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
     if not_relevant:
         lines.append("Jobs marked NOT RELEVANT (poor fit for this user):")
         for f in not_relevant:
-            lines.append(f"  - {f['job_title']} at {f['company']}")
+            reason_suffix = f" (reason: {f['reason']})" if f["reason"] else ""
+            lines.append(f"  - {f['job_title']} at {f['company']}{reason_suffix}")
 
     return "\n".join(lines)
 

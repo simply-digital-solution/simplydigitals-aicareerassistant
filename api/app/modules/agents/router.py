@@ -855,7 +855,8 @@ class JobFeedbackRequest(BaseModel):
     job_url: str
     job_title: str
     company: str
-    relevance: str   # relevant | not_relevant
+    relevance: str        # relevant | not_relevant
+    reason: str | None = None  # why not relevant — required for not_relevant, null for relevant
 
 
 @router.post("/research/feedback")
@@ -870,19 +871,21 @@ async def save_job_feedback(
 
     await db.execute(
         text("""
-            INSERT INTO job_feedback (user_id, job_url, job_title, company, relevance, created_at, updated_at)
-            VALUES (:uid, :url, :title, :company, :relevance, :now, :now)
+            INSERT INTO job_feedback (user_id, job_url, job_title, company, relevance, reason, created_at, updated_at)
+            VALUES (:uid, :url, :title, :company, :relevance, :reason, :now, :now)
             ON CONFLICT(user_id, job_url) DO UPDATE SET
-                relevance = excluded.relevance,
+                relevance  = excluded.relevance,
+                reason     = excluded.reason,
                 updated_at = excluded.updated_at
         """),
         {
-            "uid": current_user.id,
-            "url": body.job_url,
-            "title": body.job_title,
-            "company": body.company,
+            "uid":      current_user.id,
+            "url":      body.job_url,
+            "title":    body.job_title,
+            "company":  body.company,
             "relevance": body.relevance,
-            "now": datetime.now(timezone.utc).isoformat(),
+            "reason":   body.reason,
+            "now":      datetime.now(timezone.utc).isoformat(),
         },
     )
     await db.commit()
@@ -981,7 +984,7 @@ async def get_job_feedback(
     """Return all job feedback for the current user."""
     rows = await db.execute(
         text("""
-            SELECT job_url, job_title, company, relevance, created_at
+            SELECT job_url, job_title, company, relevance, reason, created_at
             FROM job_feedback
             WHERE user_id = :uid
             ORDER BY created_at DESC
