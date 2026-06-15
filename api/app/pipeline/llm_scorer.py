@@ -71,6 +71,7 @@ async def score_next_job(db: AsyncSession) -> bool:
                    jp.description, jp.inferred_industries
             FROM job_postings jp
             WHERE jp.scored = 0
+              AND jp.score_error IS NULL
             ORDER BY jp.posted_at ASC, jp.scraped_at ASC
             LIMIT 1
         """)
@@ -107,20 +108,21 @@ async def score_next_job(db: AsyncSession) -> bool:
             full_description=True,
         )
     except Exception as exc:
-        logger.error("llm_scorer: agent failed for job_id=%d: %s", job_id, exc)
-        # Mark scored so we don't retry a broken job forever
+        error_msg = f"{type(exc).__name__}: {exc}"
+        logger.error("llm_scorer: agent failed for job_id=%d: %s", job_id, error_msg)
         await db.execute(
-            text("UPDATE job_postings SET scored=1, scored_at=:now WHERE id=:id"),
-            {"now": datetime.now(timezone.utc).isoformat(), "id": job_id},
+            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+            {"err": error_msg, "id": job_id},
         )
         await db.commit()
         return True
 
     if isinstance(result, AgentError) or not result.opportunities:
-        logger.warning("llm_scorer: no output for job_id=%d, marking scored", job_id)
+        error_msg = result.error if isinstance(result, AgentError) else "LLM returned no opportunities"
+        logger.warning("llm_scorer: no output for job_id=%d: %s", job_id, error_msg)
         await db.execute(
-            text("UPDATE job_postings SET scored=1, scored_at=:now WHERE id=:id"),
-            {"now": datetime.now(timezone.utc).isoformat(), "id": job_id},
+            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+            {"err": error_msg, "id": job_id},
         )
         await db.commit()
         return True
@@ -136,6 +138,7 @@ async def score_next_job(db: AsyncSession) -> bool:
                 risks              = :risks,
                 key_keywords       = :keywords,
                 scoring_breakdown  = :breakdown,
+                score_error        = NULL,
                 scored_at          = :now
             WHERE id = :id
         """),

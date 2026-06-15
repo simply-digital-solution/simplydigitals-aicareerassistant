@@ -53,6 +53,7 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob {
     risks:                JSON.stringify(['No cloud experience stated']),
     key_keywords:         JSON.stringify(['Python', 'Spark']),
     scoring_breakdown:    null,
+    score_error:          null,
     scored_at:            '2026-06-11T08:00:00Z',
     archived:             false,
     ...overrides,
@@ -183,6 +184,31 @@ describe('LatestJobs — job card', () => {
     wrap()
     const link = await screen.findByText(/view posting/i)
     expect(link).toHaveAttribute('href', 'https://www.mycareersfuture.gov.sg/job/abc123')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Score error state
+// ---------------------------------------------------------------------------
+
+describe('LatestJobs — score error state', () => {
+  it('shows "Score failed" label when score_error is set', async () => {
+    setupApiMocks([makeJob({ scored: false, fit_score: null, score_error: 'RuntimeError: connection refused' })])
+    wrap()
+    expect(await screen.findByText(/score failed/i)).toBeInTheDocument()
+  })
+
+  it('shows re-score button when score_error is set', async () => {
+    setupApiMocks([makeJob({ scored: false, fit_score: null, score_error: 'RuntimeError: connection refused' })])
+    wrap()
+    expect(await screen.findByRole('button', { name: /re-score/i })).toBeInTheDocument()
+  })
+
+  it('does not show "Scoring…" when score_error is set', async () => {
+    setupApiMocks([makeJob({ scored: false, fit_score: null, score_error: 'parse failed' })])
+    wrap()
+    await screen.findByText(/score failed/i)
+    expect(screen.queryByText(/scoring…/i)).not.toBeInTheDocument()
   })
 })
 

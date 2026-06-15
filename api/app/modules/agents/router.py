@@ -933,7 +933,7 @@ async def get_stored_jobs(
         text(f"""
             SELECT id, mcf_uuid, title, company, url, location,
                    inferred_industries, posted_at, scraped_at,
-                   scored, fit_score, reasons, risks, key_keywords, scoring_breakdown, scored_at
+                   scored, fit_score, reasons, risks, key_keywords, scoring_breakdown, score_error, scored_at
             FROM job_postings
             WHERE {where_sql}
             ORDER BY posted_at DESC, scraped_at DESC
@@ -987,6 +987,7 @@ async def rescore_job(
                 risks             = NULL,
                 key_keywords      = NULL,
                 scoring_breakdown = NULL,
+                score_error       = NULL,
                 scored_at         = NULL
             WHERE id = :id AND user_id = :uid
         """),

@@ -133,14 +133,17 @@ async def test_successful_score_writes_result():
     params = update_call.args[1]
     assert params["fit_score"] == 0.78
     assert params["id"] == 1
+    # Happy path must clear score_error
+    update_sql = update_call.args[0].text
+    assert "score_error" in update_sql
 
 
 # ---------------------------------------------------------------------------
-# Agent raises exception → job marked scored=1, returns True
+# Agent raises exception → scored stays 0, score_error is set
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_agent_exception_marks_job_scored():
+async def test_agent_exception_sets_score_error():
     job_row = _make_job_row()
     db      = _db_with_job(job_row)
 
@@ -157,13 +160,20 @@ async def test_agent_exception_marks_job_scored():
     # job SELECT + feedback SELECT + UPDATE = 3 calls
     assert db.execute.call_count == 3
 
+    update_params = db.execute.call_args_list[2].args[1]
+    assert update_params["err"] is not None
+    assert "RuntimeError" in update_params["err"]
+    # scored stays 0 so job can be retried after re-score
+    update_sql = db.execute.call_args_list[2].args[0].text
+    assert "scored=0" in update_sql
+
 
 # ---------------------------------------------------------------------------
-# Agent returns AgentError → job marked scored=1, returns True
+# Agent returns AgentError → scored stays 0, score_error is set
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_agent_error_result_marks_job_scored():
+async def test_agent_error_result_sets_score_error():
     from app.shared.schemas import AgentError
 
     job_row = _make_job_row()
@@ -180,13 +190,18 @@ async def test_agent_error_result_marks_job_scored():
     assert had_work is True
     db.commit.assert_called()
 
+    update_params = db.execute.call_args_list[2].args[1]
+    assert update_params["err"] == "parse failed"
+    update_sql = db.execute.call_args_list[2].args[0].text
+    assert "scored=0" in update_sql
+
 
 # ---------------------------------------------------------------------------
-# Agent returns result with empty opportunities → job marked scored=1
+# Agent returns result with empty opportunities → scored stays 0
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_empty_opportunities_marks_job_scored():
+async def test_empty_opportunities_sets_score_error():
     job_row = _make_job_row()
     db      = _db_with_job(job_row)
 
@@ -202,6 +217,10 @@ async def test_empty_opportunities_marks_job_scored():
 
     assert had_work is True
     db.commit.assert_called()
+
+    update_sql = db.execute.call_args_list[2].args[0].text
+    assert "scored=0" in update_sql
+    assert "score_error" in update_sql
 
 
 # ---------------------------------------------------------------------------

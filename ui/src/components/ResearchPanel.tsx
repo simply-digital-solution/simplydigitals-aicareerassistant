@@ -127,6 +127,8 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore
         <div className="flex items-center gap-2 shrink-0">
           {!!job.scored && job.fit_score !== null
             ? <FitBadge score={job.fit_score} />
+            : job.score_error
+            ? <span className="text-xs text-red-400 italic" title={job.score_error}>⚠ Score failed</span>
             : <span className="text-xs text-gray-400 italic">Scoring…</span>
           }
           <button title="Relevant" disabled={saving} onClick={handleThumbUp}
@@ -172,7 +174,7 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore
               <path fillRule="evenodd" d="M3 7h14v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm5 3a1 1 0 0 0 0 2h4a1 1 0 1 0 0-2H8Z" clipRule="evenodd" />
             </svg>
           </button>
-          {!!job.scored && (
+          {(!!job.scored || !!job.score_error) && (
             <button
               title="Re-score"
               onClick={() => onRescore(job.id)}

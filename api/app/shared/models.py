@@ -357,6 +357,7 @@ class JobPosting(Base):
     risks = Column(Text)                        # JSON array
     key_keywords = Column(Text)                 # JSON array
     scoring_breakdown = Column(Text)            # JSON array of ScoreCategory
+    score_error = Column(Text)                  # set when scoring fails; scored stays 0
     scored_at = Column(DateTime(timezone=True))
 
 
