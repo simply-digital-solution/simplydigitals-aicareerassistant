@@ -30,6 +30,77 @@ from app.shared.industry_extractor import extract_industry_names
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# MCF category → profile industry name mapping
+# Built from the full set of categories observed in the MCF API.
+# Each MCF category maps to one or more profile industry names.
+# ---------------------------------------------------------------------------
+MCF_CATEGORY_MAP: dict[str, list[str]] = {
+    "Information Technology":         ["Technology & Software"],
+    "Banking and Finance":            ["Banking & Financial Services"],
+    "Risk Management":                ["Banking & Financial Services", "Capital Markets & Investment Management"],
+    "Accounting / Auditing / Taxation": ["Banking & Financial Services"],
+    "Professional Services":          ["Consulting & Professional Services"],
+    "Consulting":                     ["Consulting & Professional Services"],
+    "Engineering":                    ["Technology & Software"],
+    "Sciences / Laboratory / R&D":    ["Healthcare & Life Sciences"],
+    "Healthcare / Pharmaceutical":    ["Healthcare & Life Sciences"],
+    "Medical / Therapy Services":     ["Healthcare & Life Sciences"],
+    "Real Estate / Property Management": ["Real Estate & Infrastructure"],
+    "Building and Construction":      ["Real Estate & Infrastructure"],
+    "Logistics / Supply Chain":       ["Supply Chain & Logistics"],
+    "Advertising / Media":            ["Media, Marketing & Communications"],
+    "Marketing / Public Relations":   ["Media, Marketing & Communications"],
+    "Education and Training":         ["Education"],
+    "Energy and Chemicals":           ["Energy & Resources"],
+    "Environment / Health":           ["Energy & Resources"],
+    "Insurance":                      ["Insurance"],
+    "General Management":             [],   # too generic — no mapping
+    "Admin / Secretarial":            [],
+    "Customer Service":               [],
+    "Design":                         [],
+    "F&B":                            [],
+    "Hospitality":                    [],
+    "Human Resources":                [],
+    "Legal":                          [],
+    "Manufacturing":                  [],
+    "Others":                         [],
+    "Precision Engineering":          [],
+    "Purchasing / Merchandising":     [],
+    "Repair and Maintenance":         [],
+    "Sales / Retail":                 [],
+    "Security and Investigation":     [],
+    "Social Services":                [],
+    "Travel / Tourism":               [],
+    "Wholesale Trade":                [],
+    "Architecture / Interior Design": [],
+}
+
+
+def _mcf_categories_to_industries(item: dict) -> list[str]:
+    """
+    Read MCF's structured categories field and return profile industry names.
+    Deduplicates while preserving order.
+    Unknown MCF categories fall back to the raw category string so data is not lost.
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for cat in item.get("categories") or []:
+        label = cat.get("category", "")
+        if not label:
+            continue
+        mapped = MCF_CATEGORY_MAP.get(label)
+        if mapped is None:
+            # Unknown category — store raw so it's visible and filterable
+            targets = [label]
+        else:
+            targets = mapped
+        for t in targets:
+            if t and t not in seen:
+                seen.add(t)
+                result.append(t)
+    return result
+
 DATA_DIR = Path(__file__).parents[4] / "data" / "jobs_raw"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -262,7 +333,7 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
             "url": job_url,
             "location": "Singapore",
             "description": description,
-            "inferred_industries": extract_industry_names(description),
+            "inferred_industries": _mcf_categories_to_industries(item),
             "source": "mycareersfuture",
             "scraped_at": _now_iso(),
             "posted_at": original_posting_date,
