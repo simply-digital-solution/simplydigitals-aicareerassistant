@@ -212,6 +212,7 @@ export const researchApi = {
   getJobs: (params: { page?: number; per_page?: number; role?: string; days?: number }) =>
     api.get<StoredJobsResponse>('/research/jobs', { params }),
   archiveJob: (id: number) => api.post(`/research/jobs/${id}/archive`),
+  rescoreJob: (id: number) => api.post(`/research/jobs/${id}/rescore`),
 }
 
 // Budget API

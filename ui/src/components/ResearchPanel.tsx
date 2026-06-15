@@ -44,12 +44,13 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
-function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
+function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore }: {
   job: StoredJob
   feedback?: FeedbackEntry
   onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant', reason?: string) => void
   onArchive: (id: number) => void
   onSave: (job: StoredJob) => void
+  onRescore: (id: number) => void
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -171,6 +172,18 @@ function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave }: {
               <path fillRule="evenodd" d="M3 7h14v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm5 3a1 1 0 0 0 0 2h4a1 1 0 1 0 0-2H8Z" clipRule="evenodd" />
             </svg>
           </button>
+          {!!job.scored && (
+            <button
+              title="Re-score"
+              onClick={() => onRescore(job.id)}
+              className="text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 rounded p-0.5 transition-colors leading-none"
+              aria-label="Re-score"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.389Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0v2.43l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z" clipRule="evenodd" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -412,6 +425,11 @@ export default function ResearchPanel() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kanban'] }),
   })
 
+  const rescoreMutation = useMutation({
+    mutationFn: (id: number) => researchApi.rescoreJob(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stored-jobs'] }),
+  })
+
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
@@ -560,6 +578,7 @@ export default function ResearchPanel() {
                 onFeedback={handleFeedback}
                 onArchive={(id) => archiveMutation.mutate(id)}
                 onSave={(j) => saveMutation.mutate(j)}
+                onRescore={(id) => rescoreMutation.mutate(id)}
               />
             ))}
           </div>

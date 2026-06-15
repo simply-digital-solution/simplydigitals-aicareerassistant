@@ -965,6 +965,36 @@ async def archive_job(
     await db.commit()
 
 
+@router.post("/research/jobs/{job_id}/rescore", status_code=204)
+async def rescore_job(
+    job_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset a job's score fields so the background scorer loop re-scores it."""
+    result = await db.execute(
+        text("SELECT id FROM job_postings WHERE id = :id AND user_id = :uid"),
+        {"id": job_id, "uid": current_user.id},
+    )
+    if not result.fetchone():
+        raise HTTPException(404, "Job not found")
+    await db.execute(
+        text("""
+            UPDATE job_postings SET
+                scored            = 0,
+                fit_score         = NULL,
+                reasons           = NULL,
+                risks             = NULL,
+                key_keywords      = NULL,
+                scoring_breakdown = NULL,
+                scored_at         = NULL
+            WHERE id = :id AND user_id = :uid
+        """),
+        {"id": job_id, "uid": current_user.id},
+    )
+    await db.commit()
+
+
 @router.post("/research/scrape")
 async def trigger_scrape(
     current_user=Depends(get_current_user),

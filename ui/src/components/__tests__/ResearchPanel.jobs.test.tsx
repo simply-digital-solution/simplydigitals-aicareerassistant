@@ -23,6 +23,7 @@ vi.mock('../../api/client', () => ({
   researchApi: {
     getJobs:    vi.fn(),
     archiveJob: vi.fn(),
+    rescoreJob: vi.fn(),
   },
   applicationsApi: {
     kanban:  vi.fn(),
@@ -570,6 +571,49 @@ describe('LatestJobs — archive button', () => {
 
     await waitFor(() => {
       expect(vi.mocked(clientModule.researchApi.archiveJob)).toHaveBeenCalledWith(7)
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Re-score button
+// ---------------------------------------------------------------------------
+
+describe('LatestJobs — re-score button', () => {
+  it('renders re-score button on a scored job', async () => {
+    setupApiMocks([makeJob({ scored: true, fit_score: 0.82 })])
+    wrap()
+
+    const btn = await screen.findByRole('button', { name: /re-score/i })
+    expect(btn).toBeInTheDocument()
+  })
+
+  it('re-score button has tooltip title "Re-score"', async () => {
+    setupApiMocks([makeJob({ scored: true, fit_score: 0.82 })])
+    wrap()
+
+    const btn = await screen.findByRole('button', { name: /re-score/i })
+    expect(btn).toHaveAttribute('title', 'Re-score')
+  })
+
+  it('does not render re-score button on an unscored job', async () => {
+    setupApiMocks([makeJob({ scored: false, fit_score: null })])
+    wrap()
+
+    await screen.findByText('ACME Corp')
+    expect(screen.queryByRole('button', { name: /re-score/i })).not.toBeInTheDocument()
+  })
+
+  it('clicking re-score calls rescoreJob with the job id', async () => {
+    vi.mocked(clientModule.researchApi.rescoreJob).mockResolvedValue({} as never)
+    setupApiMocks([makeJob({ id: 5, scored: true, fit_score: 0.75 })])
+    wrap()
+
+    const btn = await screen.findByRole('button', { name: /re-score/i })
+    fireEvent.click(btn)
+
+    await waitFor(() => {
+      expect(vi.mocked(clientModule.researchApi.rescoreJob)).toHaveBeenCalledWith(5)
     })
   })
 })
