@@ -1,9 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import TailoredResumePanel from '../TailoredResumePanel'
+import TailoredResumePanel, { downloadAsDocx } from '../TailoredResumePanel'
 import * as clientModule from '../../api/client'
-import type { GeneratedResumeResponse } from '../../api/client'
+import type { GeneratedResumeOutput, GeneratedResumeResponse } from '../../api/client'
 
 vi.mock('../../api/client', () => ({
   default: { get: vi.fn(), post: vi.fn() },
@@ -12,6 +12,27 @@ vi.mock('../../api/client', () => ({
     generateResume: vi.fn(),
   },
 }))
+
+// Mock docx so tests don't need to run the real packer
+vi.mock('docx', () => {
+  class FakeParagraph { constructor(public opts: unknown) {} }
+  class FakeTextRun { constructor(public opts: unknown) {} }
+  class FakeDocument { constructor(public opts: unknown) {} }
+  const FakePacker = { toBlob: vi.fn().mockResolvedValue(new Blob(['fake-docx'])) }
+  return {
+    Document: FakeDocument,
+    Packer: FakePacker,
+    Paragraph: FakeParagraph,
+    TextRun: FakeTextRun,
+    HeadingLevel: { TITLE: 'Title', HEADING_2: 'Heading2' },
+    AlignmentType: { CENTER: 'center' },
+    BorderStyle: { SINGLE: 'single' },
+    TableRow: class {},
+    TableCell: class {},
+    Table: class {},
+    WidthType: { PCT: 'pct' },
+  }
+})
 
 const mockResearchApi = vi.mocked(clientModule.researchApi)
 
@@ -48,6 +69,10 @@ function makeResume(name = 'Jane Doe'): GeneratedResumeResponse {
   }
 }
 
+function makeResumeOutput(name = 'Jane Doe'): GeneratedResumeOutput {
+  return makeResume(name).resume
+}
+
 function notFoundError() {
   const err = new Error('Not Found') as Error & { response: { status: number } }
   err.response = { status: 404 }
@@ -65,6 +90,9 @@ function renderPanel(jobId = 1) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Stub browser APIs used by downloadAsDocx
+  global.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
+  global.URL.revokeObjectURL = vi.fn()
 })
 
 describe('TailoredResumePanel', () => {
@@ -85,15 +113,13 @@ describe('TailoredResumePanel', () => {
   })
 
   it('shows spinner while loading existing resume', async () => {
-    let resolve: (v: GeneratedResumeResponse) => void
     mockResearchApi.getGeneratedResume.mockReturnValue(
-      new Promise(r => { resolve = r }) as Promise<{ data: GeneratedResumeResponse }> as ReturnType<typeof mockResearchApi.getGeneratedResume>,
+      new Promise(() => {}) as ReturnType<typeof mockResearchApi.getGeneratedResume>,
     )
     renderPanel()
     fireEvent.click(screen.getByText('Tailored Resume'))
     await waitFor(() => {
-      const container = document.querySelector('.animate-pulse')
-      expect(container).toBeInTheDocument()
+      expect(document.querySelector('.animate-pulse')).toBeInTheDocument()
     })
   })
 
@@ -148,6 +174,14 @@ describe('TailoredResumePanel', () => {
     expect(screen.getByRole('button', { name: /regenerate/i })).toBeInTheDocument()
   })
 
+  it('shows Download .docx button when resume exists', async () => {
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    renderPanel()
+    fireEvent.click(screen.getByText('Tailored Resume'))
+    await waitFor(() => screen.getByText('Jane Doe'))
+    expect(screen.getByRole('button', { name: /download resume as word document/i })).toBeInTheDocument()
+  })
+
   it('renders experience bullets', async () => {
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     renderPanel()
@@ -164,5 +198,31 @@ describe('TailoredResumePanel', () => {
     await waitFor(() => screen.getByText('Generate Tailored Resume'))
     fireEvent.click(screen.getByText('Tailored Resume'))
     expect(screen.queryByText('Generate Tailored Resume')).not.toBeInTheDocument()
+  })
+})
+
+describe('downloadAsDocx', () => {
+  it('calls Packer.toBlob and triggers an anchor click', async () => {
+    const { Packer } = await import('docx')
+    const clickSpy = vi.fn()
+    const anchorStub = { href: '', download: '', click: clickSpy } as unknown as HTMLAnchorElement
+    vi.spyOn(document, 'createElement').mockReturnValueOnce(anchorStub)
+
+    await downloadAsDocx(makeResumeOutput())
+
+    expect(Packer.toBlob).toHaveBeenCalled()
+    expect(global.URL.createObjectURL).toHaveBeenCalled()
+    expect(clickSpy).toHaveBeenCalled()
+    expect(anchorStub.download).toMatch(/Jane_Doe.*\.docx$/)
+    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+  })
+
+  it('sets the filename from the candidate name', async () => {
+    const anchorStub = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement
+    vi.spyOn(document, 'createElement').mockReturnValueOnce(anchorStub)
+
+    await downloadAsDocx(makeResumeOutput('John Smith'))
+
+    expect(anchorStub.download).toBe('John_Smith_resume.docx')
   })
 })

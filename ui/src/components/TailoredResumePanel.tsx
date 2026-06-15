@@ -1,11 +1,111 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  Document, Packer, Paragraph, TextRun, HeadingLevel,
+  AlignmentType, BorderStyle, TableRow, TableCell, Table,
+  WidthType,
+} from 'docx'
 import { researchApi } from '../api/client'
 import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExperience } from '../api/client'
 
 interface TailoredResumePanelProps {
   jobId: number
 }
+
+// ---------------------------------------------------------------------------
+// .docx generation
+// ---------------------------------------------------------------------------
+
+function sectionHeading(title: string): Paragraph {
+  return new Paragraph({
+    text: title.toUpperCase(),
+    heading: HeadingLevel.HEADING_2,
+    border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '888888' } },
+    spacing: { before: 240, after: 120 },
+  })
+}
+
+function experienceBlock(entry: GeneratedResumeExperience): Paragraph[] {
+  return [
+    new Paragraph({
+      children: [
+        new TextRun({ text: entry.title, bold: true }),
+        new TextRun({ text: `  ${entry.company}`, italics: true, color: '555555' }),
+        new TextRun({ text: `\t${entry.dates}`, color: '888888' }),
+      ],
+      spacing: { before: 120, after: 40 },
+      tabStops: [{ type: 'right' as const, position: 9000 }],
+    }),
+    ...entry.bullets.map(
+      b => new Paragraph({
+        text: b,
+        bullet: { level: 0 },
+        spacing: { before: 40, after: 40 },
+      }),
+    ),
+  ]
+}
+
+export async function downloadAsDocx(resume: GeneratedResumeOutput): Promise<void> {
+  const children: Paragraph[] = [
+    new Paragraph({
+      text: resume.name,
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 80 },
+    }),
+    ...(resume.headline
+      ? [new Paragraph({
+          children: [new TextRun({ text: resume.headline, italics: true, color: '555555' })],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+        })]
+      : []),
+  ]
+
+  for (const section of resume.sections) {
+    children.push(sectionHeading(section.title))
+    if (section.section_type === 'experience') {
+      for (const entry of section.experience) {
+        children.push(...experienceBlock(entry))
+      }
+    } else {
+      for (const line of section.content) {
+        children.push(
+          new Paragraph({
+            text: line,
+            spacing: { before: 40, after: 40 },
+          }),
+        )
+      }
+    }
+  }
+
+  const doc = new Document({
+    sections: [{ children }],
+    styles: {
+      paragraphStyles: [
+        {
+          id: 'Normal',
+          name: 'Normal',
+          run: { font: 'Calibri', size: 22 },
+        },
+      ],
+    },
+  })
+
+  const blob = await Packer.toBlob(doc)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${resume.name.replace(/\s+/g, '_')}_resume.docx`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ---------------------------------------------------------------------------
+// Inline resume display
+// ---------------------------------------------------------------------------
 
 function ExperienceEntry({ entry }: { entry: GeneratedResumeExperience }) {
   return (
@@ -61,9 +161,14 @@ function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Main panel
+// ---------------------------------------------------------------------------
+
 export default function TailoredResumePanel({ jobId }: TailoredResumePanelProps) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   const { data: existing, isLoading: loadingExisting } = useQuery({
     queryKey: ['generated-resume', jobId],
@@ -84,6 +189,16 @@ export default function TailoredResumePanel({ jobId }: TailoredResumePanelProps)
   })
 
   const resume = generateMutation.data ?? existing
+
+  const handleDownload = async () => {
+    if (!resume) return
+    setDownloading(true)
+    try {
+      await downloadAsDocx(resume.resume)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
@@ -108,13 +223,23 @@ export default function TailoredResumePanel({ jobId }: TailoredResumePanelProps)
                     ? `Last generated ${new Date(existing.updated_at).toLocaleDateString()}`
                     : 'Just generated'}
                 </span>
-                <button
-                  onClick={() => generateMutation.mutate()}
-                  disabled={generateMutation.isPending}
-                  className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors"
-                >
-                  {generateMutation.isPending ? 'Regenerating…' : '↺ Regenerate'}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleDownload}
+                    disabled={downloading}
+                    className="text-xs text-green-600 hover:text-green-800 disabled:opacity-50 transition-colors font-medium"
+                    aria-label="Download resume as Word document"
+                  >
+                    {downloading ? 'Preparing…' : '↓ Download .docx'}
+                  </button>
+                  <button
+                    onClick={() => generateMutation.mutate()}
+                    disabled={generateMutation.isPending}
+                    className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors"
+                  >
+                    {generateMutation.isPending ? 'Regenerating…' : '↺ Regenerate'}
+                  </button>
+                </div>
               </div>
               <ResumeDocument resume={resume.resume} />
             </>
