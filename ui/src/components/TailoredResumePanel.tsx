@@ -234,7 +234,10 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
     },
   })
 
+  // resume prefers mutation data (freshly generated) but falls back to cache.
+  // After an upload we reset the mutation so the cache (with drive_file_id) wins.
   const resume = generateMutation.data ?? existing
+
   const effectiveDriveLink = resume?.drive_link ?? null
   const driveConnected = driveStatus?.connected ?? false
 
@@ -256,11 +259,13 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
     setUploading(true)
     try {
       const res = await researchApi.uploadToDrive(jobId, file)
-      // Update the cache directly so Drive preview and link appear immediately
+      // Patch the cache with the new drive fields
       queryClient.setQueryData(['generated-resume', jobId], (old: typeof existing) =>
         old ? { ...old, drive_link: res.data.drive_link, drive_file_id: res.data.drive_file_id } : old
       )
-      // Reset preview so iframe reloads with the new file
+      // Reset mutation so resume falls back to the patched cache (which has drive_file_id)
+      generateMutation.reset()
+      // Reset preview so iframe remounts with the new file
       setShowPreview(false)
     } catch {
       setUploadError('Upload failed. Check your Drive connection and try again.')
