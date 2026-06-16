@@ -55,6 +55,13 @@ SQLite + WAL at `api/aicareercoach.db`. Alembic migrations in `api/migrations/ve
 
 Agent system prompts live in `prompts/` as markdown files, loaded at runtime.
 
+## Shell working directory
+
+The project root is `/Users/vasu/Documents/Projects/simplydigitals-aicareerassistant`.
+- All backend commands (`poetry`, `pytest`, `alembic`, `uvicorn`) **must** be run from `/Users/vasu/Documents/Projects/simplydigitals-aicareerassistant/api` — always use the absolute path prefix: `cd /Users/vasu/Documents/Projects/simplydigitals-aicareerassistant/api &&`
+- All frontend commands (`npm`, `vitest`) **must** be run from `/Users/vasu/Documents/Projects/simplydigitals-aicareerassistant/ui` — always use the absolute path prefix: `cd /Users/vasu/Documents/Projects/simplydigitals-aicareerassistant/ui &&`
+- Never rely on the shell's current working directory being correct between commands.
+
 ## Behaviour Rules
 
 - **Never make assumptions.** If something is unclear, ask before proceeding.

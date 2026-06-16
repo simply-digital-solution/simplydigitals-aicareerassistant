@@ -237,8 +237,20 @@ export interface GeneratedResumeOutput {
 export interface GeneratedResumeResponse {
   job_posting_id: number
   resume: GeneratedResumeOutput
+  drive_file_id: string | null
+  drive_link: string | null
   created_at?: string
   updated_at?: string
+}
+
+// Auth API
+export const authApi = {
+  googleStatus: () =>
+    api.get<{ connected: boolean }>('/auth/google/status'),
+  googleConnect: () =>
+    api.get<{ url: string }>('/auth/google'),
+  googleDisconnect: () =>
+    api.delete('/auth/google'),
 }
 
 // Research (stored jobs) API
@@ -252,6 +264,13 @@ export const researchApi = {
     api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/generate-resume`),
   getGeneratedResume: (jobId: number) =>
     api.get<GeneratedResumeResponse>(`/research/jobs/${jobId}/resume`),
+  uploadToDrive: (jobId: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post<{ drive_link: string; drive_file_id: string }>(`/research/jobs/${jobId}/upload-to-drive`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 // Budget API

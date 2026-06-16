@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Document, Packer, Paragraph, TextRun,
   AlignmentType, BorderStyle,
 } from 'docx'
-import { researchApi } from '../api/client'
+import { researchApi, authApi } from '../api/client'
 import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExperience } from '../api/client'
 
 interface TailoredResumePanelProps {
@@ -206,6 +206,16 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const { data: driveStatus } = useQuery({
+    queryKey: ['google-drive-status'],
+    queryFn: () => authApi.googleStatus().then(r => r.data),
+    staleTime: 60_000,
+  })
 
   const { data: existing, isLoading: loadingExisting } = useQuery({
     queryKey: ['generated-resume', jobId],
@@ -226,6 +236,8 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
   })
 
   const resume = generateMutation.data ?? existing
+  const effectiveDriveLink = resume?.drive_link ?? null
+  const driveConnected = driveStatus?.connected ?? false
 
   const handleDownload = async () => {
     if (!resume) return
@@ -234,6 +246,27 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
       await downloadAsDocx(resume.resume, company)
     } finally {
       setDownloading(false)
+    }
+  }
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setUploadError('')
+    setUploading(true)
+    try {
+      const res = await researchApi.uploadToDrive(jobId, file)
+      // Update the cache directly so Drive preview and link appear immediately
+      queryClient.setQueryData(['generated-resume', jobId], (old: typeof existing) =>
+        old ? { ...old, drive_link: res.data.drive_link, drive_file_id: res.data.drive_file_id } : old
+      )
+      // Reset preview so iframe reloads with the new file
+      setShowPreview(false)
+    } catch {
+      setUploadError('Upload failed. Check your Drive connection and try again.')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -254,13 +287,13 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
             <div className="h-24 bg-gray-50 rounded-lg animate-pulse" />
           ) : resume ? (
             <>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="text-xs text-gray-400">
                   {existing?.updated_at
                     ? `Last generated ${new Date(existing.updated_at).toLocaleDateString()}`
                     : 'Just generated'}
                 </span>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <button
                     onClick={handleDownload}
                     disabled={downloading}
@@ -268,6 +301,36 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
                     aria-label="Download resume as Word document"
                   >
                     {downloading ? 'Preparing…' : '↓ Download .docx'}
+                  </button>
+
+                  {/* Drive upload / link */}
+                  {effectiveDriveLink && (
+                    <a
+                      href={effectiveDriveLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                      aria-label="Open resume in Google Drive"
+                    >
+                      ↗ Open in Drive
+                    </a>
+                  )}
+                  <button
+                    onClick={() => driveConnected && fileRef.current?.click()}
+                    disabled={!driveConnected || uploading}
+                    className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
+                    title={driveConnected ? (effectiveDriveLink ? 'Re-upload to Google Drive' : 'Upload resume to Google Drive') : 'Connect Google Drive first'}
+                    aria-label="Upload resume to Google Drive"
+                  >
+                    {uploading ? 'Uploading…' : effectiveDriveLink ? '↑ Re-upload' : '↑ Upload to Drive'}
+                  </button>
+
+                  <button
+                    onClick={() => setShowPreview(v => !v)}
+                    className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+                    aria-label="Toggle resume preview"
+                  >
+                    {showPreview ? '▴ Hide Preview' : '▾ Preview'}
                   </button>
                   <button
                     onClick={() => generateMutation.mutate()}
@@ -278,7 +341,35 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
                   </button>
                 </div>
               </div>
-              <ResumeDocument resume={resume.resume} />
+
+              {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
+
+              {/* Hidden file input for Drive upload */}
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".docx,.pdf"
+                className="hidden"
+                onChange={handleFileSelected}
+                aria-label="Select resume file to upload to Drive"
+              />
+
+              {showPreview && (
+                resume.drive_file_id ? (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '700px' }}>
+                    <iframe
+                      src={`https://drive.google.com/file/d/${resume.drive_file_id}/preview`}
+                      width="100%"
+                      height="100%"
+                      allow="autoplay"
+                      title="Resume preview"
+                      className="block"
+                    />
+                  </div>
+                ) : (
+                  <ResumeDocument resume={resume.resume} />
+                )
+              )}
             </>
           ) : (
             <div className="text-center py-6">

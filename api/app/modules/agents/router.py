@@ -24,8 +24,8 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional, Any
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi.responses import StreamingResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -1109,7 +1109,17 @@ async def generate_resume(
     )
     await db.commit()
 
-    return {"job_posting_id": job_id, "resume": result.model_dump()}
+    dr = (await db.execute(
+        text("SELECT drive_file_id, drive_link FROM generated_resumes WHERE user_id = :uid AND job_posting_id = :jid"),
+        {"uid": current_user.id, "jid": job_id},
+    )).mappings().first()
+
+    return {
+        "job_posting_id": job_id,
+        "resume": result.model_dump(),
+        "drive_file_id": dr["drive_file_id"] if dr else None,
+        "drive_link": dr["drive_link"] if dr else None,
+    }
 
 
 @router.get("/research/jobs/{job_id}/resume")
@@ -1121,7 +1131,7 @@ async def get_generated_resume(
     """Return the previously generated resume for a job, or 404 if not yet generated."""
     row = await db.execute(
         text("""
-            SELECT resume_json, created_at, updated_at
+            SELECT resume_json, drive_file_id, drive_link, created_at, updated_at
             FROM generated_resumes
             WHERE user_id = :uid AND job_posting_id = :jid
         """),
@@ -1135,6 +1145,8 @@ async def get_generated_resume(
     return {
         "job_posting_id": job_id,
         "resume": _json.loads(resume["resume_json"]),
+        "drive_file_id": resume["drive_file_id"],
+        "drive_link": resume["drive_link"],
         "created_at": resume["created_at"],
         "updated_at": resume["updated_at"],
     }
@@ -1167,3 +1179,230 @@ async def get_job_feedback(
         {"uid": current_user.id},
     )
     return {"feedback": [dict(r) for r in rows.mappings()]}
+
+
+# ---------------------------------------------------------------------------
+# Google Drive OAuth2
+# ---------------------------------------------------------------------------
+
+@router.get("/auth/google")
+async def google_oauth_start(current_user=Depends(get_current_user)):
+    """Return the Google OAuth2 authorisation URL with user email encoded in state."""
+    from app.shared.google_drive import get_oauth_url
+    return {"url": get_oauth_url(state=current_user.email)}
+
+
+@router.get("/auth/google/callback")
+async def google_oauth_callback(
+    code: str,
+    state: str = "",
+    db: AsyncSession = Depends(get_db),
+):
+    """Exchange authorisation code for tokens and persist them on the profile.
+
+    The user email is passed via the OAuth state parameter so this endpoint
+    does not require the X-User-Email header (it's a direct browser redirect
+    from Google, not an API call from the frontend).
+    """
+    from app.shared.google_drive import exchange_code, token_expiry_iso
+
+    if not state:
+        raise HTTPException(400, "Missing state parameter — cannot identify user")
+
+    email = state
+
+    # Look up (or create) the user by email
+    user_result = await db.execute(
+        text("SELECT id FROM users WHERE email = :email"),
+        {"email": email},
+    )
+    user_row = user_result.mappings().first()
+    if not user_row:
+        raise HTTPException(404, f"User {email} not found")
+    uid = user_row["id"]
+
+    try:
+        token_data = await exchange_code(code)
+    except Exception as exc:
+        raise HTTPException(400, f"Google token exchange failed: {exc}")
+
+    expiry = token_expiry_iso(token_data.get("expires_in", 3600))
+
+    # Upsert tokens onto the user's profile
+    result = await db.execute(
+        text("SELECT id FROM profiles WHERE user_id = :uid"),
+        {"uid": uid},
+    )
+    profile_row = result.mappings().first()
+    if profile_row:
+        await db.execute(
+            text("""
+                UPDATE profiles
+                SET google_access_token  = :at,
+                    google_refresh_token = :rt,
+                    google_token_expiry  = :exp
+                WHERE user_id = :uid
+            """),
+            {
+                "at": token_data["access_token"],
+                "rt": token_data.get("refresh_token"),
+                "exp": expiry,
+                "uid": uid,
+            },
+        )
+    else:
+        await db.execute(
+            text("""
+                INSERT INTO profiles (user_id, google_access_token, google_refresh_token, google_token_expiry)
+                VALUES (:uid, :at, :rt, :exp)
+            """),
+            {
+                "uid": uid,
+                "at": token_data["access_token"],
+                "rt": token_data.get("refresh_token"),
+                "exp": expiry,
+            },
+        )
+    await db.commit()
+
+    # Redirect back to the frontend with a success flag
+    return RedirectResponse("http://localhost:5173/?drive=connected")
+
+
+@router.get("/auth/google/status")
+async def google_oauth_status(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return whether the user has connected Google Drive."""
+    result = await db.execute(
+        text("SELECT google_refresh_token FROM profiles WHERE user_id = :uid"),
+        {"uid": current_user.id},
+    )
+    row = result.mappings().first()
+    connected = bool(row and row["google_refresh_token"])
+    return {"connected": connected}
+
+
+@router.delete("/auth/google", status_code=204)
+async def google_oauth_disconnect(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove stored OAuth tokens (disconnect Drive). drive_links are retained."""
+    await db.execute(
+        text("""
+            UPDATE profiles
+            SET google_access_token  = NULL,
+                google_refresh_token = NULL,
+                google_token_expiry  = NULL
+            WHERE user_id = :uid
+        """),
+        {"uid": current_user.id},
+    )
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Upload tailored resume to Google Drive
+# ---------------------------------------------------------------------------
+
+@router.post("/research/jobs/{job_id}/upload-to-drive")
+async def upload_resume_to_drive(
+    job_id: int,
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a tailored resume file to the user's Google Drive.
+
+    Folder: My Drive / AI Career Assistant / {Company} - {Job Title} /
+    Filename: Resume_{Company}.docx
+
+    If a drive_file_id is already stored, the file is updated (Drive keeps
+    version history automatically). Returns { drive_link }.
+    """
+    from app.shared.google_drive import upload_or_update_file
+
+    # Load OAuth tokens from profile
+    prof_result = await db.execute(
+        text("""
+            SELECT google_access_token, google_refresh_token, google_token_expiry
+            FROM profiles WHERE user_id = :uid
+        """),
+        {"uid": current_user.id},
+    )
+    prof = prof_result.mappings().first()
+    if not prof or not prof["google_refresh_token"]:
+        raise HTTPException(403, "Google Drive not connected. Connect Drive first.")
+
+    # Load job info for folder/filename
+    job_result = await db.execute(
+        text("SELECT title, company FROM job_postings WHERE id = :jid AND user_id = :uid"),
+        {"jid": job_id, "uid": current_user.id},
+    )
+    job = job_result.mappings().first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    # Load existing drive_file_id if any
+    gr_result = await db.execute(
+        text("SELECT id, drive_file_id FROM generated_resumes WHERE job_posting_id = :jid AND user_id = :uid"),
+        {"jid": job_id, "uid": current_user.id},
+    )
+    gr = gr_result.mappings().first()
+    existing_file_id = gr["drive_file_id"] if gr else None
+
+    company = job["company"]
+    title = job["title"]
+    folder_name = f"{company} - {title}"
+    ext = "." + (file.filename or "resume.docx").rsplit(".", 1)[-1].lower()
+    filename = f"Resume_{company.replace(' ', '_')}{ext}"
+    file_bytes = await file.read()
+
+    try:
+        file_id, drive_link, new_token_data = await upload_or_update_file(
+            access_token=prof["google_access_token"],
+            refresh_token=prof["google_refresh_token"],
+            expiry_iso=prof["google_token_expiry"],
+            folder_name=folder_name,
+            filename=filename,
+            file_bytes=file_bytes,
+            existing_file_id=existing_file_id,
+        )
+    except Exception as exc:
+        raise HTTPException(502, f"Google Drive upload failed: {exc}")
+
+    # Persist refreshed tokens if they were rotated
+    if new_token_data:
+        await db.execute(
+            text("""
+                UPDATE profiles
+                SET google_access_token = :at, google_token_expiry = :exp
+                WHERE user_id = :uid
+            """),
+            {"at": new_token_data["access_token"], "exp": new_token_data["expiry_iso"], "uid": current_user.id},
+        )
+
+    # Store drive_file_id and drive_link on generated_resumes row
+    if gr:
+        await db.execute(
+            text("""
+                UPDATE generated_resumes
+                SET drive_file_id = :fid, drive_link = :link
+                WHERE job_posting_id = :jid AND user_id = :uid
+            """),
+            {"fid": file_id, "link": drive_link, "jid": job_id, "uid": current_user.id},
+        )
+    else:
+        # No generated resume row yet — store link standalone
+        await db.execute(
+            text("""
+                INSERT INTO generated_resumes (user_id, job_posting_id, resume_json, drive_file_id, drive_link)
+                VALUES (:uid, :jid, '{}', :fid, :link)
+            """),
+            {"uid": current_user.id, "jid": job_id, "fid": file_id, "link": drive_link},
+        )
+
+    await db.commit()
+    return {"drive_link": drive_link, "drive_file_id": file_id}

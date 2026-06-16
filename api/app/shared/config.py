@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     lever_email: str = ""
     lever_password: str = ""
 
+    # Google OAuth2 (Drive integration)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
+
     # Optional integrations
     news_api_key: str = ""
 

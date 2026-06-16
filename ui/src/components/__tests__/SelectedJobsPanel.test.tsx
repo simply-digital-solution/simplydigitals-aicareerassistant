@@ -17,6 +17,10 @@ vi.mock('../../api/client', () => ({
   },
   applicationsApi: {
     create: vi.fn(),
+    move: vi.fn(),
+  },
+  authApi: {
+    googleStatus: vi.fn().mockResolvedValue({ data: { connected: false } }),
   },
 }))
 
@@ -164,5 +168,50 @@ describe('SelectedJobsPanel — re-score', () => {
     await waitFor(() => {
       expect(vi.mocked(clientModule.researchApi.rescoreJob)).toHaveBeenCalledWith(7)
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Mark as Applied (two-step)
+// ---------------------------------------------------------------------------
+
+describe('SelectedJobsPanel — mark as applied', () => {
+  it('renders the Applied button for each job', async () => {
+    setupMocks([makeJob()])
+    wrap()
+    expect(await screen.findByRole('button', { name: /mark job as applied/i })).toBeInTheDocument()
+  })
+
+  it('shows confirmation step on first click', async () => {
+    setupMocks([makeJob()])
+    wrap()
+    const btn = await screen.findByRole('button', { name: /mark job as applied/i })
+    fireEvent.click(btn)
+    expect(await screen.findByRole('button', { name: /confirm mark as applied/i })).toBeInTheDocument()
+    expect(screen.getByText('Applied?')).toBeInTheDocument()
+  })
+
+  it('calls applicationsApi.move with "applied" on confirm', async () => {
+    vi.mocked(clientModule.applicationsApi.move).mockResolvedValue({} as never)
+    setupMocks([makeJob({ application_id: 10 } as never)])
+    wrap()
+    const btn = await screen.findByRole('button', { name: /mark job as applied/i })
+    fireEvent.click(btn)
+    const confirmBtn = await screen.findByRole('button', { name: /confirm mark as applied/i })
+    fireEvent.click(confirmBtn)
+    await waitFor(() => {
+      expect(vi.mocked(clientModule.applicationsApi.move)).toHaveBeenCalledWith(10, 'applied')
+    })
+  })
+
+  it('Cancel returns to the initial Applied button', async () => {
+    setupMocks([makeJob()])
+    wrap()
+    const btn = await screen.findByRole('button', { name: /mark job as applied/i })
+    fireEvent.click(btn)
+    await screen.findByRole('button', { name: /confirm mark as applied/i })
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(await screen.findByRole('button', { name: /mark job as applied/i })).toBeInTheDocument()
+    expect(screen.queryByText('Applied?')).not.toBeInTheDocument()
   })
 })

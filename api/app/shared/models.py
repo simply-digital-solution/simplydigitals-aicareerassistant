@@ -52,6 +52,9 @@ class Profile(Base):
     role_fit_json = Column(Text)                            # last RoleFitOutput as JSON
     seniority_level = Column(String(50))                    # kept for backward compat, no longer primary
     target_titles = Column(Text)                            # JSON array of inferred target job titles
+    google_access_token = Column(Text)
+    google_refresh_token = Column(Text)
+    google_token_expiry = Column(Text)                      # ISO-8601 UTC string
     updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)
 
     user = relationship("User", back_populates="profile")
@@ -100,6 +103,8 @@ class GeneratedResume(Base):
     job_posting_id = Column(Integer, ForeignKey("job_postings.id"), nullable=False)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True)
     resume_json    = Column(Text, nullable=False)
+    drive_file_id  = Column(Text)
+    drive_link     = Column(Text)
     created_at     = Column(DateTime(timezone=True), default=_now)
     updated_at     = Column(DateTime(timezone=True), default=_now, onupdate=_now)
 

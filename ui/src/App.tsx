@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuth } from './hooks/useAuth'
 import LoginPage from './pages/LoginPage'
@@ -8,6 +8,7 @@ import SelectedJobsPanel from './components/SelectedJobsPanel'
 import InterviewPanel from './components/InterviewPanel'
 import DraftsPanel from './components/DraftsPanel'
 import ProfilePanel from './components/ProfilePanel'
+import GoogleDriveButton from './components/GoogleDriveButton'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -40,6 +41,18 @@ function Layout({
   activeTab: Tab
   onTabChange: (t: Tab) => void
 }) {
+  const [driveToast, setDriveToast] = useState(false)
+
+  // Handle ?drive=connected redirect from OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('drive') === 'connected') {
+      setDriveToast(true)
+      window.history.replaceState({}, '', window.location.pathname)
+      setTimeout(() => setDriveToast(false), 3500)
+    }
+  }, [])
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
@@ -68,6 +81,7 @@ function Layout({
           >
             ✨ Run Coach
           </button>
+          <GoogleDriveButton />
           <span className="text-xs text-gray-400 hidden sm:block">{email}</span>
           <button onClick={onSignOut} className="text-gray-400 hover:text-gray-600 text-sm">
             Sign out
@@ -77,6 +91,12 @@ function Layout({
       <main>
         <TabContent tab={activeTab} />
       </main>
+
+      {driveToast && (
+        <div className="fixed bottom-4 right-4 bg-green-600 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg z-50 flex items-center gap-2">
+          <span>Google Drive connected</span>
+        </div>
+      )}
     </div>
   )
 }
