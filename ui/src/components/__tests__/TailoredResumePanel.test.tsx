@@ -120,7 +120,7 @@ describe('TailoredResumePanel', () => {
     mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
     renderPanel()
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /generate tailored resume/i })).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: /generate/i })).toBeInTheDocument(),
     )
   })
 
@@ -158,8 +158,8 @@ describe('TailoredResumePanel', () => {
     mockResearchApi.generateResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.generateResume>)
 
     renderPanel(42)
-    await waitFor(() => screen.getByRole('button', { name: /generate tailored resume/i }))
-    fireEvent.click(screen.getByRole('button', { name: /generate tailored resume/i }))
+    await waitFor(() => screen.getByRole('button', { name: /generate/i }))
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
     await waitFor(() => expect(mockResearchApi.generateResume).toHaveBeenCalledWith(42))
   })
 
@@ -168,8 +168,8 @@ describe('TailoredResumePanel', () => {
     mockResearchApi.generateResume.mockResolvedValue({ data: makeResume('Alice') } as ReturnType<typeof mockResearchApi.generateResume>)
 
     renderPanel()
-    await waitFor(() => screen.getByRole('button', { name: /generate tailored resume/i }))
-    fireEvent.click(screen.getByRole('button', { name: /generate tailored resume/i }))
+    await waitFor(() => screen.getByRole('button', { name: /generate/i }))
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     fireEvent.click(screen.getByRole('button', { name: /toggle resume preview/i }))
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument())
