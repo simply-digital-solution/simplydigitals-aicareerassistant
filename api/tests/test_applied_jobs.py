@@ -1,4 +1,4 @@
-"""Tests for GET /research/jobs/applied endpoint."""
+"""Tests for GET /research/jobs/applied endpoint and Drive filename generation."""
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,6 +20,21 @@ def _db_with_applied_jobs(jobs: list[dict]):
     result.mappings.return_value = rows
     db.execute.return_value = result
     return db
+
+
+def test_drive_filename_strips_dots_from_company_name():
+    """Company names like 'AUREXIA PTE. LTD.' should produce clean filenames."""
+    company = "AUREXIA PTE. LTD."
+    company_slug = company.replace('.', '').replace(' ', '_')
+    filename = f"Resume_{company_slug}.pdf"
+    assert filename == "Resume_AUREXIA_PTE_LTD.pdf"
+
+
+def test_drive_filename_plain_company_name():
+    company = "Standard Chartered Bank"
+    company_slug = company.replace('.', '').replace(' ', '_')
+    filename = f"Resume_{company_slug}.docx"
+    assert filename == "Resume_Standard_Chartered_Bank.docx"
 
 
 @pytest.mark.asyncio

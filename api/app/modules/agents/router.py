@@ -1384,7 +1384,8 @@ async def upload_resume_to_drive(
     title = job["title"]
     folder_name = f"{company} - {title}"
     ext = "." + (file.filename or "resume.docx").rsplit(".", 1)[-1].lower()
-    filename = f"Resume_{company.replace(' ', '_')}{ext}"
+    company_slug = company.replace('.', '').replace(' ', '_')
+    filename = f"Resume_{company_slug}{ext}"
     file_bytes = await file.read()
 
     try:
