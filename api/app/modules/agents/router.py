@@ -21,8 +21,11 @@ Endpoints:
 """
 import json
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Any
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import StreamingResponse, RedirectResponse
