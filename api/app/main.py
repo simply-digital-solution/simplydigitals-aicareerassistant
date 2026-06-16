@@ -1,7 +1,9 @@
 import logging
+import traceback
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,6 +13,7 @@ from app.modules.agents.router import router as agents_router
 from app.modules.profile.router import router as profile_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -39,6 +42,19 @@ app.add_middleware(
 app.include_router(applications_router)
 app.include_router(agents_router)
 app.include_router(profile_router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error(
+        "Unhandled exception: %s %s → %s: %s\n%s",
+        request.method,
+        request.url.path,
+        type(exc).__name__,
+        exc,
+        traceback.format_exc(),
+    )
+    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
 
 
 @app.get("/health")

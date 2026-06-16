@@ -1388,6 +1388,10 @@ async def upload_resume_to_drive(
     filename = f"Resume_{company_slug}{ext}"
     file_bytes = await file.read()
 
+    logger.info(
+        "upload_resume_to_drive: user_id=%d job_id=%d filename=%r folder=%r existing_file_id=%s",
+        current_user.id, job_id, filename, folder_name, existing_file_id,
+    )
     try:
         file_id, drive_link, new_token_data = await upload_or_update_file(
             access_token=prof["google_access_token"],
@@ -1398,7 +1402,15 @@ async def upload_resume_to_drive(
             file_bytes=file_bytes,
             existing_file_id=existing_file_id,
         )
+        logger.info(
+            "upload_resume_to_drive: success — user_id=%d job_id=%d file_id=%s",
+            current_user.id, job_id, file_id,
+        )
     except Exception as exc:
+        logger.error(
+            "upload_resume_to_drive: Drive upload failed — user_id=%d job_id=%d: %s",
+            current_user.id, job_id, exc, exc_info=True,
+        )
         raise HTTPException(502, f"Google Drive upload failed: {exc}")
 
     # Persist refreshed tokens if they were rotated
@@ -1424,12 +1436,15 @@ async def upload_resume_to_drive(
         )
     else:
         # No generated resume row yet — store link standalone
+        from datetime import datetime, timezone as _tz
+        _now = datetime.now(_tz.utc).isoformat()
         await db.execute(
             text("""
-                INSERT INTO generated_resumes (user_id, job_posting_id, resume_json, drive_file_id, drive_link)
-                VALUES (:uid, :jid, '{}', :fid, :link)
+                INSERT INTO generated_resumes
+                    (user_id, job_posting_id, resume_json, drive_file_id, drive_link, created_at, updated_at)
+                VALUES (:uid, :jid, '{}', :fid, :link, :now, :now)
             """),
-            {"uid": current_user.id, "jid": job_id, "fid": file_id, "link": drive_link},
+            {"uid": current_user.id, "jid": job_id, "fid": file_id, "link": drive_link, "now": _now},
         )
 
     await db.commit()
