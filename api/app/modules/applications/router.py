@@ -115,8 +115,8 @@ async def move_pipeline(
     app = await _get_or_404(db, body.application_id, current_user.id)
     app.status = body.new_status
     if body.new_status == 'applied' and not app.applied_at:
-        from datetime import datetime, timezone
-        app.applied_at = datetime.now(timezone.utc).isoformat()
+        from datetime import date
+        app.applied_at = date.today()
     await db.flush()
     await db.refresh(app)
     return app
