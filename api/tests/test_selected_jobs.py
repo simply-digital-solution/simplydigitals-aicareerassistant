@@ -133,3 +133,25 @@ async def test_get_stored_jobs_excludes_any_application():
     assert "NOT IN" in where_sql
     assert "job_posting_id" in where_sql
     assert "selected" not in where_sql
+
+
+# GET /research/jobs min_score filter excludes unscored jobs
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_get_stored_jobs_min_score_excludes_unscored():
+    from app.modules.agents.router import get_stored_jobs
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 0
+    jobs_result = MagicMock()
+    jobs_result.mappings.return_value = []
+
+    db = AsyncMock()
+    db.execute.side_effect = [count_result, jobs_result]
+
+    await get_stored_jobs(page=1, per_page=10, role="", days=0, min_score=0.8,
+                          current_user=_make_user(), db=db)
+
+    where_sql = db.execute.call_args_list[0].args[0].text
+    assert "fit_score >= :min_score" in where_sql
+    assert "scored = 0" not in where_sql

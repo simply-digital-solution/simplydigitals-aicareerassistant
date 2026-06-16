@@ -930,7 +930,7 @@ async def get_stored_jobs(
         params["cutoff"] = f"-{days} days"
 
     if min_score > 0:
-        where_clauses.append("(scored = 0 OR fit_score IS NULL OR fit_score >= :min_score)")
+        where_clauses.append("fit_score >= :min_score")
         params["min_score"] = min_score
 
     where_sql = " AND ".join(where_clauses)
