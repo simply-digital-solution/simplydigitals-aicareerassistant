@@ -136,7 +136,7 @@ def _docx_to_html(content: bytes) -> tuple[str, str]:
             continue
 
         text_lines.append(raw)
-        style_name = (para.style.name or "").lower()
+        style_name = (getattr(para.style, "name", None) or "").lower()
 
         # Build inline HTML for runs (preserving bold/italic per run)
         inner = ""
@@ -159,7 +159,7 @@ def _docx_to_html(content: bytes) -> tuple[str, str]:
             html_parts.append(f'<h1 class="resume-name">{inner}</h1>')
         elif "heading 2" in style_name or "heading 3" in style_name:
             html_parts.append(f'<h2 class="resume-heading">{inner}</h2>')
-        elif para.style.name and "List" in para.style.name:
+        elif style_name and "list" in style_name:
             html_parts.append(f'<li>{inner}</li>')
         # Heuristic fallback: short ALL-CAPS = section heading
         elif raw.isupper() and len(raw) <= 60:
