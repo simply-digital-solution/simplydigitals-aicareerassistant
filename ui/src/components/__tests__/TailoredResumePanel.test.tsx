@@ -164,11 +164,11 @@ describe('TailoredResumePanel', () => {
     expect(screen.getByRole('button', { name: /regenerate/i })).toBeInTheDocument()
   })
 
-  it('shows Download .docx button when resume exists', async () => {
+  it('does not show Download link when no drive file uploaded yet', async () => {
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     renderPanel()
-    await waitFor(() => screen.getByRole('button', { name: /download resume as word document/i }))
-    expect(screen.getByRole('button', { name: /download resume as word document/i })).toBeInTheDocument()
+    await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
+    expect(screen.queryByRole('link', { name: /download resume from google drive/i })).not.toBeInTheDocument()
   })
 
   it('renders experience bullets', async () => {
@@ -188,12 +188,12 @@ describe('TailoredResumePanel', () => {
         <TailoredResumePanel jobId={1} company="ACME Corp" readOnly />
       </QueryClientProvider>,
     )
-    await waitFor(() => screen.getByRole('button', { name: /download resume as word document/i }))
+    await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /upload resume to google drive/i })).not.toBeInTheDocument()
   })
 
-  it('shows Download and Preview buttons in readOnly mode', async () => {
+  it('shows Preview button in readOnly mode', async () => {
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
@@ -201,8 +201,23 @@ describe('TailoredResumePanel', () => {
         <TailoredResumePanel jobId={1} company="ACME Corp" readOnly />
       </QueryClientProvider>,
     )
-    await waitFor(() => screen.getByRole('button', { name: /download resume as word document/i }))
+    await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     expect(screen.getByRole('button', { name: /toggle resume preview/i })).toBeInTheDocument()
+  })
+
+  it('shows Download link when drive_file_id exists', async () => {
+    const resumeWithDrive = { ...makeResume(), drive_file_id: 'abc123', drive_link: 'https://drive.google.com/file/d/abc123/view' }
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithDrive } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    renderPanel()
+    const link = await screen.findByRole('link', { name: /download resume from google drive/i })
+    expect(link).toHaveAttribute('href', 'https://drive.google.com/uc?export=download&id=abc123')
+  })
+
+  it('does not show Download link when no drive_file_id', async () => {
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    renderPanel()
+    await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
+    expect(screen.queryByRole('link', { name: /download resume from google drive/i })).not.toBeInTheDocument()
   })
 })
 

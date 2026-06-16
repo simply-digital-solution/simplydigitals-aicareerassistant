@@ -205,7 +205,6 @@ function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
 
 export default function TailoredResumePanel({ jobId, company, readOnly = false }: TailoredResumePanelProps) {
   const queryClient = useQueryClient()
-  const [downloading, setDownloading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -240,16 +239,6 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
 
   const effectiveDriveLink = resume?.drive_link ?? null
   const driveConnected = driveStatus?.connected ?? false
-
-  const handleDownload = async () => {
-    if (!resume) return
-    setDownloading(true)
-    try {
-      await downloadAsDocx(resume.resume, company)
-    } finally {
-      setDownloading(false)
-    }
-  }
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -288,14 +277,17 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
                   : 'Just generated'}
               </span>
               <div className="flex items-center gap-3 flex-wrap">
-                <button
-                  onClick={handleDownload}
-                  disabled={downloading}
-                  className="text-xs text-green-600 hover:text-green-800 disabled:opacity-50 transition-colors font-medium"
-                  aria-label="Download resume as Word document"
-                >
-                  {downloading ? 'Preparing…' : '↓ Download .docx'}
-                </button>
+                {resume?.drive_file_id && (
+                  <a
+                    href={`https://drive.google.com/uc?export=download&id=${resume.drive_file_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-green-600 hover:text-green-800 font-medium"
+                    aria-label="Download resume from Google Drive"
+                  >
+                    ↓ Download
+                  </a>
+                )}
 
                 {effectiveDriveLink && (
                   <a
