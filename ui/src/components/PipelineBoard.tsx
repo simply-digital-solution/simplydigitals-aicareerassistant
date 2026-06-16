@@ -20,7 +20,7 @@ function ScoreBadge({ score }: { score?: number }) {
 
 function ApplicationCard({ app }: { app: Application }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+    <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-semibold text-gray-900 text-sm truncate">{app.company_name}</p>
