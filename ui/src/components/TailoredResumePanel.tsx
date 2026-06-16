@@ -301,15 +301,17 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
                   </a>
                 )}
 
-                <button
-                  onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
-                  disabled={!driveConnected || uploading}
-                  className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
-                  title={driveConnected ? (effectiveDriveLink ? 'Re-upload to Google Drive' : 'Upload resume to Google Drive') : 'Connect Google Drive first'}
-                  aria-label="Upload resume to Google Drive"
-                >
-                  {uploading ? 'Uploading…' : effectiveDriveLink ? '↑ Re-upload' : '↑ Upload to Drive'}
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
+                    disabled={!driveConnected || uploading}
+                    className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
+                    title={driveConnected ? (effectiveDriveLink ? 'Re-upload to Google Drive' : 'Upload resume to Google Drive') : 'Connect Google Drive first'}
+                    aria-label="Upload resume to Google Drive"
+                  >
+                    {uploading ? 'Uploading…' : effectiveDriveLink ? '↑ Re-upload' : '↑ Upload to Drive'}
+                  </button>
+                )}
 
                 <button
                   onClick={() => setShowPreview(v => !v)}
@@ -333,14 +335,16 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
 
             {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
 
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".docx,.pdf"
-              className="hidden"
-              onChange={handleFileSelected}
-              aria-label="Select resume file to upload to Drive"
-            />
+            {!readOnly && (
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".docx,.pdf"
+                className="hidden"
+                onChange={handleFileSelected}
+                aria-label="Select resume file to upload to Drive"
+              />
+            )}
 
             {showPreview && (
               resume.drive_link ? (

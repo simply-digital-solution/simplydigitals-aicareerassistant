@@ -180,7 +180,7 @@ describe('TailoredResumePanel', () => {
     expect(screen.getByText('Reduced latency by 40%')).toBeInTheDocument()
   })
 
-  it('hides only Regenerate button in readOnly mode', async () => {
+  it('hides Regenerate and Upload buttons in readOnly mode', async () => {
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
@@ -190,7 +190,7 @@ describe('TailoredResumePanel', () => {
     )
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /upload resume to google drive/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /upload resume to google drive/i })).not.toBeInTheDocument()
   })
 
   it('shows Preview button in readOnly mode', async () => {

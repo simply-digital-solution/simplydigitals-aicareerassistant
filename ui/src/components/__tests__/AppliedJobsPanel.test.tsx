@@ -106,16 +106,7 @@ describe('AppliedJobsPanel', () => {
     expect(screen.queryByRole('button', { name: /re-score/i })).not.toBeInTheDocument()
   })
 
-  it('does not show Regenerate button in the resume section', async () => {
-    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
-      { data: { total: 1, jobs: [makeJob()] } } as never
-    )
-    wrap()
-    await screen.findByText('Data Engineer')
-    expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument()
-  })
-
-  it('shows Upload to Drive button in the resume section', async () => {
+  it('does not show Regenerate or Upload buttons in the resume section', async () => {
     vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob()] } } as never
     )
@@ -129,6 +120,8 @@ describe('AppliedJobsPanel', () => {
     } as never)
     wrap()
     await screen.findByText('Data Engineer')
-    expect(await screen.findByRole('button', { name: /upload resume to google drive/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /toggle resume preview/i }))
+    expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /upload resume to google drive/i })).not.toBeInTheDocument()
   })
 })
