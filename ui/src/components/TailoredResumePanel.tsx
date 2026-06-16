@@ -355,10 +355,10 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
             )}
 
             {showPreview && (
-              resume.drive_file_id ? (
+              resume.drive_link ? (
                 <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '700px' }}>
                   <iframe
-                    src={`https://drive.google.com/file/d/${resume.drive_file_id}/preview`}
+                    src={resume.drive_link.replace(/\/(edit|view)(\?.*)?$/, '/preview')}
                     width="100%"
                     height="100%"
                     allow="autoplay"

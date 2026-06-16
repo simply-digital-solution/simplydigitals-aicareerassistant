@@ -179,14 +179,15 @@ async def upload_or_update_file(
 
         if existing_file_id:
             # Update existing file — Drive keeps version history automatically
+            # mimeType in metadata prevents Drive auto-converting .docx to Google Doc
             resp = await client.patch(
                 f"{_UPLOAD_URL}/{existing_file_id}",
                 params={"uploadType": "multipart", "fields": "id,webViewLink"},
-                content=_build_multipart(filename, mime, file_bytes),
+                content=_build_multipart(filename, mime, file_bytes, {"name": filename, "mimeType": mime}),
                 headers=headers,
             )
         else:
-            metadata = {"name": filename, "parents": [sub_id]}
+            metadata = {"name": filename, "parents": [sub_id], "mimeType": mime}
             resp = await client.post(
                 _UPLOAD_URL,
                 params={"uploadType": "multipart", "fields": "id,webViewLink"},
