@@ -36,7 +36,10 @@ def _build_user_message(
         f"--- TARGET JOB DESCRIPTION ---\n{jd_section}\n"
         f"--- END JOB DESCRIPTION ---\n\n"
         "Produce a complete tailored resume following the candidate's exact "
-        "section structure and style. Return JSON only."
+        "section structure and style. Return JSON only.\n\n"
+        "REMINDER: Every sentence MUST be first person. "
+        "Never use the candidate's name, 'he', 'his', 'she', 'they' anywhere. "
+        "Convert all third-person text to first person (e.g. 'Vasu brings' → 'I bring')."
     )
 
 
