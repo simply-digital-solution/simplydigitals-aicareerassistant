@@ -366,25 +366,46 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
         ) : !readOnly ? (
           <div className="text-center py-6">
             <p className="text-xs text-gray-500 mb-3">
-              Generate a tailored resume for this role using your uploaded resume as a template.
+              Generate a tailored resume for this role using your uploaded resume as a template,
+              or upload one you've already prepared.
             </p>
-            <button
-              onClick={() => generateMutation.mutate()}
-              disabled={generateMutation.isPending}
-              className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-            >
-              {generateMutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                  </svg>
-                  Generating…
-                </span>
-              ) : (
-                'Generate Tailored Resume'
-              )}
-            </button>
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <button
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending}
+                className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {generateMutation.isPending ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    Generating…
+                  </span>
+                ) : (
+                  'Generate Tailored Resume'
+                )}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
+                disabled={!driveConnected || uploading}
+                className="px-4 py-2 border border-gray-300 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                title={driveConnected ? 'Upload resume to Google Drive' : 'Connect Google Drive first'}
+                aria-label="Upload resume to Google Drive"
+              >
+                {uploading ? 'Uploading…' : '↑ Upload to Drive'}
+              </button>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".docx,.pdf"
+              className="hidden"
+              onChange={handleFileSelected}
+              aria-label="Select resume file to upload to Drive"
+            />
+            {uploadError && <p className="mt-2 text-xs text-red-500">{uploadError}</p>}
             {generateMutation.isError && (
               <p className="mt-2 text-xs text-red-500">
                 {(generateMutation.error as Error)?.message ?? 'Generation failed. Please try again.'}

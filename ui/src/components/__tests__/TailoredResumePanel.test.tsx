@@ -124,6 +124,24 @@ describe('TailoredResumePanel', () => {
     )
   })
 
+  it('shows Upload to Drive button even when no resume exists yet', async () => {
+    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: true } } as never)
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    renderPanel()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /upload resume to google drive/i })).toBeInTheDocument(),
+    )
+  })
+
+  it('Upload to Drive button is disabled when Drive not connected and no resume exists', async () => {
+    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: false } } as never)
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    renderPanel()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /upload resume to google drive/i })).toBeDisabled(),
+    )
+  })
+
   it('shows the resume document when one already exists', async () => {
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     renderPanel()
