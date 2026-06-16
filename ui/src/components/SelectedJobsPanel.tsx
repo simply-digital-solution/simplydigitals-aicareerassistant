@@ -45,7 +45,7 @@ function MarkAppliedButton({ applicationId }: { applicationId: number }) {
 
   return (
     <button
-      onClick={() => setConfirming(true)}
+      onClick={(e) => { e.stopPropagation(); setConfirming(true) }}
       className="text-xs border border-green-300 text-green-700 px-2.5 py-1 rounded-md hover:bg-green-50 transition-colors font-medium"
       aria-label="Mark job as applied"
     >

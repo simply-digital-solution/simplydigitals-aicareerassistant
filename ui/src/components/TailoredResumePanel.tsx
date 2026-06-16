@@ -316,7 +316,7 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
                     </a>
                   )}
                   <button
-                    onClick={() => driveConnected && fileRef.current?.click()}
+                    onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
                     disabled={!driveConnected || uploading}
                     className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
                     title={driveConnected ? (effectiveDriveLink ? 'Re-upload to Google Drive' : 'Upload resume to Google Drive') : 'Connect Google Drive first'}
