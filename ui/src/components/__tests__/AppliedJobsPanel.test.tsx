@@ -1,0 +1,118 @@
+import { render, screen } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import AppliedJobsPanel from '../AppliedJobsPanel'
+import * as clientModule from '../../api/client'
+import type { StoredJob } from '../../api/client'
+
+vi.mock('../../api/client', () => ({
+  default: { get: vi.fn(), post: vi.fn() },
+  researchApi: {
+    getAppliedJobs: vi.fn(),
+    getGeneratedResume: vi.fn(),
+  },
+  authApi: {
+    googleStatus: vi.fn().mockResolvedValue({ data: { connected: false } }),
+  },
+}))
+
+vi.mock('docx', () => ({
+  Document: class {},
+  Packer: { toBlob: vi.fn().mockResolvedValue(new Blob(['fake'])) },
+  Paragraph: class {},
+  TextRun: class {},
+  HeadingLevel: { TITLE: 'Title', HEADING_2: 'Heading2' },
+  AlignmentType: { CENTER: 'center' },
+  BorderStyle: { SINGLE: 'single' },
+  TableRow: class {},
+  TableCell: class {},
+  Table: class {},
+  WidthType: { PCT: 'pct' },
+}))
+
+function makeJob(overrides: Partial<StoredJob> = {}): StoredJob & { application_id: number; applied_at: string | null } {
+  return {
+    id: 1, mcf_uuid: 'abc', title: 'Data Engineer', company: 'ACME Corp',
+    url: 'https://www.mycareersfuture.gov.sg/job/abc', location: 'Singapore',
+    inferred_industries: JSON.stringify(['Technology']),
+    posted_at: '2026-06-10T10:00:00Z', scraped_at: '2026-06-11T07:00:00Z',
+    scored: true, fit_score: 0.82,
+    reasons: JSON.stringify(['Python skills match']),
+    risks: JSON.stringify(['No cloud experience']),
+    key_keywords: JSON.stringify(['Python', 'Spark']),
+    scoring_breakdown: null, score_error: null, scored_at: '2026-06-11T08:00:00Z',
+    archived: false, application_id: 10, applied_at: '2026-06-16T10:00:00Z',
+    ...overrides,
+  }
+}
+
+function wrap() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={qc}><AppliedJobsPanel /></QueryClientProvider>)
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(clientModule.authApi.googleStatus).mockResolvedValue({ data: { connected: false } } as never)
+  vi.mocked(clientModule.researchApi.getGeneratedResume).mockRejectedValue(
+    Object.assign(new Error('Not Found'), { response: { status: 404 } })
+  )
+})
+
+describe('AppliedJobsPanel', () => {
+  it('shows empty state when no applied jobs', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 0, jobs: [] } } as never
+    )
+    wrap()
+    expect(await screen.findByText(/no applied jobs yet/i)).toBeInTheDocument()
+  })
+
+  it('shows total count in header', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 2, jobs: [makeJob(), makeJob({ id: 2, title: 'ML Engineer' })] } } as never
+    )
+    wrap()
+    expect(await screen.findByText(/2 total/i)).toBeInTheDocument()
+  })
+
+  it('renders job title and company', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob()] } } as never
+    )
+    wrap()
+    expect(await screen.findByText('Data Engineer')).toBeInTheDocument()
+    expect(await screen.findByText('ACME Corp')).toBeInTheDocument()
+  })
+
+  it('shows ✓ Applied badge instead of Apply button', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob()] } } as never
+    )
+    wrap()
+    expect(await screen.findByLabelText(/job marked as applied/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /mark job as applied/i })).not.toBeInTheDocument()
+  })
+
+  it('does not show thumbs, archive or re-score buttons', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ scored: true, fit_score: 0.8 })] } } as never
+    )
+    wrap()
+    await screen.findByText('Data Engineer')
+    expect(screen.queryByTitle('Relevant')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Not relevant')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /archive job/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /re-score/i })).not.toBeInTheDocument()
+  })
+
+  it('does not show Regenerate or Re-upload buttons in the resume section', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob()] } } as never
+    )
+    wrap()
+    await screen.findByText('Data Engineer')
+    expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /upload resume to google drive/i })).not.toBeInTheDocument()
+  })
+})

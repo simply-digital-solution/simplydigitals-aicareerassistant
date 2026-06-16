@@ -44,13 +44,14 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
-export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore }: {
+export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore, readOnly = false }: {
   job: StoredJob
   feedback?: FeedbackEntry
   onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant', reason?: string) => void
   onArchive: (id: number) => void
   onSave?: (job: StoredJob) => void
   onRescore: (id: number) => void
+  readOnly?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -131,14 +132,14 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
             ? <span className="text-xs text-red-400 italic" title={job.score_error ?? 'Score incomplete'}>⚠ Something went wrong. Click Re-score</span>
             : <span className="text-xs text-gray-400 italic">Scoring…</span>
           }
-          <button title="Relevant" disabled={saving} onClick={handleThumbUp}
+          {!readOnly && <button title="Relevant" disabled={saving} onClick={handleThumbUp}
             className={`text-base leading-none px-1.5 py-0.5 rounded transition-colors ${
               feedback?.relevance === 'relevant' ? 'bg-green-200 text-green-700' : 'hover:bg-green-100 text-gray-400 hover:text-green-600'
-            } disabled:opacity-40`}>👍</button>
-          <button title="Not relevant" disabled={saving} onClick={handleThumbDown}
+            } disabled:opacity-40`}>👍</button>}
+          {!readOnly && <button title="Not relevant" disabled={saving} onClick={handleThumbDown}
             className={`text-base leading-none px-1.5 py-0.5 rounded transition-colors ${
               feedback?.relevance === 'not_relevant' ? 'bg-red-200 text-red-600' : pickingReason ? 'bg-red-100 text-red-500' : 'hover:bg-red-100 text-gray-400 hover:text-red-500'
-            } disabled:opacity-40`}>👎</button>
+            } disabled:opacity-40`}>👎</button>}
           {onSave && <button
             title="Save to Selected"
             onClick={handleSave}
@@ -163,7 +164,7 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
               )
             }
           </button>}
-          <button
+          {!readOnly && <button
             title="Archive job"
             onClick={() => onArchive(job.id)}
             className="text-gray-300 hover:text-gray-500 hover:bg-gray-100 rounded p-0.5 transition-colors leading-none"
@@ -173,8 +174,8 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
               <path d="M2 3a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3Z" />
               <path fillRule="evenodd" d="M3 7h14v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm5 3a1 1 0 0 0 0 2h4a1 1 0 1 0 0-2H8Z" clipRule="evenodd" />
             </svg>
-          </button>
-          {(!!job.scored || !!job.score_error) && (
+          </button>}
+          {!readOnly && (!!job.scored || !!job.score_error) && (
             <button
               title="Re-score"
               onClick={() => onRescore(job.id)}

@@ -16,6 +16,7 @@ function MarkAppliedButton({ applicationId }: { applicationId: number }) {
     mutationFn: () => applicationsApi.move(applicationId, 'applied'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['selected-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['applied-jobs'] })
       queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
     },
   })
@@ -49,7 +50,7 @@ function MarkAppliedButton({ applicationId }: { applicationId: number }) {
       className="text-xs border border-green-300 text-green-700 px-2.5 py-1 rounded-md hover:bg-green-50 transition-colors font-medium"
       aria-label="Mark job as applied"
     >
-      ✓ Applied
+      Apply
     </button>
   )
 }

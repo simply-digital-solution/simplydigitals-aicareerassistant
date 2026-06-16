@@ -984,6 +984,33 @@ async def get_selected_jobs(
     return {"total": len(jobs), "jobs": jobs}
 
 
+@router.get("/research/jobs/applied")
+async def get_applied_jobs(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return job postings the user has marked as applied."""
+    rows = await db.execute(
+        text("""
+            SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
+                   jp.scoring_breakdown, jp.score_error, jp.scored_at, jp.archived,
+                   a.id AS application_id, a.applied_at
+            FROM job_postings jp
+            JOIN applications a
+              ON a.job_posting_id = jp.id
+             AND a.user_id = :uid
+             AND a.status = 'applied'
+            WHERE jp.user_id = :uid
+            ORDER BY a.updated_at DESC
+        """),
+        {"uid": current_user.id},
+    )
+    jobs = [dict(r) for r in rows.mappings()]
+    return {"total": len(jobs), "jobs": jobs}
+
+
 @router.post("/research/jobs/{job_id}/archive", status_code=204)
 async def archive_job(
     job_id: int,

@@ -176,10 +176,11 @@ describe('SelectedJobsPanel — re-score', () => {
 // ---------------------------------------------------------------------------
 
 describe('SelectedJobsPanel — mark as applied', () => {
-  it('renders the Applied button for each job', async () => {
+  it('renders the Apply button for each job', async () => {
     setupMocks([makeJob()])
     wrap()
     expect(await screen.findByRole('button', { name: /mark job as applied/i })).toBeInTheDocument()
+    expect(await screen.findByText('Apply')).toBeInTheDocument()
   })
 
   it('shows confirmation step on first click', async () => {

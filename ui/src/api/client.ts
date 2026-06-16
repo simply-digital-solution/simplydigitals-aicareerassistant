@@ -214,6 +214,11 @@ export interface SelectedJobsResponse {
   jobs: (StoredJob & { application_id: number })[]
 }
 
+export interface AppliedJobsResponse {
+  total: number
+  jobs: (StoredJob & { application_id: number; applied_at: string | null })[]
+}
+
 export interface GeneratedResumeExperience {
   title: string
   company: string
@@ -258,6 +263,7 @@ export const researchApi = {
   getJobs: (params: { page?: number; per_page?: number; role?: string; days?: number }) =>
     api.get<StoredJobsResponse>('/research/jobs', { params }),
   getSelectedJobs: () => api.get<SelectedJobsResponse>('/research/jobs/selected'),
+  getAppliedJobs: () => api.get<AppliedJobsResponse>('/research/jobs/applied'),
   archiveJob: (id: number) => api.post(`/research/jobs/${id}/archive`),
   rescoreJob: (id: number) => api.post(`/research/jobs/${id}/rescore`),
   generateResume: (jobId: number) =>

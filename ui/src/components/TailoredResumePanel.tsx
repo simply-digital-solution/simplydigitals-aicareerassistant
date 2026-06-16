@@ -10,6 +10,7 @@ import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExpe
 interface TailoredResumePanelProps {
   jobId: number
   company: string
+  readOnly?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -202,9 +203,8 @@ function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
 // Main panel
 // ---------------------------------------------------------------------------
 
-export default function TailoredResumePanel({ jobId, company }: TailoredResumePanelProps) {
+export default function TailoredResumePanel({ jobId, company, readOnly = false }: TailoredResumePanelProps) {
   const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
@@ -224,7 +224,6 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
         if (err?.response?.status === 404) return null
         throw err
       }),
-    enabled: open,
     retry: false,
   })
 
@@ -272,49 +271,40 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
 
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
-        aria-expanded={open}
-      >
-        <span>{open ? '▾' : '▸'}</span>
-        <span>Tailored Resume</span>
-      </button>
+      <div className="space-y-3">
+        {loadingExisting ? (
+          <div className="h-24 bg-gray-50 rounded-lg animate-pulse" />
+        ) : resume ? (
+          <>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-xs text-gray-400">
+                {existing?.updated_at
+                  ? `Last generated ${new Date(existing.updated_at).toLocaleDateString()}`
+                  : 'Just generated'}
+              </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="text-xs text-green-600 hover:text-green-800 disabled:opacity-50 transition-colors font-medium"
+                  aria-label="Download resume as Word document"
+                >
+                  {downloading ? 'Preparing…' : '↓ Download .docx'}
+                </button>
 
-      {open && (
-        <div className="mt-3 space-y-3">
-          {loadingExisting ? (
-            <div className="h-24 bg-gray-50 rounded-lg animate-pulse" />
-          ) : resume ? (
-            <>
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="text-xs text-gray-400">
-                  {existing?.updated_at
-                    ? `Last generated ${new Date(existing.updated_at).toLocaleDateString()}`
-                    : 'Just generated'}
-                </span>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <button
-                    onClick={handleDownload}
-                    disabled={downloading}
-                    className="text-xs text-green-600 hover:text-green-800 disabled:opacity-50 transition-colors font-medium"
-                    aria-label="Download resume as Word document"
+                {effectiveDriveLink && (
+                  <a
+                    href={effectiveDriveLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                    aria-label="Open resume in Google Drive"
                   >
-                    {downloading ? 'Preparing…' : '↓ Download .docx'}
-                  </button>
+                    ↗ Open in Drive
+                  </a>
+                )}
 
-                  {/* Drive upload / link */}
-                  {effectiveDriveLink && (
-                    <a
-                      href={effectiveDriveLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                      aria-label="Open resume in Google Drive"
-                    >
-                      ↗ Open in Drive
-                    </a>
-                  )}
+                {!readOnly && (
                   <button
                     onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
                     disabled={!driveConnected || uploading}
@@ -324,14 +314,17 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
                   >
                     {uploading ? 'Uploading…' : effectiveDriveLink ? '↑ Re-upload' : '↑ Upload to Drive'}
                   </button>
+                )}
 
-                  <button
-                    onClick={() => setShowPreview(v => !v)}
-                    className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
-                    aria-label="Toggle resume preview"
-                  >
-                    {showPreview ? '▴ Hide Preview' : '▾ Preview'}
-                  </button>
+                <button
+                  onClick={() => setShowPreview(v => !v)}
+                  className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+                  aria-label="Toggle resume preview"
+                >
+                  {showPreview ? '▴ Hide Preview' : '▾ Preview'}
+                </button>
+
+                {!readOnly && (
                   <button
                     onClick={() => generateMutation.mutate()}
                     disabled={generateMutation.isPending}
@@ -339,12 +332,13 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
                   >
                     {generateMutation.isPending ? 'Regenerating…' : '↺ Regenerate'}
                   </button>
-                </div>
+                )}
               </div>
+            </div>
 
-              {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
+            {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
 
-              {/* Hidden file input for Drive upload */}
+            {!readOnly && (
               <input
                 ref={fileRef}
                 type="file"
@@ -353,55 +347,55 @@ export default function TailoredResumePanel({ jobId, company }: TailoredResumePa
                 onChange={handleFileSelected}
                 aria-label="Select resume file to upload to Drive"
               />
+            )}
 
-              {showPreview && (
-                resume.drive_file_id ? (
-                  <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '700px' }}>
-                    <iframe
-                      src={`https://drive.google.com/file/d/${resume.drive_file_id}/preview`}
-                      width="100%"
-                      height="100%"
-                      allow="autoplay"
-                      title="Resume preview"
-                      className="block"
-                    />
-                  </div>
-                ) : (
-                  <ResumeDocument resume={resume.resume} />
-                )
+            {showPreview && (
+              resume.drive_file_id ? (
+                <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '700px' }}>
+                  <iframe
+                    src={`https://drive.google.com/file/d/${resume.drive_file_id}/preview`}
+                    width="100%"
+                    height="100%"
+                    allow="autoplay"
+                    title="Resume preview"
+                    className="block"
+                  />
+                </div>
+              ) : (
+                <ResumeDocument resume={resume.resume} />
+              )
+            )}
+          </>
+        ) : !readOnly ? (
+          <div className="text-center py-6">
+            <p className="text-xs text-gray-500 mb-3">
+              Generate a tailored resume for this role using your uploaded resume as a template.
+            </p>
+            <button
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+              className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {generateMutation.isPending ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  Generating…
+                </span>
+              ) : (
+                'Generate Tailored Resume'
               )}
-            </>
-          ) : (
-            <div className="text-center py-6">
-              <p className="text-xs text-gray-500 mb-3">
-                Generate a tailored resume for this role using your uploaded resume as a template.
+            </button>
+            {generateMutation.isError && (
+              <p className="mt-2 text-xs text-red-500">
+                {(generateMutation.error as Error)?.message ?? 'Generation failed. Please try again.'}
               </p>
-              <button
-                onClick={() => generateMutation.mutate()}
-                disabled={generateMutation.isPending}
-                className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {generateMutation.isPending ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                    </svg>
-                    Generating…
-                  </span>
-                ) : (
-                  'Generate Tailored Resume'
-                )}
-              </button>
-              {generateMutation.isError && (
-                <p className="mt-2 text-xs text-red-500">
-                  {(generateMutation.error as Error)?.message ?? 'Generation failed. Please try again.'}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
