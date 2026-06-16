@@ -18,10 +18,7 @@ function ScoreBadge({ score }: { score?: number }) {
   return <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${color}`}>{pct}%</span>
 }
 
-function ApplicationCard({ app, onMove }: { app: Application; onMove: (id: number, status: string) => void }) {
-  const [showMenu, setShowMenu] = useState(false)
-  const otherStatuses = COLUMNS.map(c => c.key).filter(s => s !== app.status)
-
+function ApplicationCard({ app }: { app: Application }) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
       <div className="flex items-start justify-between gap-2">
@@ -36,29 +33,8 @@ function ApplicationCard({ app, onMove }: { app: Application; onMove: (id: numbe
         <p className="text-xs text-orange-600 mt-1">Due: {app.deadline}</p>
       )}
 
-      <div className="mt-2 flex items-center justify-between">
+      <div className="mt-2">
         <span className="text-xs text-gray-400">{app.source ?? 'manual'}</span>
-        <div className="relative">
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="text-gray-400 hover:text-gray-600 text-xs px-2 py-0.5 rounded border border-gray-200 hover:border-gray-300"
-          >
-            Move →
-          </button>
-          {showMenu && (
-            <div className="absolute right-0 top-6 bg-white border border-gray-200 rounded shadow-lg z-10 min-w-32">
-              {otherStatuses.map(s => (
-                <button
-                  key={s}
-                  onClick={() => { onMove(app.id, s); setShowMenu(false) }}
-                  className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 capitalize"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   )
@@ -121,12 +97,6 @@ export default function PipelineBoard() {
     queryFn: () => applicationsApi.kanban().then(r => r.data),
   })
 
-  const moveMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      applicationsApi.move(id, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kanban'] }),
-  })
-
   const addMutation = useMutation({
     mutationFn: (data: Partial<Application>) => applicationsApi.create(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kanban'] }),
@@ -167,11 +137,7 @@ export default function PipelineBoard() {
                 </div>
                 <div className="space-y-2">
                   {apps.map(app => (
-                    <ApplicationCard
-                      key={app.id}
-                      app={app}
-                      onMove={(id, status) => moveMutation.mutate({ id, status })}
-                    />
+                    <ApplicationCard key={app.id} app={app} />
                   ))}
                   {apps.length === 0 && (
                     <p className="text-center text-gray-400 text-xs py-8">No applications</p>
