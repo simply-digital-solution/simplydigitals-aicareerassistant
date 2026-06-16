@@ -123,7 +123,7 @@ export default function PipelineBoard() {
         {COLUMNS.map(col => {
           const apps = board?.[col.key] ?? []
           return (
-            <div key={col.key} className="shrink-0 w-48">
+            <div key={col.key} className="shrink-0 w-64">
               <div className={`rounded-xl border-2 ${col.color} p-3 min-h-96`}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold text-sm text-gray-700 capitalize">{col.label}</h3>
