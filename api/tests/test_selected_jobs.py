@@ -112,11 +112,11 @@ async def test_create_application_job_posting_id_optional():
 
 
 # ---------------------------------------------------------------------------
-# GET /research/jobs excludes selected jobs
+# GET /research/jobs excludes jobs with any application row
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_get_stored_jobs_excludes_selected():
+async def test_get_stored_jobs_excludes_any_application():
     from app.modules.agents.router import get_stored_jobs
     count_result = MagicMock()
     count_result.scalar_one.return_value = 0
@@ -130,5 +130,6 @@ async def test_get_stored_jobs_excludes_selected():
                           current_user=_make_user(), db=db)
 
     where_sql = db.execute.call_args_list[0].args[0].text
-    assert "selected" in where_sql
+    assert "NOT IN" in where_sql
     assert "job_posting_id" in where_sql
+    assert "selected" not in where_sql

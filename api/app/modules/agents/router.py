@@ -914,7 +914,7 @@ async def get_stored_jobs(
     where_clauses = [
         "user_id = :uid",
         "archived = 0",
-        "id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND status = 'selected' AND job_posting_id IS NOT NULL)",
+        "id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND job_posting_id IS NOT NULL)",
     ]
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
 
