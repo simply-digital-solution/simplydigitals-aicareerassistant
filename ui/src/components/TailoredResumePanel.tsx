@@ -248,9 +248,11 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
     setUploading(true)
     try {
       const res = await researchApi.uploadToDrive(jobId, file)
-      // Patch the cache with the new drive fields
+      // Patch the cache with the new drive fields; if no resume existed yet, seed a minimal record
       queryClient.setQueryData(['generated-resume', jobId], (old: typeof existing) =>
-        old ? { ...old, drive_link: res.data.drive_link, drive_file_id: res.data.drive_file_id } : old
+        old
+          ? { ...old, drive_link: res.data.drive_link, drive_file_id: res.data.drive_file_id }
+          : { job_posting_id: jobId, resume: null, drive_link: res.data.drive_link, drive_file_id: res.data.drive_file_id, created_at: null, updated_at: null }
       )
       // Reset mutation so resume falls back to the patched cache (which has drive_file_id)
       generateMutation.reset()
@@ -272,9 +274,13 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
           <>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">
-                {existing?.updated_at
-                  ? `Last generated ${new Date(existing.updated_at).toLocaleDateString()}`
-                  : 'Just generated'}
+                {resume?.resume
+                  ? existing?.updated_at
+                    ? `Last generated ${new Date(existing.updated_at).toLocaleDateString()}`
+                    : 'Just generated'
+                  : resume?.drive_file_id
+                  ? 'Uploaded to Drive'
+                  : ''}
               </span>
               <div className="flex items-center gap-3 flex-wrap">
                 {resume?.drive_file_id && (
@@ -358,9 +364,9 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
                     className="block"
                   />
                 </div>
-              ) : (
+              ) : resume.resume ? (
                 <ResumeDocument resume={resume.resume} />
-              )
+              ) : null
             )}
           </>
         ) : !readOnly ? (
