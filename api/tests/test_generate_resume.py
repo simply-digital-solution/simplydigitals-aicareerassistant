@@ -57,13 +57,14 @@ def _make_profile_orm(resume_text: str = "My resume text here."):
     return p
 
 
-def _db_with_job(has_job: bool = True, resume_text: str = "My resume text here."):
+def _db_with_job(has_job: bool = True, resume_text: str = "My resume text here.", drive_file_id=None, drive_link=None):
     """
     DB mock serving execute calls in endpoint order:
       1st → job row  (text SELECT)
       2nd → profile  (ORM select → scalar_one_or_none)
       3rd → app link (text SELECT)
-      4th → INSERT
+      4th → INSERT/upsert
+      5th → SELECT drive_file_id, drive_link (post-commit read-back)
     """
     db = AsyncMock()
 
@@ -84,7 +85,13 @@ def _db_with_job(has_job: bool = True, resume_text: str = "My resume text here."
     # Call 4: INSERT
     insert_result = MagicMock()
 
-    db.execute.side_effect = [job_result, profile_orm_result, app_result, insert_result]
+    # Call 5: read-back drive fields after commit
+    drive_row = MagicMock()
+    drive_row.__getitem__ = lambda self, k: drive_file_id if k == "drive_file_id" else drive_link
+    drive_result = MagicMock()
+    drive_result.mappings.return_value.first.return_value = drive_row
+
+    db.execute.side_effect = [job_result, profile_orm_result, app_result, insert_result, drive_result]
     db.commit = AsyncMock()
     return db
 
@@ -130,8 +137,8 @@ async def test_generate_resume_upserts_to_db():
         await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
     db.commit.assert_awaited_once()
-    # 4 executes: job + profile + app_link + insert
-    assert db.execute.await_count == 4
+    # 5 executes: job + profile + app_link + insert + drive read-back
+    assert db.execute.await_count == 5
 
 
 @pytest.mark.asyncio
@@ -160,6 +167,32 @@ async def test_generate_resume_422_when_no_resume_in_profile():
         await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
     assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_generate_resume_includes_drive_fields_when_null():
+    from app.modules.agents.router import generate_resume
+
+    db = _db_with_job(drive_file_id=None, drive_link=None)
+
+    with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
+        result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
+
+    assert result["drive_file_id"] is None
+    assert result["drive_link"] is None
+
+
+@pytest.mark.asyncio
+async def test_generate_resume_includes_drive_fields_when_present():
+    from app.modules.agents.router import generate_resume
+
+    db = _db_with_job(drive_file_id="abc123", drive_link="https://drive.google.com/file/d/abc123/view")
+
+    with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
+        result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
+
+    assert result["drive_file_id"] == "abc123"
+    assert result["drive_link"] == "https://drive.google.com/file/d/abc123/view"
 
 
 @pytest.mark.asyncio
