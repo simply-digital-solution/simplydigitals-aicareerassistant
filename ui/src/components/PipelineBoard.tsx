@@ -32,10 +32,6 @@ function ApplicationCard({ app }: { app: Application }) {
       {app.deadline && (
         <p className="text-xs text-orange-600 mt-1">Due: {app.deadline}</p>
       )}
-
-      <div className="mt-2">
-        <span className="text-xs text-gray-400">{app.source ?? 'manual'}</span>
-      </div>
     </div>
   )
 }
