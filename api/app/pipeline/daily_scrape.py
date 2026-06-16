@@ -8,6 +8,7 @@ UUID to the same posting) and is dropped.
 """
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +26,8 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
     Scrape MCF for a single user's target titles and insert new job rows.
     Returns the number of new rows inserted.
     """
+    t_user_start = time.monotonic()
+
     result = await db.execute(select(Profile).where(Profile.user_id == user_id))
     profile = result.scalar_one_or_none()
     if not profile:
@@ -38,24 +41,43 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
         logger.info("scrape_for_user: user_id=%d has no target titles, skipping", user_id)
         return 0
 
+    logger.info(
+        "scrape_for_user: user_id=%d starting — titles=%s industries=%s",
+        user_id, target_titles, target_industries or ["(no filter)"],
+    )
+
     inserted = 0
     now = datetime.now(timezone.utc)
 
     for title in target_titles:
-        logger.info("scrape_for_user: user_id=%d scraping MCF for %r", user_id, title)
+        t_title_start = time.monotonic()
+        logger.info("scrape_for_user: user_id=%d fetching MCF for title=%r", user_id, title)
         try:
             jobs = await scrape_mycareersfuture(query=title, max_results=100)
         except Exception as exc:
-            logger.warning("scrape_for_user: MCF failed for %r: %s", title, exc)
+            logger.warning("scrape_for_user: user_id=%d MCF fetch failed for title=%r: %s", user_id, title, exc)
             continue
+
+        fetched = len(jobs)
+        logger.info(
+            "scrape_for_user: user_id=%d title=%r MCF returned %d jobs in %.2fs",
+            user_id, title, fetched, time.monotonic() - t_title_start,
+        )
 
         # Apply industry filter before inserting
         if target_industries:
             jobs = _filter_by_industry(jobs, target_industries, threshold=0.80)
+            logger.info(
+                "scrape_for_user: user_id=%d title=%r after industry filter: %d/%d jobs kept",
+                user_id, title, len(jobs), fetched,
+            )
 
+        title_inserted = 0
+        title_skipped = 0
         for job in jobs:
             uuid = job.get("url", "").rstrip("/").split("/")[-1]
             if not uuid:
+                title_skipped += 1
                 continue
 
             posted_at = None
@@ -105,20 +127,47 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                     "scraped_at":  now.isoformat(),
                 },
             )
-            inserted += row.rowcount
+            if row.rowcount:
+                title_inserted += 1
+            else:
+                title_skipped += 1
+
+        inserted += title_inserted
+        logger.info(
+            "scrape_for_user: user_id=%d title=%r → inserted=%d skipped=%d",
+            user_id, title, title_inserted, title_skipped,
+        )
 
     await db.commit()
-    logger.info("scrape_for_user: user_id=%d inserted %d new jobs", user_id, inserted)
+    elapsed = time.monotonic() - t_user_start
+    logger.info(
+        "scrape_for_user: user_id=%d done — total inserted=%d across %d titles in %.2fs",
+        user_id, inserted, len(target_titles), elapsed,
+    )
     return inserted
 
 
 async def scrape_for_all_users(db: AsyncSession) -> None:
     """Called by the scheduler — scrapes for every user who has a profile."""
+    t_start = time.monotonic()
     rows = await db.execute(text("SELECT user_id FROM profiles"))
     user_ids = [r[0] for r in rows.fetchall()]
-    logger.info("scrape_for_all_users: found %d users", len(user_ids))
+    logger.info("scrape_for_all_users: starting — found %d users: %s", len(user_ids), user_ids)
+
+    summary: dict[int, int] = {}
     for uid in user_ids:
         try:
-            await scrape_for_user(uid, db)
+            summary[uid] = await scrape_for_user(uid, db)
         except Exception as exc:
-            logger.error("scrape_for_all_users: user_id=%d failed: %s", uid, exc)
+            logger.error(
+                "scrape_for_all_users: user_id=%d failed: %s",
+                uid, exc, exc_info=True,
+            )
+            summary[uid] = -1
+
+    elapsed = time.monotonic() - t_start
+    logger.info(
+        "scrape_for_all_users: done in %.2fs — per-user new jobs: %s",
+        elapsed,
+        {f"user_{uid}": count for uid, count in summary.items()},
+    )

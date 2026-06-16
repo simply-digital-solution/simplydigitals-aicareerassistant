@@ -19,9 +19,13 @@ _scorer_task: asyncio.Task | None = None
 async def _run_daily_scrape() -> None:
     from app.shared.database import get_db_context
     from app.pipeline.daily_scrape import scrape_for_all_users
-    logger.info("scheduler: daily scrape triggered")
+    logger.info("scheduler: daily scrape triggered at %s", __import__('datetime').datetime.now().isoformat(timespec='seconds'))
     async with get_db_context() as db:
         await scrape_for_all_users(db)
+    if _scheduler:
+        job = _scheduler.get_job("daily_scrape")
+        if job and job.next_run_time:
+            logger.info("scheduler: next scrape scheduled at %s", job.next_run_time.isoformat(timespec='seconds'))
 
 
 def start(get_db_context_fn) -> None:

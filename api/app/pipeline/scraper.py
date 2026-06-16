@@ -277,14 +277,22 @@ _MCF_JOB_URL = "https://www.mycareersfuture.gov.sg/job"
 
 async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict]:
     params = {"search": query, "limit": min(max_results, 100)}
+    logger.info("MCF: GET %s params=%s", _MCF_BASE, params)
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(_MCF_BASE, params=params)
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
-        logger.warning("MyCareersFuture scrape failed for %r: %s", query, e)
+        logger.warning("MCF: request failed for query=%r: %s", query, e)
         return []
+
+    total_available = data.get("total", "unknown")
+    raw_count = len(data.get("results", []))
+    logger.info(
+        "MCF: query=%r HTTP 200 — total_available=%s results_in_response=%d cap=%d",
+        query, total_available, raw_count, max_results,
+    )
 
     jobs = []
     for item in data.get("results", [])[:max_results]:
@@ -339,6 +347,7 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
             "posted_at": original_posting_date,
         })
 
+    logger.info("MCF: query=%r → built %d job dicts", query, len(jobs))
     return jobs
 
 
