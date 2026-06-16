@@ -42,7 +42,7 @@ MCF_CATEGORY_MAP: dict[str, list[str]] = {
     "Accounting / Auditing / Taxation": ["Banking & Financial Services"],
     "Professional Services":          ["Consulting & Professional Services"],
     "Consulting":                     ["Consulting & Professional Services"],
-    "Engineering":                    ["Technology & Software"],
+    "Engineering":                    [],   # too generic — covers mechanical, civil, manufacturing
     "Sciences / Laboratory / R&D":    ["Healthcare & Life Sciences"],
     "Healthcare / Pharmaceutical":    ["Healthcare & Life Sciences"],
     "Medical / Therapy Services":     ["Healthcare & Life Sciences"],
