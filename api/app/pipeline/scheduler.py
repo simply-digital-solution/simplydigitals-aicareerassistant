@@ -35,13 +35,13 @@ def start(get_db_context_fn) -> None:
     _scheduler = AsyncIOScheduler()
     _scheduler.add_job(
         _run_daily_scrape,
-        trigger=CronTrigger(hour=7, minute=0, timezone="Asia/Singapore"),
+        trigger=CronTrigger(hour=5, minute=0, timezone="Asia/Singapore"),
         id="daily_scrape",
         replace_existing=True,
         misfire_grace_time=3600,
     )
     _scheduler.start()
-    logger.info("scheduler: started — daily scrape at 07:00 SGT")
+    logger.info("scheduler: started — daily scrape at 05:00 SGT")
 
     from app.pipeline.llm_scorer import run_scorer_loop
     _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))
