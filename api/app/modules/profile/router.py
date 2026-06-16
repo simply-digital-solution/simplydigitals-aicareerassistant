@@ -39,6 +39,7 @@ def _dedupe_json_array(value: str | None) -> str | None:
 
 class ProfileUpdate(BaseModel):
     resume_text: str | None = None
+    resume_html: str | None = None
     linkedin_url: str | None = None
     full_name: str | None = None
     target_locations: str | None = None      # JSON array string
@@ -56,6 +57,7 @@ class ProfileUpdate(BaseModel):
 
 class ProfileResponse(BaseModel):
     resume_text: str | None
+    resume_html: str | None
     linkedin_url: str | None
     full_name: str | None
     target_locations: str | None
@@ -87,37 +89,111 @@ async def _get_or_create(db: AsyncSession, user_id: int) -> Profile:
 
 class ParsedResumeResponse(BaseModel):
     text: str
+    html: str
+
+
+def _escape(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _pdf_to_html(content: bytes) -> tuple[str, str]:
+    """Extract text + basic HTML from a PDF using pdfplumber."""
+    text_parts: list[str] = []
+    html_parts: list[str] = []
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if not page_text:
+                continue
+            text_parts.append(page_text)
+            for line in page_text.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    html_parts.append("<br>")
+                    continue
+                # Heuristic: short ALL-CAPS lines (≤60 chars) are section headings
+                if stripped.isupper() and len(stripped) <= 60:
+                    html_parts.append(f'<h2 class="resume-heading">{_escape(stripped)}</h2>')
+                # Heuristic: lines starting with ● or • are bullets
+                elif stripped.startswith(("●", "•", "-", "–")):
+                    bullet = _escape(stripped.lstrip("●•–- ").strip())
+                    html_parts.append(f'<li>{bullet}</li>')
+                else:
+                    html_parts.append(f'<p>{_escape(stripped)}</p>')
+    return "\n\n".join(text_parts), "\n".join(html_parts)
+
+
+def _docx_to_html(content: bytes) -> tuple[str, str]:
+    """Extract text + styled HTML from a DOCX preserving bold/italic/bullets/headings."""
+    doc = docx.Document(io.BytesIO(content))
+    text_lines: list[str] = []
+    html_parts: list[str] = []
+
+    for para in doc.paragraphs:
+        raw = para.text.strip()
+        if not raw:
+            html_parts.append("<br>")
+            continue
+
+        text_lines.append(raw)
+        style_name = (para.style.name or "").lower()
+
+        # Build inline HTML for runs (preserving bold/italic per run)
+        inner = ""
+        for run in para.runs:
+            chunk = _escape(run.text)
+            if not chunk:
+                continue
+            if run.bold and run.italic:
+                chunk = f"<strong><em>{chunk}</em></strong>"
+            elif run.bold:
+                chunk = f"<strong>{chunk}</strong>"
+            elif run.italic:
+                chunk = f"<em>{chunk}</em>"
+            inner += chunk
+        if not inner:
+            inner = _escape(raw)
+
+        # Map Word styles to HTML elements
+        if "heading 1" in style_name or "title" in style_name:
+            html_parts.append(f'<h1 class="resume-name">{inner}</h1>')
+        elif "heading 2" in style_name or "heading 3" in style_name:
+            html_parts.append(f'<h2 class="resume-heading">{inner}</h2>')
+        elif para.style.name and "List" in para.style.name:
+            html_parts.append(f'<li>{inner}</li>')
+        # Heuristic fallback: short ALL-CAPS = section heading
+        elif raw.isupper() and len(raw) <= 60:
+            html_parts.append(f'<h2 class="resume-heading">{inner}</h2>')
+        else:
+            html_parts.append(f'<p>{inner}</p>')
+
+    return "\n".join(text_lines), "\n".join(html_parts)
 
 
 @router.post("/parse-resume", response_model=ParsedResumeResponse)
 async def parse_resume_file(
     file: UploadFile = File(...),
     current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     content = await file.read()
     filename = (file.filename or "").lower()
 
     if filename.endswith(".pdf"):
         try:
-            text_parts: list[str] = []
-            with pdfplumber.open(io.BytesIO(content)) as pdf:
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text_parts.append(page_text)
-            text = "\n\n".join(text_parts)
+            text, html = _pdf_to_html(content)
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Could not parse PDF: {e}")
 
     elif filename.endswith(".docx"):
         try:
-            doc = docx.Document(io.BytesIO(content))
-            text = "\n".join(para.text for para in doc.paragraphs if para.text.strip())
+            text, html = _docx_to_html(content)
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Could not parse DOCX: {e}")
 
     elif filename.endswith((".txt", ".md")):
         text = content.decode("utf-8", errors="replace")
+        html = "".join(f"<p>{_escape(l)}</p>" for l in text.splitlines() if l.strip())
 
     else:
         raise HTTPException(status_code=415, detail="Unsupported file type. Upload PDF, DOCX, TXT, or MD.")
@@ -125,7 +201,12 @@ async def parse_resume_file(
     if not text.strip():
         raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
 
-    return ParsedResumeResponse(text=text)
+    # Persist both text and HTML to the profile immediately on upload
+    profile = await _get_or_create(db, current_user.id)
+    profile.resume_html = html
+    await db.commit()
+
+    return ParsedResumeResponse(text=text, html=html)
 
 
 @router.get("", response_model=ProfileResponse)

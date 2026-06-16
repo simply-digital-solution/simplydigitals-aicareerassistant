@@ -8,6 +8,23 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
+// Scoped styles injected once — mirrors the PDF template colours/spacing
+const RESUME_PREVIEW_CSS = `
+  .resume-preview { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #222; line-height: 1.5; }
+  .resume-preview h1.resume-name { font-size: 22pt; font-weight: bold; text-align: center; margin: 0 0 4px; }
+  .resume-preview p.resume-headline { font-style: italic; text-align: center; color: #555; margin: 0 0 16px; font-size: 10pt; }
+  .resume-preview h2.resume-heading {
+    font-size: 11pt; font-weight: normal; text-transform: uppercase;
+    color: #1F5C9E; border-bottom: 1.5px solid #1F5C9E;
+    margin: 18px 0 6px; padding-bottom: 2px; letter-spacing: 0.04em;
+  }
+  .resume-preview p { margin: 3px 0; }
+  .resume-preview li { margin: 2px 0 2px 20px; list-style-type: disc; }
+  .resume-preview strong { font-weight: bold; }
+  .resume-preview em { font-style: italic; color: #444; }
+  .resume-preview br { display: block; margin: 4px 0; content: ""; }
+`
+
 export default function ResumeSection({
   data,
   onSaved,
@@ -16,6 +33,8 @@ export default function ResumeSection({
   onSaved: () => void
 }) {
   const [resumeText, setResumeText] = useState<string>(data.resume_text ?? '')
+  const [resumeHtml, setResumeHtml] = useState<string>(data.resume_html ?? '')
+  const [showRaw, setShowRaw] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -42,6 +61,7 @@ export default function ResumeSection({
     if (name.endsWith('.txt') || name.endsWith('.md')) {
       const text = await file.text()
       handleTextChange(text)
+      setResumeHtml('')
     } else {
       const email = localStorage.getItem('user_email')
       const form = new FormData()
@@ -55,8 +75,12 @@ export default function ResumeSection({
         const err = await res.json().catch(() => ({}))
         setUploadError((err.detail ?? 'Server could not parse the file.') + ' Try a different file or paste text instead.')
       } else {
-        const { text } = await res.json()
+        const { text, html } = await res.json()
         handleTextChange(text)
+        setResumeHtml(html ?? '')
+        // html is already saved to profile by the backend on upload
+        setDirty(false)
+        onSaved()
       }
     }
     e.target.value = ''
@@ -65,7 +89,7 @@ export default function ResumeSection({
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.patch('/profile', { resume_text: resumeText || null })
+      await api.patch('/profile', { resume_text: resumeText || null, resume_html: resumeHtml || null })
       setDirty(false)
       onSaved()
     } finally {
@@ -115,6 +139,15 @@ export default function ResumeSection({
         : <span className="text-xs text-amber-500 font-normal">Not uploaded</span>}
       actions={
         <div className="flex gap-1.5">
+          {resumeHtml && (
+            <button
+              type="button"
+              onClick={() => setShowRaw(v => !v)}
+              className="text-xs border border-gray-300 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              {showRaw ? 'Preview' : 'Plain text'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -129,14 +162,27 @@ export default function ResumeSection({
 
       {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
 
-      <textarea
-        value={resumeText}
-        onChange={e => handleTextChange(e.target.value)}
-        rows={12}
-        placeholder="Paste your resume text here…"
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
-      />
-      <p className="text-xs text-gray-400">{wordCount} words</p>
+      {/* Resume display — HTML preview or plain text textarea */}
+      {resumeHtml && !showRaw ? (
+        <div className="border border-gray-200 rounded-lg bg-white overflow-auto max-h-[520px] p-6">
+          <style>{RESUME_PREVIEW_CSS}</style>
+          <div
+            className="resume-preview"
+            dangerouslySetInnerHTML={{ __html: resumeHtml }}
+          />
+        </div>
+      ) : (
+        <>
+          <textarea
+            value={resumeText}
+            onChange={e => handleTextChange(e.target.value)}
+            rows={12}
+            placeholder="Paste your resume text here…"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+          />
+          <p className="text-xs text-gray-400">{wordCount} words</p>
+        </>
+      )}
 
       {analyseError && <p className="text-sm text-red-600">{analyseError}</p>}
 
@@ -183,14 +229,16 @@ export default function ResumeSection({
         >
           {analysing ? 'Analysing…' : 'Analyse Skills'}
         </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-        >
-          {saving ? 'Saving…' : 'Save Resume'}
-        </button>
+        {dirty && (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+          >
+            {saving ? 'Saving…' : 'Save Resume'}
+          </button>
+        )}
       </div>
     </Section>
   )

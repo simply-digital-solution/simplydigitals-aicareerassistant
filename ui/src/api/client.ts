@@ -4,6 +4,7 @@ const api = axios.create({ baseURL: '/api/v1' })
 
 export interface ProfileData {
   resume_text: string | null
+  resume_html: string | null
   linkedin_url: string | null
   full_name: string | null
   target_locations: string | null
