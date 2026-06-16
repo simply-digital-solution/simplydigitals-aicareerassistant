@@ -48,13 +48,18 @@ export default function AppliedJobsPanel() {
                       onRescore={() => {}}
                     />
                   </div>
-                  <div className="pt-2 shrink-0">
+                  <div className="pt-2 shrink-0 text-right">
                     <span
                       className="text-xs text-gray-400 border border-gray-200 px-2.5 py-1 rounded-md font-medium"
                       aria-label="Job marked as applied"
                     >
                       ✓ Applied
                     </span>
+                    {job.applied_at && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        {new Date(job.applied_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <TailoredResumePanel jobId={job.id} company={job.company} readOnly />

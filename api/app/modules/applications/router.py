@@ -114,6 +114,9 @@ async def move_pipeline(
         raise HTTPException(400, f"Invalid status. Must be one of: {VALID_STATUSES}")
     app = await _get_or_404(db, body.application_id, current_user.id)
     app.status = body.new_status
+    if body.new_status == 'applied' and not app.applied_at:
+        from datetime import datetime, timezone
+        app.applied_at = datetime.now(timezone.utc).isoformat()
     await db.flush()
     await db.refresh(app)
     return app
