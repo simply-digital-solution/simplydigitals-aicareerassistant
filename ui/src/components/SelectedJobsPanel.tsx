@@ -82,7 +82,7 @@ export default function SelectedJobsPanel() {
     queryFn: () => researchApi.getSelectedJobs().then(r => r.data),
   })
 
-  const [pendingRescore, setPendingRescore] = useState<Set<number>>(new Set())
+  const [rescoringIds, setRescoringIds] = useState<Set<number>>(new Set())
 
   const archiveMutation = useMutation({
     mutationFn: (id: number) => researchApi.archiveJob(id),
@@ -93,10 +93,21 @@ export default function SelectedJobsPanel() {
   })
 
   const rescoreMutation = useMutation({
-    mutationFn: (id: number) => researchApi.rescoreJob(id),
-    onSuccess: (_data, id) => {
-      setPendingRescore(prev => new Set([...prev, id]))
-      queryClient.invalidateQueries({ queryKey: ['selected-jobs'] })
+    mutationFn: (id: number) => researchApi.rescoreJob(id).then(r => ({ id, job: r.data })),
+    onMutate: (id) => {
+      setRescoringIds(prev => new Set([...prev, id]))
+    },
+    onSuccess: ({ id, job }) => {
+      setRescoringIds(prev => { const next = new Set(prev); next.delete(id); return next })
+      queryClient.setQueryData<{ total: number; jobs: StoredJob[] }>(
+        ['selected-jobs'],
+        old => old
+          ? { ...old, jobs: old.jobs.map(j => j.id === id ? { ...j, ...job } : j) }
+          : old
+      )
+    },
+    onError: (_err, id) => {
+      setRescoringIds(prev => { const next = new Set(prev); next.delete(id); return next })
     },
   })
 
@@ -137,6 +148,7 @@ export default function SelectedJobsPanel() {
                       onFeedback={handleFeedback}
                       onArchive={(id) => archiveMutation.mutate(id)}
                       onRescore={(id) => rescoreMutation.mutate(id)}
+                      rescoring={rescoringIds.has(job.id)}
                     />
                   </div>
                   <div className="pt-2 shrink-0">

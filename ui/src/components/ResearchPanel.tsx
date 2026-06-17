@@ -44,7 +44,7 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
-export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore, readOnly = false, selected = false, onToggleSelect }: {
+export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore, readOnly = false, selected = false, onToggleSelect, rescoring = false }: {
   job: StoredJob
   feedback?: FeedbackEntry
   onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant', reason?: string) => void
@@ -54,6 +54,7 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
   readOnly?: boolean
   selected?: boolean
   onToggleSelect?: (id: number) => void
+  rescoring?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -189,20 +190,28 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
               <path fillRule="evenodd" d="M3 7h14v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm5 3a1 1 0 0 0 0 2h4a1 1 0 1 0 0-2H8Z" clipRule="evenodd" />
             </svg>
           </button>}
-          {!readOnly && (!!job.scored || !!job.score_error) && (
+          {!readOnly && (!!job.scored || !!job.score_error || rescoring) && (
             <button
               title="Re-score"
               onClick={() => onRescore(job.id)}
-              className="text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 rounded p-0.5 transition-colors leading-none"
+              disabled={rescoring}
+              className={`rounded p-0.5 transition-colors leading-none ${
+                rescoring
+                  ? 'text-indigo-300 cursor-not-allowed'
+                  : 'text-gray-300 hover:text-indigo-500 hover:bg-indigo-50'
+              }`}
               aria-label="Re-score"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 ${rescoring ? 'animate-spin' : ''}`}>
                 <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.389Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0v2.43l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z" clipRule="evenodd" />
               </svg>
             </button>
           )}
         </div>
       </div>
+      {rescoring && (
+        <p className="text-xs text-indigo-400 italic animate-pulse mt-1">Rescoring…</p>
+      )}
 
       {pickingReason && (
         <div className="pt-1">
@@ -435,7 +444,7 @@ export default function ResearchPanel() {
   const [filterDays, setFilterDays] = useState(0)
   const [filterScore, setFilterScore] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
-  const [pendingRescore, setPendingRescore] = useState<Set<number>>(new Set())
+  const [rescoringIds, setRescoringIds] = useState<Set<number>>(new Set())
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const params = new URLSearchParams({
@@ -449,7 +458,7 @@ export default function ResearchPanel() {
   const { data, isLoading } = useQuery<StoredJobsResponse>({
     queryKey: ['stored-jobs', page, filterRole, filterDays, filterScore],
     queryFn: () => api.get<StoredJobsResponse>(`/research/jobs?${params}`).then(r => r.data),
-    refetchInterval: pendingRescore.size > 0 ? 8000 : false,
+    refetchInterval: false,
   })
 
   // Role options come from the user's target titles in their profile
@@ -484,27 +493,23 @@ export default function ResearchPanel() {
   })
 
   const rescoreMutation = useMutation({
-    mutationFn: (id: number) => researchApi.rescoreJob(id),
-    onSuccess: (_data, id) => {
-      setPendingRescore(prev => new Set([...prev, id]))
-      queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
+    mutationFn: (id: number) => researchApi.rescoreJob(id).then(r => ({ id, job: r.data })),
+    onMutate: (id) => {
+      setRescoringIds(prev => new Set([...prev, id]))
+    },
+    onSuccess: ({ id, job }) => {
+      setRescoringIds(prev => { const next = new Set(prev); next.delete(id); return next })
+      queryClient.setQueryData<StoredJobsResponse>(
+        ['stored-jobs', page, filterRole, filterDays, filterScore],
+        old => old
+          ? { ...old, jobs: old.jobs.map(j => j.id === id ? { ...j, ...job } : j) }
+          : old
+      )
+    },
+    onError: (_err, id) => {
+      setRescoringIds(prev => { const next = new Set(prev); next.delete(id); return next })
     },
   })
-
-  // Remove jobs from pendingRescore once they come back with a score or error
-  useEffect(() => {
-    if (!data || pendingRescore.size === 0) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPendingRescore(prev => {
-      const stillPending = new Set<number>()
-      for (const id of prev) {
-        const job = data.jobs.find(j => j.id === id)
-        if (!job || (job.scored && job.fit_score !== null) || job.score_error) continue
-        stillPending.add(id)
-      }
-      return stillPending.size !== prev.size ? stillPending : prev
-    })
-  }, [data, pendingRescore.size])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -673,6 +678,7 @@ export default function ResearchPanel() {
                 onArchive={(id) => archiveMutation.mutate(id)}
                 onSave={(j) => saveMutation.mutate(j)}
                 onRescore={(id) => rescoreMutation.mutate(id)}
+                rescoring={rescoringIds.has(job.id)}
                 selected={selectedIds.has(job.id)}
                 onToggleSelect={id => setSelectedIds(prev => {
                   const next = new Set(prev)
