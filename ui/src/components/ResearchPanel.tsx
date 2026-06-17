@@ -539,17 +539,16 @@ export default function ResearchPanel() {
     },
   })
 
+  const [confirmRescoreAll, setConfirmRescoreAll] = useState(false)
+
   const rescoreAllMutation = useMutation({
     mutationFn: () => researchApi.rescoreAllJobs(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stored-jobs'] }),
+    onSuccess: () => {
+      setConfirmRescoreAll(false)
+      queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
+    },
+    onError: () => setConfirmRescoreAll(false),
   })
-
-  const handleRescoreAll = () => {
-    const total = data?.total ?? 0
-    const msg = `Are you sure you want to rescore all ${total} job${total !== 1 ? 's' : ''}? This may take a few minutes.`
-    if (!window.confirm(msg)) return
-    rescoreAllMutation.mutate()
-  }
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -645,8 +644,8 @@ export default function ResearchPanel() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleRescoreAll}
-              disabled={rescoreAllMutation.isPending || rescoringIds.size > 0 || bulkRescoreMutation.isPending}
+              onClick={() => setConfirmRescoreAll(true)}
+              disabled={confirmRescoreAll || rescoreAllMutation.isPending || rescoringIds.size > 0 || bulkRescoreMutation.isPending}
               className="text-xs bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
               title="Rescore all jobs for your profile"
             >
@@ -698,6 +697,31 @@ export default function ResearchPanel() {
             ))}
           </div>
         </div>
+
+        {/* Rescore All confirmation */}
+        {confirmRescoreAll && (
+          <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <p className="text-sm text-amber-800">
+              Rescore all <strong>{data?.total ?? 0}</strong> job{(data?.total ?? 0) !== 1 ? 's' : ''}? This may take a few minutes.
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => rescoreAllMutation.mutate()}
+                disabled={rescoreAllMutation.isPending}
+                className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors font-medium"
+              >
+                {rescoreAllMutation.isPending ? 'Rescoring…' : 'Yes, rescore all'}
+              </button>
+              <button
+                onClick={() => setConfirmRescoreAll(false)}
+                disabled={rescoreAllMutation.isPending}
+                className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1.5 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Job list */}
         {isLoading ? (
