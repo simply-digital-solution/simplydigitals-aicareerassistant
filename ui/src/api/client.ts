@@ -104,6 +104,7 @@ export interface StoredJob {
   risks: string | null                 // JSON string from DB
   key_keywords: string | null          // JSON string from DB
   scoring_breakdown: string | null     // JSON string from DB
+  recommendation: string | null
   score_error: string | null
   scored_at: string | null
   archived: boolean

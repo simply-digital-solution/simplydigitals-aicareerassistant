@@ -295,6 +295,13 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
                   </table>
                 </div>
               )}
+
+              {job.recommendation && (
+                <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+                  <p className="text-xs font-semibold text-indigo-500 uppercase tracking-wide mb-1">Recommendation</p>
+                  {job.recommendation}
+                </div>
+              )}
             </div>
           )}
         </>
