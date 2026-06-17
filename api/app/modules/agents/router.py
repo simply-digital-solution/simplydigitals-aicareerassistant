@@ -1015,6 +1015,30 @@ async def get_applied_jobs(
     return {"total": len(jobs), "jobs": jobs}
 
 
+class BulkArchiveRequest(BaseModel):
+    job_ids: list[int] = Field(min_length=1, max_length=500)
+
+
+@router.post("/research/jobs/bulk-archive", status_code=204)
+async def bulk_archive_jobs(
+    body: BulkArchiveRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Archive multiple job postings in one call. Silently ignores IDs not owned by the user."""
+    if not body.job_ids:
+        return
+    placeholders = ",".join(f":id{i}" for i in range(len(body.job_ids)))
+    params = {"uid": current_user.id}
+    for i, jid in enumerate(body.job_ids):
+        params[f"id{i}"] = jid
+    await db.execute(
+        text(f"UPDATE job_postings SET archived = 1 WHERE user_id = :uid AND id IN ({placeholders})"),
+        params,
+    )
+    await db.commit()
+
+
 @router.post("/research/jobs/{job_id}/archive", status_code=204)
 async def archive_job(
     job_id: int,
