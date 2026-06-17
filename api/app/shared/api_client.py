@@ -371,6 +371,92 @@ class OllamaClient(BaseLLMClient):
 
 
 # ------------------------------------------------------------------
+# Gemini provider
+# ------------------------------------------------------------------
+
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+
+class GeminiClient(BaseLLMClient):
+    def __init__(self):
+        settings = get_settings()
+        self._model = settings.gemini_model
+        self._api_key = settings.gemini_api_key
+        self._max_corrections = settings.max_self_corrections
+
+    async def _call(
+        self,
+        messages: list[dict],
+        stream_callback: Optional[callable] = None,
+        *,
+        user_id: Optional[int] = None,
+        job_posting_id: Optional[int] = None,
+        request_type: str = "unknown",
+        db: Optional[AsyncSession] = None,
+    ) -> tuple[str, dict]:
+        # Convert OpenAI-style messages to Gemini contents format.
+        # System message becomes the first user turn with a "SYSTEM:" prefix
+        # so the conversation alternates user/model as Gemini requires.
+        contents = []
+        for m in messages:
+            role = "user" if m["role"] in ("system", "user") else "model"
+            contents.append({"role": role, "parts": [{"text": m["content"]}]})
+
+        payload = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": 0.1,
+                "maxOutputTokens": 8192,
+            },
+        }
+
+        input_tokens = sum(len(m["content"].split()) for m in messages)
+        requested_at = datetime.now(timezone.utc)
+        full_text = ""
+
+        url = f"{GEMINI_BASE_URL}/{self._model}:generateContent"
+        params = {"key": self._api_key}
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(url, json=payload, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+        candidates = data.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            full_text = "".join(p.get("text", "") for p in parts)
+
+        # Gemini returns real token counts in usageMetadata
+        usage_meta = data.get("usageMetadata", {})
+        input_tokens = usage_meta.get("promptTokenCount", input_tokens)
+        output_tokens = usage_meta.get("candidatesTokenCount", len(full_text.split()))
+
+        responded_at = datetime.now(timezone.utc)
+
+        if stream_callback is not None:
+            await stream_callback(full_text)
+
+        await self._persist_usage(
+            user_id=user_id,
+            job_posting_id=job_posting_id,
+            request_type=request_type,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            requested_at=requested_at,
+            responded_at=responded_at,
+            db=db,
+        )
+
+        return full_text, {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+        }
+
+
+# ------------------------------------------------------------------
 # Module-level helpers
 # ------------------------------------------------------------------
 
@@ -406,8 +492,9 @@ _client: Optional[BaseLLMClient] = None
 
 
 def get_claude_client() -> BaseLLMClient:
-    """Returns the configured LLM client. Name kept for compatibility."""
+    """Returns GeminiClient if GEMINI_API_KEY is set, otherwise OllamaClient."""
     global _client
     if _client is None:
-        _client = OllamaClient()
+        settings = get_settings()
+        _client = GeminiClient() if settings.gemini_api_key else OllamaClient()
     return _client
