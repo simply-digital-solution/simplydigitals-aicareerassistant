@@ -107,6 +107,7 @@ export interface StoredJob {
   recommendation: string | null
   score_error: string | null
   scored_at: string | null
+  scored_by_model: string | null
   archived: boolean
 }
 

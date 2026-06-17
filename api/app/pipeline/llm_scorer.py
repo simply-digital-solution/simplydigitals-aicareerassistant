@@ -108,7 +108,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
 
     t_start = time.monotonic()
     try:
-        result, _ = await run_research_agent(
+        result, meta = await run_research_agent(
             profile=profile,
             job_postings=job_dicts,
             search_filters={},
@@ -142,6 +142,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         return True
 
     # Match results by job_id
+    batch_model = meta.get("model")
     returned = {opp.job_id: opp for opp in result.opportunities}
     for jid in job_ids:
         opp = returned.get(jid)
@@ -152,13 +153,13 @@ async def score_next_batch(db: AsyncSession) -> bool:
                 {"err": "Missing from LLM batch response", "id": jid},
             )
             continue
-        await _write_score(db, jid, opp)
+        await _write_score(db, jid, opp, model=batch_model)
 
     await db.commit()
     return True
 
 
-async def _write_score(db: AsyncSession, job_id: int, opp) -> None:
+async def _write_score(db: AsyncSession, job_id: int, opp, model: str | None = None) -> None:
     """Write a scored opportunity back to the DB (shared by batch and single scorer)."""
     breakdown = [b.model_dump() for b in opp.scoring_breakdown] if opp.scoring_breakdown else []
     await db.execute(
@@ -172,6 +173,7 @@ async def _write_score(db: AsyncSession, job_id: int, opp) -> None:
                 scoring_breakdown    = :breakdown,
                 recommendation       = :recommendation,
                 inferred_industries  = :industries,
+                scored_by_model      = :model,
                 score_error          = NULL,
                 scored_at            = :now
             WHERE id = :id
@@ -184,11 +186,12 @@ async def _write_score(db: AsyncSession, job_id: int, opp) -> None:
             "breakdown":      json.dumps(breakdown),
             "recommendation": opp.recommendation or None,
             "industries":     json.dumps(opp.inferred_industries),
+            "model":          model,
             "now":            datetime.now(timezone.utc).isoformat(),
             "id":             job_id,
         },
     )
-    logger.info("llm_scorer: job_id=%d scored fit=%.2f", job_id, opp.fit_score)
+    logger.info("llm_scorer: job_id=%d scored fit=%.2f model=%s", job_id, opp.fit_score, model)
 
 
 async def score_single_job(db: AsyncSession, job_id: int) -> bool:
@@ -225,7 +228,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
 
     t_start = time.monotonic()
     try:
-        result, _ = await run_research_agent(
+        result, meta = await run_research_agent(
             profile=profile,
             job_postings=[job_dict],
             search_filters={},
@@ -256,6 +259,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
         await db.commit()
         return False
 
+    single_model = meta.get("model")
     returned = {opp.job_id: opp for opp in result.opportunities}
     opp = returned.get(job_id)
     if opp is None:
@@ -267,7 +271,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
         await db.commit()
         return False
 
-    await _write_score(db, job_id, opp)
+    await _write_score(db, job_id, opp, model=single_model)
     await db.commit()
     return True
 

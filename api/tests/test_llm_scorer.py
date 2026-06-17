@@ -482,6 +482,48 @@ async def test_empty_inferred_industries_stored_as_empty_list():
 
 
 # ---------------------------------------------------------------------------
+# scored_by_model written to DB
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_scored_by_model_written_from_meta():
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
+
+    opp    = _make_opportunity(job_id=1)
+    result = _make_research_result([opp])
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent",
+              AsyncMock(return_value=(result, {"model": "gemini-flash-latest"}))),
+    ):
+        await score_next_batch(db)
+
+    params = db.execute.call_args_list[2].args[1]
+    assert params["model"] == "gemini-flash-latest"
+
+
+@pytest.mark.asyncio
+async def test_scored_by_model_none_when_meta_missing():
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
+
+    opp    = _make_opportunity(job_id=1)
+    result = _make_research_result([opp])
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent",
+              AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_batch(db)
+
+    params = db.execute.call_args_list[2].args[1]
+    assert params["model"] is None
+
+
+# ---------------------------------------------------------------------------
 # Feedback examples — _build_feedback_examples helper
 # ---------------------------------------------------------------------------
 

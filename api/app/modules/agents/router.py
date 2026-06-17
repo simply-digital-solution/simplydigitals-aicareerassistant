@@ -963,7 +963,7 @@ async def get_stored_jobs(
         text(f"""
             SELECT id, mcf_uuid, title, company, url, location,
                    inferred_industries, posted_at, scraped_at,
-                   scored, fit_score, reasons, risks, key_keywords, scoring_breakdown, recommendation, score_error, scored_at
+                   scored, fit_score, reasons, risks, key_keywords, scoring_breakdown, recommendation, score_error, scored_at, scored_by_model
             FROM job_postings
             WHERE {where_sql}
             ORDER BY posted_at DESC, scraped_at DESC
@@ -989,7 +989,7 @@ async def get_selected_jobs(
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
                    jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
-                   jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.archived,
+                   jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.scored_by_model, jp.archived,
                    a.id AS application_id
             FROM job_postings jp
             JOIN applications a
@@ -1016,7 +1016,7 @@ async def get_applied_jobs(
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
                    jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
-                   jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.archived,
+                   jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.scored_by_model, jp.archived,
                    a.id AS application_id, a.applied_at
             FROM job_postings jp
             JOIN applications a
@@ -1119,7 +1119,7 @@ async def rescore_job(
             SELECT id, mcf_uuid, title, company, url, location,
                    inferred_industries, posted_at, scraped_at,
                    scored, fit_score, reasons, risks, key_keywords,
-                   scoring_breakdown, recommendation, score_error, scored_at
+                   scoring_breakdown, recommendation, score_error, scored_at, scored_by_model
             FROM job_postings WHERE id = :id
         """),
         {"id": job_id},

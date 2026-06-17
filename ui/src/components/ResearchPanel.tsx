@@ -138,6 +138,9 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           {feedback?.relevance === 'not_relevant' && feedback.reason && (
             <p className="text-xs text-red-500 mt-0.5">👎 {feedback.reason}</p>
           )}
+          {job.scored_by_model && (
+            <p className="text-xs text-gray-400 mt-0.5">scored by {job.scored_by_model}</p>
+          )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
