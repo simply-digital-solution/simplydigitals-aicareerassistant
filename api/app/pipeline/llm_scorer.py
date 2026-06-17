@@ -8,6 +8,7 @@ the result back. Sleeps 30s between jobs, 5 min when the queue is empty.
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,6 +98,7 @@ async def score_next_job(db: AsyncSession) -> bool:
         "inferred_industries": json.loads(job_row["inferred_industries"] or "[]"),
     }
 
+    t_start = time.monotonic()
     try:
         result, _ = await run_research_agent(
             profile=profile,
@@ -107,9 +109,10 @@ async def score_next_job(db: AsyncSession) -> bool:
             feedback_examples=feedback_examples,
             full_description=True,
         )
+        logger.info("llm_scorer: job_id=%d LLM call completed in %.1fs", job_id, time.monotonic() - t_start)
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
-        logger.error("llm_scorer: agent failed for job_id=%d: %s", job_id, error_msg)
+        logger.error("llm_scorer: agent failed for job_id=%d after %.1fs: %s", job_id, time.monotonic() - t_start, error_msg)
         await db.execute(
             text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
             {"err": error_msg, "id": job_id},

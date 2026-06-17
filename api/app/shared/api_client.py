@@ -160,7 +160,7 @@ class OllamaClient:
         full_text = ""
         input_tokens = sum(len(m["content"].split()) for m in messages)
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             if stream_callback is not None:
                 async with client.stream(
                     "POST", f"{OLLAMA_BASE_URL}/api/chat", json=payload
