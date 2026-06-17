@@ -266,6 +266,7 @@ export const researchApi = {
   getSelectedJobs: () => api.get<SelectedJobsResponse>('/research/jobs/selected'),
   getAppliedJobs: () => api.get<AppliedJobsResponse>('/research/jobs/applied'),
   archiveJob: (id: number) => api.post(`/research/jobs/${id}/archive`),
+  bulkArchiveJobs: (jobIds: number[]) => api.post('/research/jobs/bulk-archive', { job_ids: jobIds }),
   rescoreJob: (id: number) => api.post(`/research/jobs/${id}/rescore`),
   generateResume: (jobId: number) =>
     api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/generate-resume`),

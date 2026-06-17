@@ -44,7 +44,7 @@ function parseJsonArray(val: string | null | undefined): string[] {
   try { return JSON.parse(val) } catch { return [] }
 }
 
-export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore, readOnly = false }: {
+export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, onRescore, readOnly = false, selected = false, onToggleSelect }: {
   job: StoredJob
   feedback?: FeedbackEntry
   onFeedback: (url: string, title: string, company: string, rel: 'relevant' | 'not_relevant', reason?: string) => void
@@ -52,6 +52,8 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
   onSave?: (job: StoredJob) => void
   onRescore: (id: number) => void
   readOnly?: boolean
+  selected?: boolean
+  onToggleSelect?: (id: number) => void
 }) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -113,9 +115,20 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
     : null
 
   return (
-    <div className={`border rounded-lg p-4 space-y-2 transition-colors ${borderCls}`}>
+    <div className={`border rounded-lg p-4 space-y-2 transition-colors ${selected ? 'border-indigo-400 bg-indigo-50' : borderCls}`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="flex items-start gap-2 min-w-0">
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(job.id)}
+              onClick={e => e.stopPropagation()}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0 cursor-pointer"
+              aria-label={`Select ${job.title}`}
+            />
+          )}
+          <div className="min-w-0">
           <p className="font-medium text-gray-900 truncate">{job.title}</p>
           <p className="text-sm text-gray-500">
             {job.company}
@@ -124,6 +137,7 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           {feedback?.relevance === 'not_relevant' && feedback.reason && (
             <p className="text-xs text-red-500 mt-0.5">👎 {feedback.reason}</p>
           )}
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {!!job.scored && job.fit_score !== null
@@ -422,6 +436,7 @@ export default function ResearchPanel() {
   const [filterScore, setFilterScore] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [pendingRescore, setPendingRescore] = useState<Set<number>>(new Set())
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const params = new URLSearchParams({
     page: String(page),
@@ -443,6 +458,14 @@ export default function ResearchPanel() {
   const archiveMutation = useMutation({
     mutationFn: (id: number) => researchApi.archiveJob(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stored-jobs'] }),
+  })
+
+  const bulkArchiveMutation = useMutation({
+    mutationFn: (ids: number[]) => researchApi.bulkArchiveJobs(ids),
+    onSuccess: () => {
+      setSelectedIds(new Set())
+      queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
+    },
   })
 
   const saveMutation = useMutation({
@@ -497,6 +520,9 @@ export default function ResearchPanel() {
 
   const visibleJobs = data?.jobs ?? []
 
+  // Clear selection when page or filters change
+  useEffect(() => { setSelectedIds(new Set()) }, [page, filterRole, filterDays, filterScore])
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {/* ── Targeting (collapsible, read-only) ── */}
@@ -546,14 +572,32 @@ export default function ResearchPanel() {
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-800">
-            Latest Jobs
-            {data && (
-              <span className="ml-2 text-xs font-normal text-gray-400">
-                {`${data.total} total`}
-              </span>
+          <div className="flex items-center gap-3">
+            {visibleJobs.length > 0 && (
+              <input
+                type="checkbox"
+                checked={selectedIds.size === visibleJobs.length}
+                ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < visibleJobs.length }}
+                onChange={() => {
+                  if (selectedIds.size === visibleJobs.length) {
+                    setSelectedIds(new Set())
+                  } else {
+                    setSelectedIds(new Set(visibleJobs.map(j => j.id)))
+                  }
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                aria-label="Select all jobs"
+              />
             )}
-          </h3>
+            <h3 className="text-sm font-semibold text-gray-800">
+              Latest Jobs
+              {data && (
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  {`${data.total} total`}
+                </span>
+              )}
+            </h3>
+          </div>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -629,8 +673,38 @@ export default function ResearchPanel() {
                 onArchive={(id) => archiveMutation.mutate(id)}
                 onSave={(j) => saveMutation.mutate(j)}
                 onRescore={(id) => rescoreMutation.mutate(id)}
+                selected={selectedIds.has(job.id)}
+                onToggleSelect={id => setSelectedIds(prev => {
+                  const next = new Set(prev)
+                  if (next.has(id)) { next.delete(id) } else { next.add(id) }
+                  return next
+                })}
               />
             ))}
+          </div>
+        )}
+
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
+            <span className="text-sm text-indigo-700 font-medium">
+              {selectedIds.size} job{selectedIds.size > 1 ? 's' : ''} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-indigo-500 hover:text-indigo-700 px-2 py-1 rounded"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => bulkArchiveMutation.mutate(Array.from(selectedIds))}
+                disabled={bulkArchiveMutation.isPending}
+                className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
+              >
+                {bulkArchiveMutation.isPending ? 'Archiving…' : `Archive ${selectedIds.size} job${selectedIds.size > 1 ? 's' : ''}`}
+              </button>
+            </div>
           </div>
         )}
 
