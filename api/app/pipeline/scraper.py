@@ -178,7 +178,7 @@ def scrape_rss(feed_name: str, keyword: str = "") -> list[dict]:
             "url": entry.get("link", ""),
             "location": entry.get("location", "Remote"),
             "description": clean_desc,
-            "inferred_industries": extract_industry_names(clean_desc),
+            "inferred_industries": [],
             "source": f"rss_{feed_name}",
             "scraped_at": _now_iso(),
         })
@@ -251,7 +251,7 @@ async def scrape_indeed(query: str, location: str = "Remote", max_results: int =
                     "url": job_url,
                     "location": location_el.get_text(strip=True) if location_el else location,
                     "description": snippet,
-                    "inferred_industries": extract_industry_names(snippet),
+                    "inferred_industries": [],
                     "source": "indeed",
                     "scraped_at": _now_iso(),
                 })
@@ -341,7 +341,7 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
             "url": job_url,
             "location": "Singapore",
             "description": description,
-            "inferred_industries": _mcf_categories_to_industries(item),
+            "inferred_industries": [],
             "source": "mycareersfuture",
             "scraped_at": _now_iso(),
             "posted_at": original_posting_date,
@@ -420,7 +420,7 @@ async def scrape_adzuna(
             "url": item.get("redirect_url", ""),
             "location": item.get("location", {}).get("display_name", location),
             "description": desc,
-            "inferred_industries": extract_industry_names(desc),
+            "inferred_industries": [],
             "source": "adzuna",
             "scraped_at": _now_iso(),
         })
@@ -454,7 +454,7 @@ async def scrape_remotive(query: str, max_results: int = 15) -> list[dict]:
             "url": item.get("url", ""),
             "location": item.get("candidate_required_location", "Remote"),
             "description": description,
-            "inferred_industries": extract_industry_names(description),
+            "inferred_industries": [],
             "source": "remotive",
             "scraped_at": _now_iso(),
         })

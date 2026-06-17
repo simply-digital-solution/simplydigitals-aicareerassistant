@@ -609,12 +609,14 @@ export default function ResearchPanel() {
           </div>
         ) : !data || data.jobs.length === 0 ? (
           <div className="text-center py-10 text-sm text-gray-400">
-            <p>No jobs yet.</p>
-            <p className="mt-1">Click <strong>↻ Refresh</strong> to scrape now, or wait for the 07:00 daily run.</p>
-          </div>
-        ) : visibleJobs.length === 0 ? (
-          <div className="text-center py-10 text-sm text-gray-400">
-            <p>No jobs match the selected score filter.</p>
+            {filterRole || filterDays > 0 || filterScore > 0 ? (
+              <p>No jobs match the selected filters.</p>
+            ) : (
+              <>
+                <p>No jobs matching your industry.</p>
+                <p className="mt-1">New jobs are scored and classified automatically — check back shortly, or click <strong>↻ Refresh</strong> to scrape now.</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
