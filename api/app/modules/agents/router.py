@@ -1076,19 +1076,23 @@ async def archive_job(
     await db.commit()
 
 
-@router.post("/research/jobs/{job_id}/rescore", status_code=204)
+@router.post("/research/jobs/{job_id}/rescore")
 async def rescore_job(
     job_id: int,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Reset a job's score fields so the background scorer loop re-scores it."""
+    """Score a single job immediately and return the updated job row."""
+    from app.pipeline.llm_scorer import score_single_job  # local import avoids circular dep
+
     result = await db.execute(
         text("SELECT id FROM job_postings WHERE id = :id AND user_id = :uid"),
         {"id": job_id, "uid": current_user.id},
     )
     if not result.fetchone():
         raise HTTPException(404, "Job not found")
+
+    # Reset fields then score immediately
     await db.execute(
         text("""
             UPDATE job_postings SET
@@ -1107,6 +1111,21 @@ async def rescore_job(
         {"id": job_id, "uid": current_user.id},
     )
     await db.commit()
+
+    await score_single_job(db, job_id)
+
+    row = await db.execute(
+        text("""
+            SELECT id, mcf_uuid, title, company, url, location,
+                   inferred_industries, posted_at, scraped_at,
+                   scored, fit_score, reasons, risks, key_keywords,
+                   scoring_breakdown, recommendation, score_error, scored_at
+            FROM job_postings WHERE id = :id
+        """),
+        {"id": job_id},
+    )
+    job = row.mappings().first()
+    return dict(job) if job else {}
 
 
 @router.post("/research/jobs/{job_id}/generate-resume", status_code=201)

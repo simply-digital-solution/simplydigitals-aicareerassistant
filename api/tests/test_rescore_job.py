@@ -13,12 +13,43 @@ async def _call_rescore(job_id: int, db, user_id: int = 1):
     return await rescore_job(job_id=job_id, current_user=user, db=db)
 
 
+def _make_opp(job_id=1):
+    from app.shared.schemas import JobOpportunity, ScoreRow
+    return JobOpportunity(
+        job_id=job_id, role="Engineer", company="Co", link="",
+        fit_score=0.8, reasons=["r1", "r2", "r3"], risks=["k1", "k2", "k3"],
+        key_keywords=["kw"], inferred_industries=["Technology & Software"],
+        scoring_breakdown=[], recommendation="Apply.",
+    )
+
+
 def _db_with_job(found: bool = True):
     db = AsyncMock()
+    # [0] ownership SELECT
     select_result = MagicMock()
     select_result.fetchone.return_value = (1,) if found else None
+    # [1] reset UPDATE
     update_result = MagicMock()
-    db.execute.side_effect = [select_result, update_result]
+    # [2] score_single_job: job SELECT
+    job_select = MagicMock()
+    job_select.mappings.return_value.first.return_value = {
+        "id": 1, "user_id": 1, "title": "Eng", "company": "Co",
+        "url": "", "description": "", "inferred_industries": "[]",
+    } if found else None
+    # [3] score_single_job: feedback SELECT
+    feedback_select = MagicMock()
+    feedback_select.mappings.return_value.all.return_value = []
+    # [4] score UPDATE
+    score_update = MagicMock()
+    # [5] final SELECT for response
+    final_select = MagicMock()
+    final_select.mappings.return_value.first.return_value = {"id": 1} if found else None
+
+    db.execute.side_effect = [
+        select_result, update_result,
+        job_select, feedback_select, score_update,
+        final_select,
+    ]
     return db
 
 
@@ -26,11 +57,18 @@ def _db_with_job(found: bool = True):
 
 @pytest.mark.asyncio
 async def test_rescore_resets_score_fields():
+    from app.shared.schemas import ResearchOutput
     db = _db_with_job(found=True)
 
-    await _call_rescore(job_id=1, db=db)
+    result = ResearchOutput(opportunities=[_make_opp(job_id=1)])
 
-    db.commit.assert_called_once()
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await _call_rescore(job_id=1, db=db)
+
+    db.commit.assert_called()
     update_sql = db.execute.call_args_list[1].args[0].text
     assert "scored" in update_sql
     assert "fit_score" in update_sql

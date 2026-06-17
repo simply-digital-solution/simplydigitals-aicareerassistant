@@ -152,37 +152,121 @@ async def score_next_batch(db: AsyncSession) -> bool:
                 {"err": "Missing from LLM batch response", "id": jid},
             )
             continue
+        await _write_score(db, jid, opp)
 
-        breakdown = [b.model_dump() for b in opp.scoring_breakdown] if opp.scoring_breakdown else []
-        await db.execute(
-            text("""
-                UPDATE job_postings SET
-                    scored               = 1,
-                    fit_score            = :fit_score,
-                    reasons              = :reasons,
-                    risks                = :risks,
-                    key_keywords         = :keywords,
-                    scoring_breakdown    = :breakdown,
-                    recommendation       = :recommendation,
-                    inferred_industries  = :industries,
-                    score_error          = NULL,
-                    scored_at            = :now
-                WHERE id = :id
-            """),
-            {
-                "fit_score":      opp.fit_score,
-                "reasons":        json.dumps(opp.reasons),
-                "risks":          json.dumps(opp.risks),
-                "keywords":       json.dumps(opp.key_keywords),
-                "breakdown":      json.dumps(breakdown),
-                "recommendation": opp.recommendation or None,
-                "industries":     json.dumps(opp.inferred_industries),
-                "now":            datetime.now(timezone.utc).isoformat(),
-                "id":             jid,
-            },
+    await db.commit()
+    return True
+
+
+async def _write_score(db: AsyncSession, job_id: int, opp) -> None:
+    """Write a scored opportunity back to the DB (shared by batch and single scorer)."""
+    breakdown = [b.model_dump() for b in opp.scoring_breakdown] if opp.scoring_breakdown else []
+    await db.execute(
+        text("""
+            UPDATE job_postings SET
+                scored               = 1,
+                fit_score            = :fit_score,
+                reasons              = :reasons,
+                risks                = :risks,
+                key_keywords         = :keywords,
+                scoring_breakdown    = :breakdown,
+                recommendation       = :recommendation,
+                inferred_industries  = :industries,
+                score_error          = NULL,
+                scored_at            = :now
+            WHERE id = :id
+        """),
+        {
+            "fit_score":      opp.fit_score,
+            "reasons":        json.dumps(opp.reasons),
+            "risks":          json.dumps(opp.risks),
+            "keywords":       json.dumps(opp.key_keywords),
+            "breakdown":      json.dumps(breakdown),
+            "recommendation": opp.recommendation or None,
+            "industries":     json.dumps(opp.inferred_industries),
+            "now":            datetime.now(timezone.utc).isoformat(),
+            "id":             job_id,
+        },
+    )
+    logger.info("llm_scorer: job_id=%d scored fit=%.2f", job_id, opp.fit_score)
+
+
+async def score_single_job(db: AsyncSession, job_id: int) -> bool:
+    """
+    Score a single job immediately — used by the rescore endpoint.
+    Returns True if scoring succeeded, False if the job was not found.
+    """
+    row = await db.execute(
+        text("""
+            SELECT id, user_id, title, company, url, description, inferred_industries
+            FROM job_postings
+            WHERE id = :id
+        """),
+        {"id": job_id},
+    )
+    job = row.mappings().first()
+    if not job:
+        return False
+
+    user_id = job["user_id"]
+    logger.info("llm_scorer: scoring single job_id=%d for user_id=%d", job_id, user_id)
+
+    profile = await _load_profile(db, user_id)
+    feedback_examples = await _build_feedback_examples(db, user_id)
+
+    job_dict = {
+        "job_id":              job["id"],
+        "title":               job["title"],
+        "company":             job["company"],
+        "url":                 job["url"],
+        "description":         job["description"] or "",
+        "inferred_industries": json.loads(job["inferred_industries"] or "[]"),
+    }
+
+    t_start = time.monotonic()
+    try:
+        result, _ = await run_research_agent(
+            profile=profile,
+            job_postings=[job_dict],
+            search_filters={},
+            db=db,
+            user_id=user_id,
+            request_type="scoring",
+            feedback_examples=feedback_examples,
+            full_description=True,
         )
-        logger.info("llm_scorer: job_id=%d scored fit=%.2f", jid, opp.fit_score)
+        logger.info("llm_scorer: single job LLM call completed in %.1fs", time.monotonic() - t_start)
+    except Exception as exc:
+        error_msg = f"{type(exc).__name__}: {exc}"
+        logger.error("llm_scorer: single job_id=%d failed: %s", job_id, error_msg)
+        await db.execute(
+            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+            {"err": error_msg, "id": job_id},
+        )
+        await db.commit()
+        return False
 
+    if isinstance(result, AgentError):
+        logger.warning("llm_scorer: single job_id=%d agent error: %s", job_id, result.error)
+        await db.execute(
+            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+            {"err": result.error, "id": job_id},
+        )
+        await db.commit()
+        return False
+
+    returned = {opp.job_id: opp for opp in result.opportunities}
+    opp = returned.get(job_id)
+    if opp is None:
+        logger.warning("llm_scorer: job_id=%d missing from single response", job_id)
+        await db.execute(
+            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+            {"err": "Missing from LLM response", "id": job_id},
+        )
+        await db.commit()
+        return False
+
+    await _write_score(db, job_id, opp)
     await db.commit()
     return True
 
