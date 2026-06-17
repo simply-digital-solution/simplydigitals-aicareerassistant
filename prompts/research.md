@@ -32,6 +32,7 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
         { "category": "Technical",   "requirement": "Java",                                        "your_profile": "No evidence",                                                      "match": "❌ Gap" },
         { "category": "Soft Skills", "requirement": "Stakeholder communication, business translation", "your_profile": "Strong — core strength across all roles",                   "match": "✅ Strong" }
       ],
+      "inferred_industries": ["Banking & Financial Services", "Technology & Software"],
       "recommendation": "Apply — strong experience and domain match, but prepare to address the KYC/AML gap directly in the cover letter. The hard gate on KYC/AML makes this a stretch; if the JD says 'mandatory', deprioritise."
     }
   ]
@@ -74,6 +75,15 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 - Do not soften gaps with vague phrases like "could develop" or "transferable".
 - Do not invent experience the candidate did not mention.
 - A candidate who matches on experience and education but fails on 5 technical requirements should have a low fit_score.
+
+### inferred_industries — REQUIRED
+- Pick 1–3 industries from this fixed list that best describe the hiring company and role:
+  `Technology & Software`, `Banking & Financial Services`, `Capital Markets & Investment Management`,
+  `Consulting & Professional Services`, `Government & Public Sector`, `Healthcare & Life Sciences`,
+  `Real Estate & Infrastructure`, `Supply Chain & Logistics`, `Media, Marketing & Communications`,
+  `Insurance`, `Energy & Resources`, `Education`, `Manufacturing & Engineering`, `Telecommunications`
+- Base the classification on the job description and company — not the candidate's profile.
+- If no industry fits, return `[]`.
 
 ### General
 - Each job posting is given with a `job_id`. You MUST echo that exact `job_id` back in the corresponding opportunity.
