@@ -1,13 +1,17 @@
 """
-Ollama API wrapper.
+LLM client abstraction.
 
-Replaces the Anthropic Claude client with a local Ollama call.
-Same public interface — all agents, router, and pipeline code unchanged.
+BaseLLMClient owns the full run_agent() lifecycle: secret scrubbing,
+reflexion loop, DB recording, usage logging, budget update.
+
+Concrete subclasses only implement _call() — the raw HTTP exchange.
+Provider is selected at startup via the llm_provider config setting.
 """
 import re
 import json
 import time
 import hashlib
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone, date
 from typing import TypeVar, Type, Optional
 
@@ -37,14 +41,21 @@ class SecurityError(Exception):
     pass
 
 
-class OllamaClient:
-    def __init__(self):
-        settings = get_settings()
-        self._model = settings.specialist_model
-        self._max_corrections = settings.max_self_corrections
+# ------------------------------------------------------------------
+# Base class — shared lifecycle, subclasses implement _call()
+# ------------------------------------------------------------------
+
+class BaseLLMClient(ABC):
+    """
+    Owns run_agent(): scrubbing → _call() → reflexion → DB record → budget.
+    Subclasses must set self._model and implement _call().
+    """
+
+    _model: str
+    _max_corrections: int
 
     # ------------------------------------------------------------------
-    # Public interface — same signature as ClaudeClient.run_agent
+    # Public interface
     # ------------------------------------------------------------------
 
     async def run_agent(
@@ -62,7 +73,7 @@ class OllamaClient:
         stream_callback: Optional[callable] = None,
     ) -> tuple[T | AgentError, dict]:
         import logging
-        _log = logging.getLogger("ollama_timing")
+        _log = logging.getLogger("llm_timing")
 
         self._scrub_secrets(system_prompt + user_message)
 
@@ -136,7 +147,7 @@ class OllamaClient:
             "model": self._model,
             "attempts": attempt,
             "duration_ms": duration_ms,
-            "cost_usd": 0.0,   # local model — no cost
+            "cost_usd": 0.0,
             **usage,
         }
 
@@ -150,9 +161,10 @@ class OllamaClient:
         ), meta
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Abstract — each provider implements this
     # ------------------------------------------------------------------
 
+    @abstractmethod
     async def _call(
         self,
         messages: list[dict],
@@ -163,49 +175,33 @@ class OllamaClient:
         request_type: str = "unknown",
         db: Optional[AsyncSession] = None,
     ) -> tuple[str, dict]:
-        """POST to Ollama /api/chat. Streams if callback provided."""
+        """Make the HTTP call and return (full_text, usage_dict)."""
+
+    # ------------------------------------------------------------------
+    # Shared helpers
+    # ------------------------------------------------------------------
+
+    def _scrub_secrets(self, text: str) -> None:
+        for pattern in _SECRET_PATTERNS:
+            if pattern.search(text):
+                raise SecurityError("Secret pattern detected in prompt. Call aborted.")
+
+    async def _persist_usage(
+        self,
+        *,
+        user_id: Optional[int],
+        job_posting_id: Optional[int],
+        request_type: str,
+        input_tokens: int,
+        output_tokens: int,
+        requested_at: datetime,
+        responded_at: datetime,
+        db: Optional[AsyncSession],
+    ) -> None:
         from app.shared.llm_logger import log_llm_call
 
-        payload = {
-            "model": self._model,
-            "messages": messages,
-            "stream": stream_callback is not None,
-            "options": {"temperature": 0.1, "num_predict": 6144, "num_ctx": 16384},
-        }
-
-        full_text = ""
-        input_tokens = sum(len(m["content"].split()) for m in messages)
-        requested_at = datetime.now(timezone.utc)
-
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            if stream_callback is not None:
-                async with client.stream(
-                    "POST", f"{OLLAMA_BASE_URL}/api/chat", json=payload
-                ) as resp:
-                    resp.raise_for_status()
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            chunk = json.loads(line)
-                            token = chunk.get("message", {}).get("content", "")
-                            full_text += token
-                            if token:
-                                await stream_callback(token)
-                        except json.JSONDecodeError:
-                            continue
-            else:
-                payload["stream"] = False
-                resp = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                full_text = data.get("message", {}).get("content", "")
-
-        responded_at = datetime.now(timezone.utc)
         duration_s = (responded_at - requested_at).total_seconds()
-        output_tokens = len(full_text.split())
 
-        # Persist to file log
         log_llm_call(
             user_id=user_id,
             job_posting_id=job_posting_id,
@@ -218,7 +214,6 @@ class OllamaClient:
             duration_s=duration_s,
         )
 
-        # Persist to DB
         if db is not None:
             try:
                 await db.execute(
@@ -246,21 +241,6 @@ class OllamaClient:
                 import logging
                 logging.getLogger(__name__).warning(
                     "llm_usage_logs insert failed (non-fatal)", exc_info=True
-                )
-
-        usage = {
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "cache_read_tokens": 0,
-            "cache_creation_tokens": 0,
-        }
-        return full_text, usage
-
-    def _scrub_secrets(self, text: str) -> None:
-        for pattern in _SECRET_PATTERNS:
-            if pattern.search(text):
-                raise SecurityError(
-                    "Secret pattern detected in prompt. Call aborted."
                 )
 
     async def _record_run(
@@ -314,6 +294,83 @@ class OllamaClient:
 
 
 # ------------------------------------------------------------------
+# Ollama provider
+# ------------------------------------------------------------------
+
+class OllamaClient(BaseLLMClient):
+    def __init__(self):
+        settings = get_settings()
+        self._model = settings.specialist_model
+        self._max_corrections = settings.max_self_corrections
+
+    async def _call(
+        self,
+        messages: list[dict],
+        stream_callback: Optional[callable] = None,
+        *,
+        user_id: Optional[int] = None,
+        job_posting_id: Optional[int] = None,
+        request_type: str = "unknown",
+        db: Optional[AsyncSession] = None,
+    ) -> tuple[str, dict]:
+        payload = {
+            "model": self._model,
+            "messages": messages,
+            "stream": stream_callback is not None,
+            "options": {"temperature": 0.1, "num_predict": 6144, "num_ctx": 16384},
+        }
+
+        full_text = ""
+        input_tokens = sum(len(m["content"].split()) for m in messages)
+        requested_at = datetime.now(timezone.utc)
+
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            if stream_callback is not None:
+                async with client.stream(
+                    "POST", f"{OLLAMA_BASE_URL}/api/chat", json=payload
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                            token = chunk.get("message", {}).get("content", "")
+                            full_text += token
+                            if token:
+                                await stream_callback(token)
+                        except json.JSONDecodeError:
+                            continue
+            else:
+                payload["stream"] = False
+                resp = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+                full_text = data.get("message", {}).get("content", "")
+
+        responded_at = datetime.now(timezone.utc)
+        output_tokens = len(full_text.split())
+
+        await self._persist_usage(
+            user_id=user_id,
+            job_posting_id=job_posting_id,
+            request_type=request_type,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            requested_at=requested_at,
+            responded_at=responded_at,
+            db=db,
+        )
+
+        return full_text, {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+        }
+
+
+# ------------------------------------------------------------------
 # Module-level helpers
 # ------------------------------------------------------------------
 
@@ -345,11 +402,11 @@ async def _update_budget(db: AsyncSession, agent_name: str, usage: dict):
 
 
 # Singleton
-_client: Optional[OllamaClient] = None
+_client: Optional[BaseLLMClient] = None
 
 
-def get_claude_client() -> OllamaClient:
-    """Name kept for compatibility — returns OllamaClient."""
+def get_claude_client() -> BaseLLMClient:
+    """Returns the configured LLM client. Name kept for compatibility."""
     global _client
     if _client is None:
         _client = OllamaClient()
