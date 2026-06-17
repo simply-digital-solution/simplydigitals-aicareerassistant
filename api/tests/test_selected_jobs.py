@@ -5,7 +5,7 @@ Tests for the Selected Jobs feature:
   - GET /research/jobs excludes selected jobs
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def _make_user(user_id: int = 1):
@@ -126,8 +126,9 @@ async def test_get_stored_jobs_excludes_any_application():
     db = AsyncMock()
     db.execute.side_effect = [count_result, jobs_result]
 
-    await get_stored_jobs(page=1, per_page=10, role="", days=0,
-                          current_user=_make_user(), db=db)
+    with patch("app.modules.agents.router._load_profile", AsyncMock(return_value={})):
+        await get_stored_jobs(page=1, per_page=10, role="", days=0,
+                              current_user=_make_user(), db=db)
 
     where_sql = db.execute.call_args_list[0].args[0].text
     assert "NOT IN" in where_sql
@@ -149,8 +150,9 @@ async def test_get_stored_jobs_min_score_excludes_unscored():
     db = AsyncMock()
     db.execute.side_effect = [count_result, jobs_result]
 
-    await get_stored_jobs(page=1, per_page=10, role="", days=0, min_score=0.8,
-                          current_user=_make_user(), db=db)
+    with patch("app.modules.agents.router._load_profile", AsyncMock(return_value={})):
+        await get_stored_jobs(page=1, per_page=10, role="", days=0, min_score=0.8,
+                              current_user=_make_user(), db=db)
 
     where_sql = db.execute.call_args_list[0].args[0].text
     assert "fit_score >= :min_score" in where_sql

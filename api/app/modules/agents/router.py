@@ -911,8 +911,15 @@ async def get_stored_jobs(
     Return paginated stored job postings for the current user.
     Ordered by posted_at DESC (most recent first).
     Optionally filter by role title, recency (days), and minimum fit score.
+    Jobs whose inferred_industries don't match the user's target_industries are excluded.
+    Jobs with no inferred industries (empty list) are always shown.
     """
+    import json as _json
     offset = (page - 1) * per_page
+
+    # Load user's target industries for server-side filtering
+    profile = await _load_profile(db, current_user.id)
+    target_industries: list[str] = profile.get("industries") or []
 
     where_clauses = [
         "user_id = :uid",
@@ -921,6 +928,16 @@ async def get_stored_jobs(
         "id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND job_posting_id IS NOT NULL)",
     ]
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
+
+    # Industry filter: pass jobs with no industries, exclude those that don't match
+    if target_industries:
+        ind_placeholders = ",".join(f":ind{i}" for i in range(len(target_industries)))
+        where_clauses.append(
+            f"(inferred_industries = '[]' OR inferred_industries IS NULL OR "
+            f"EXISTS (SELECT 1 FROM json_each(inferred_industries) WHERE value IN ({ind_placeholders})))"
+        )
+        for i, ind in enumerate(target_industries):
+            params[f"ind{i}"] = ind
 
     if role:
         where_clauses.append("title LIKE :role")
