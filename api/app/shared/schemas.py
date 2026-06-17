@@ -36,6 +36,19 @@ class ResearchOutput(AgentBaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Industry Classifier (backfill tool)
+# ---------------------------------------------------------------------------
+
+class IndustryClassification(AgentBaseModel):
+    job_id: int
+    industries: list[str] = Field(default_factory=list)
+
+
+class IndustryClassifierOutput(AgentBaseModel):
+    classifications: list[IndustryClassification]
+
+
+# ---------------------------------------------------------------------------
 # Agent 2 — Resume & LinkedIn Optimizer
 # ---------------------------------------------------------------------------
 
