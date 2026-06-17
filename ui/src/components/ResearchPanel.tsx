@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { ProfileData, StoredJobsResponse, StoredJob, ScoreCategory } from '../api/client'
+import type { ProfileData, StoredJobsResponse, StoredJob, ScoreRow } from '../api/client'
 import api, { researchApi, applicationsApi } from '../api/client'
 
 export type FeedbackEntry = { relevance: 'relevant' | 'not_relevant'; reason?: string }
@@ -61,7 +61,7 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
   const keywords   = parseJsonArray(job.key_keywords)
   const reasons    = parseJsonArray(job.reasons)
   const risks      = parseJsonArray(job.risks)
-  const breakdown: ScoreCategory[] = job.scoring_breakdown ? JSON.parse(job.scoring_breakdown) : []
+  const breakdown: ScoreRow[] = job.scoring_breakdown ? JSON.parse(job.scoring_breakdown) : []
 
   const borderCls =
     feedback?.relevance === 'relevant'     ? 'border-green-400 bg-green-50' :
@@ -270,24 +270,24 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-gray-50 text-gray-500">
-                        <th className="text-left py-1 px-2 font-medium border border-gray-200 w-1/4">Category</th>
-                        <th className="text-left py-1 px-2 font-medium border border-gray-200 w-5/12">JD Requires</th>
-                        <th className="text-left py-1 px-2 font-medium border border-gray-200 w-5/12">Your Profile</th>
-                        <th className="text-center py-1 px-2 font-medium border border-gray-200 w-12">Score</th>
+                        <th className="text-left py-1 px-2 font-medium border border-gray-200 w-24">Category</th>
+                        <th className="text-left py-1 px-2 font-medium border border-gray-200">JD Requirement</th>
+                        <th className="text-left py-1 px-2 font-medium border border-gray-200">Your Profile</th>
+                        <th className="text-left py-1 px-2 font-medium border border-gray-200 w-28">Match</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {breakdown.map((row) => {
-                        const scoreCls =
-                          row.score >= 8 ? 'text-green-700 font-semibold' :
-                          row.score >= 5 ? 'text-amber-600 font-semibold' :
+                      {breakdown.map((row, i) => {
+                        const matchCls =
+                          row.match.startsWith('✅') ? 'text-green-700 font-semibold' :
+                          row.match.startsWith('⚠') ? 'text-amber-600 font-semibold' :
                           'text-red-600 font-semibold'
                         return (
-                          <tr key={row.category} className="even:bg-gray-50">
-                            <td className="py-1 px-2 border border-gray-200 text-gray-700">{row.category}</td>
-                            <td className="py-1 px-2 border border-gray-200 text-gray-600">{row.jd_experience}</td>
+                          <tr key={i} className="even:bg-gray-50">
+                            <td className="py-1 px-2 border border-gray-200 text-gray-500 whitespace-nowrap">{row.category}</td>
+                            <td className="py-1 px-2 border border-gray-200 text-gray-700">{row.requirement}</td>
                             <td className="py-1 px-2 border border-gray-200 text-gray-600">{row.your_profile}</td>
-                            <td className={`py-1 px-2 border border-gray-200 text-center ${scoreCls}`}>{row.score}/10</td>
+                            <td className={`py-1 px-2 border border-gray-200 ${matchCls}`}>{row.match}</td>
                           </tr>
                         )
                       })}

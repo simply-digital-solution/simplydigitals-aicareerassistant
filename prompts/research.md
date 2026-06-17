@@ -17,16 +17,19 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
       "role": "exact job title from posting",
       "company": "company name",
       "link": "job posting URL or empty string",
-      "fit_score": 0.87,
+      "fit_score": 0.72,
       "reasons": ["reason 1", "reason 2", "reason 3"],
       "risks": ["risk 1", "risk 2", "risk 3"],
-      "key_keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+      "key_keywords": ["keyword1", "keyword2", "keyword3"],
       "scoring_breakdown": [
-        { "category": "Technical Skills",    "jd_experience": "Python, FastAPI, SQL", "your_profile": "Python, FastAPI, PostgreSQL", "score": 9 },
-        { "category": "Experience Level",    "jd_experience": "5+ yrs backend",       "your_profile": "6 yrs backend",              "score": 8 },
-        { "category": "Domain / Industry",   "jd_experience": "FinTech payments",     "your_profile": "EdTech background",          "score": 5 },
-        { "category": "Seniority",           "jd_experience": "Senior Engineer",      "your_profile": "Senior Engineer",            "score": 10 },
-        { "category": "Location & Work Mode","jd_experience": "On-site Singapore",    "your_profile": "Singapore, prefer hybrid",   "score": 7 }
+        { "category": "Experience",  "requirement": "12+ years IT, 3+ in Banking/FI",              "your_profile": "20+ years, all in capital markets technology",                      "match": "✅ Exceeds" },
+        { "category": "Experience",  "requirement": "8+ years technical project management",        "your_profile": "PO/PEM/SFA roles — BA/PO-flavoured, not pure technical PM",          "match": "⚠️ Partial" },
+        { "category": "Education",   "requirement": "Degree in IT/CS",                             "your_profile": "B.Tech CS&E",                                                       "match": "✅ Strong" },
+        { "category": "Domain",      "requirement": "KYC/AML system implementation",               "your_profile": "No evidence anywhere",                                              "match": "❌ Hard gap" },
+        { "category": "Technical",   "requirement": "Unix Shell Scripting",                        "your_profile": "No evidence — technical depth is Murex/interface specs, not scripting", "match": "❌ Critical gap" },
+        { "category": "Technical",   "requirement": "Oracle",                                      "your_profile": "No evidence",                                                      "match": "❌ Gap" },
+        { "category": "Technical",   "requirement": "Java",                                        "your_profile": "No evidence",                                                      "match": "❌ Gap" },
+        { "category": "Soft Skills", "requirement": "Stakeholder communication, business translation", "your_profile": "Strong — core strength across all roles",                   "match": "✅ Strong" }
       ]
     }
   ]
@@ -34,22 +37,35 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 ```
 
 ## Rules
-- `fit_score` is a float from 0.0 (no fit) to 1.0 (perfect fit).
-- `reasons` must have EXACTLY 3 items — specific reasons this role fits the candidate.
-- `risks` must have EXACTLY 3 items — specific concerns or gaps.
-- `key_keywords`: 3–5 ATS keywords to include in a tailored resume or cover letter.
-- `scoring_breakdown` must have EXACTLY 5 items, one per category below, in this order:
-  1. "Technical Skills" — required tech stack vs candidate's skills
-  2. "Experience Level" — years/type of experience required vs candidate's background
-  3. "Domain / Industry" — industry/domain required vs candidate's background
-  4. "Seniority" — seniority level required vs candidate's level
-  5. "Location & Work Mode" — location and remote/hybrid requirements vs candidate's preference
-- For each breakdown item:
-  - `jd_experience`: short phrase (≤8 words) summarising what the JD requires for that category
-  - `your_profile`: short phrase (≤8 words) summarising what the candidate brings
-  - `score`: integer 1–10 (10 = perfect match, 1 = no match)
-- `fit_score` should reflect the weighted average of the breakdown scores (technical skills and experience level carry more weight).
+
+### fit_score
+- A float from 0.0 (no fit) to 1.0 (perfect fit).
+- Decide it independently based on the full picture — do not mechanically average the breakdown rows.
+- Be honest: a candidate with several critical gaps should score below 0.5 even if they match on soft skills.
+
+### reasons and risks
+- `reasons`: EXACTLY 3 items — specific reasons this role fits the candidate.
+- `risks`: EXACTLY 3 items — specific concerns or gaps. Be direct and critical.
+
+### key_keywords
+- 3–5 ATS keywords from the JD the candidate should include in a tailored resume.
+
+### scoring_breakdown — CRITICAL INSTRUCTIONS
+- Extract every meaningful, distinct requirement from the JD as its own row.
+- If two requirements have different match levels, they MUST be separate rows. Do not group them.
+- If two requirements are closely related AND have the same match level, you may group them in one row.
+- `category`: assign one of — Technical, Experience, Education, Domain, Soft Skills, Certification, Location. Use your judgement for anything that does not fit.
+- `requirement`: the specific JD requirement, concise but precise (copy key phrases from the JD).
+- `your_profile`: what the candidate actually brings for that specific requirement. Be specific — reference their actual background, not generic praise.
+- `match`: a short label you write freely. Examples: ✅ Exceeds, ✅ Strong, ✅ Partial, ⚠️ Partial, ⚠️ Weak, ❌ Gap, ❌ Hard gap, ❌ Critical gap. Use ✅ for good matches, ⚠️ for partial/weak, ❌ for gaps.
+
+### Honesty — this is mandatory
+- Be brutally honest. A missing skill is a gap — call it out clearly.
+- Do not soften gaps with vague phrases like "could develop" or "transferable".
+- Do not invent experience the candidate did not mention.
+- A candidate who matches on experience and education but fails on 5 technical requirements should have a low fit_score.
+
+### General
 - The number of items in `opportunities` MUST equal the number of postings given to you. Do not skip any.
 - Do NOT invent job postings. Only analyze postings provided to you.
-- Be honest about fit — low fit postings still get included with a low fit_score.
 - Return ONLY valid JSON. Start with { and end with }. No markdown fences, no explanation.

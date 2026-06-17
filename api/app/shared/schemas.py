@@ -10,11 +10,11 @@ class AgentBaseModel(BaseModel):
 # Agent 1 — Role & Market Research
 # ---------------------------------------------------------------------------
 
-class ScoreCategory(AgentBaseModel):
-    category: str
-    jd_experience: str
+class ScoreRow(AgentBaseModel):
+    category: str    # e.g. Technical, Experience, Education, Domain, Soft Skills
+    requirement: str # specific JD requirement
     your_profile: str
-    score: int = Field(ge=1, le=10)
+    match: str       # free-form label, e.g. "✅ Exceeds", "❌ Critical gap"
 
 
 class JobOpportunity(AgentBaseModel):
@@ -26,7 +26,7 @@ class JobOpportunity(AgentBaseModel):
     risks: list[str] = Field(min_length=1, max_length=5)
     key_keywords: list[str] = Field(min_length=1, max_length=10)
     inferred_industries: list[str] = Field(default_factory=list)
-    scoring_breakdown: list[ScoreCategory] = Field(default_factory=list)
+    scoring_breakdown: list[ScoreRow] = Field(default_factory=list)
 
 
 class ResearchOutput(AgentBaseModel):

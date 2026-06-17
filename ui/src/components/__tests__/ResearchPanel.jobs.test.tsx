@@ -237,11 +237,11 @@ describe('LatestJobs — score error state', () => {
 
 describe('LatestJobs — score breakdown', () => {
   const breakdown = JSON.stringify([
-    { category: 'Technical Skills',    jd_experience: 'Python, SQL', your_profile: 'Python, PostgreSQL', score: 9 },
-    { category: 'Experience Level',    jd_experience: '5+ yrs backend', your_profile: '6 yrs backend',   score: 8 },
-    { category: 'Domain / Industry',   jd_experience: 'FinTech',        your_profile: 'EdTech',           score: 5 },
-    { category: 'Seniority',           jd_experience: 'Senior Engineer', your_profile: 'Senior Engineer', score: 10 },
-    { category: 'Location & Work Mode','jd_experience': 'On-site SG',    your_profile: 'SG, prefer hybrid', score: 7 },
+    { category: 'Technical',  requirement: 'Python, SQL',      your_profile: 'Python, PostgreSQL',  match: '✅ Strong' },
+    { category: 'Technical',  requirement: 'Java',             your_profile: 'No evidence',         match: '❌ Gap' },
+    { category: 'Experience', requirement: '5+ yrs backend',   your_profile: '6 yrs backend',       match: '✅ Exceeds' },
+    { category: 'Domain',     requirement: 'FinTech payments', your_profile: 'EdTech background',   match: '⚠️ Partial' },
+    { category: 'Location',   requirement: 'On-site SG',       your_profile: 'SG, prefer hybrid',  match: '⚠️ Weak' },
   ])
 
   it('breakdown table is not visible before expanding details', async () => {
@@ -257,21 +257,20 @@ describe('LatestJobs — score breakdown', () => {
     const toggle = await screen.findByRole('button', { name: /show details/i })
     fireEvent.click(toggle)
     expect(screen.getByText('Score Breakdown')).toBeInTheDocument()
-    expect(screen.getByText('Technical Skills')).toBeInTheDocument()
     expect(screen.getByText('Python, SQL')).toBeInTheDocument()
     expect(screen.getByText('Python, PostgreSQL')).toBeInTheDocument()
-    expect(screen.getByText('9/10')).toBeInTheDocument()
+    expect(screen.getByText('✅ Strong')).toBeInTheDocument()
   })
 
-  it('renders all 5 category rows', async () => {
+  it('renders all breakdown rows with correct columns', async () => {
     setupApiMocks([makeJob({ scoring_breakdown: breakdown })])
     wrap()
     fireEvent.click(await screen.findByRole('button', { name: /show details/i }))
-    expect(screen.getByText('Technical Skills')).toBeInTheDocument()
-    expect(screen.getByText('Experience Level')).toBeInTheDocument()
-    expect(screen.getByText('Domain / Industry')).toBeInTheDocument()
-    expect(screen.getByText('Seniority')).toBeInTheDocument()
-    expect(screen.getByText('Location & Work Mode')).toBeInTheDocument()
+    expect(screen.getByText('Java')).toBeInTheDocument()
+    expect(screen.getByText('❌ Gap')).toBeInTheDocument()
+    expect(screen.getByText('✅ Exceeds')).toBeInTheDocument()
+    expect(screen.getByText('⚠️ Partial')).toBeInTheDocument()
+    expect(screen.getByText('⚠️ Weak')).toBeInTheDocument()
   })
 
   it('does not render breakdown section when scoring_breakdown is null', async () => {

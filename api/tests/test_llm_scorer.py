@@ -65,11 +65,11 @@ def _make_job_row(job_id=1, user_id=42,
     }
 
 
-def _make_score_category(category="Technical Skills", jd_experience="Python, SQL",
-                          your_profile="Python, PostgreSQL", score=8):
-    from app.shared.schemas import ScoreCategory
-    return ScoreCategory(category=category, jd_experience=jd_experience,
-                         your_profile=your_profile, score=score)
+def _make_score_row(category="Technical", requirement="Python, SQL",
+                    your_profile="Python, PostgreSQL", match="✅ Strong"):
+    from app.shared.schemas import ScoreRow
+    return ScoreRow(category=category, requirement=requirement,
+                    your_profile=your_profile, match=match)
 
 
 def _make_opportunity(fit_score=0.85, reasons=None, risks=None, keywords=None, breakdown=None):
@@ -432,9 +432,9 @@ async def test_scoring_breakdown_json_encoded_in_update():
     job_row = _make_job_row()
     db      = _db_with_job(job_row)
 
-    cat = _make_score_category(category="Technical Skills", jd_experience="Python, SQL",
-                                your_profile="Python, PostgreSQL", score=8)
-    opp    = _make_opportunity(breakdown=[cat])
+    row    = _make_score_row(category="Technical", requirement="Python, SQL",
+                              your_profile="Python, PostgreSQL", match="✅ Strong")
+    opp    = _make_opportunity(breakdown=[row])
     result = _make_research_result(opp)
 
     with (
@@ -446,8 +446,9 @@ async def test_scoring_breakdown_json_encoded_in_update():
     params = db.execute.call_args_list[2].args[1]
     breakdown = json.loads(params["breakdown"])
     assert len(breakdown) == 1
-    assert breakdown[0]["category"] == "Technical Skills"
-    assert breakdown[0]["score"] == 8
+    assert breakdown[0]["category"] == "Technical"
+    assert breakdown[0]["requirement"] == "Python, SQL"
+    assert breakdown[0]["match"] == "✅ Strong"
 
 
 @pytest.mark.asyncio

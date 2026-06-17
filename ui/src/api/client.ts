@@ -81,11 +81,11 @@ export interface ResearchOutput {
   opportunities: JobOpportunity[]
 }
 
-export interface ScoreCategory {
+export interface ScoreRow {
   category: string
-  jd_experience: string
+  requirement: string
   your_profile: string
-  score: number
+  match: string
 }
 
 export interface StoredJob {
