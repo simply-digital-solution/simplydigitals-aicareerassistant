@@ -398,6 +398,9 @@ class GeminiClient(BaseLLMClient):
         request_type: str = "unknown",
         db: Optional[AsyncSession] = None,
     ) -> tuple[str, dict]:
+        from app.shared.rate_limiter import gemini_rate_limiter
+        await gemini_rate_limiter.acquire()
+
         # Convert OpenAI-style messages to Gemini contents format.
         # System message becomes the first user turn with a "SYSTEM:" prefix
         # so the conversation alternates user/model as Gemini requires.

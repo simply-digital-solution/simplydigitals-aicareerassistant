@@ -4,13 +4,15 @@ import {
   Document, Packer, Paragraph, TextRun,
   AlignmentType, BorderStyle,
 } from 'docx'
-import { researchApi, authApi } from '../api/client'
+import { researchApi, authApi, applicationsApi } from '../api/client'
 import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExperience } from '../api/client'
 
 interface TailoredResumePanelProps {
   jobId: number
   company: string
   readOnly?: boolean
+  isGenerating?: boolean
+  applicationId?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +205,54 @@ function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
 // Main panel
 // ---------------------------------------------------------------------------
 
-export default function TailoredResumePanel({ jobId, company, readOnly = false }: TailoredResumePanelProps) {
+function MarkAppliedButton({ applicationId }: { applicationId: number }) {
+  const queryClient = useQueryClient()
+  const [confirming, setConfirming] = useState(false)
+
+  const applyMutation = useMutation({
+    mutationFn: () => applicationsApi.move(applicationId, 'applied'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['selected-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['applied-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
+    },
+  })
+
+  if (confirming) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="text-xs text-gray-500">Applied?</span>
+        <button
+          onClick={() => applyMutation.mutate()}
+          disabled={applyMutation.isPending}
+          className="text-xs bg-green-600 text-white px-2.5 py-1 rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors font-medium"
+          aria-label="Confirm mark as applied"
+        >
+          {applyMutation.isPending ? 'Saving…' : 'Yes'}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Cancel"
+        >
+          Cancel
+        </button>
+      </span>
+    )
+  }
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); setConfirming(true) }}
+      className="text-xs border border-green-300 text-green-700 px-2.5 py-1 rounded-md hover:bg-green-50 transition-colors font-medium"
+      aria-label="Mark job as applied"
+    >
+      Apply
+    </button>
+  )
+}
+
+export default function TailoredResumePanel({ jobId, readOnly = false, isGenerating = false, applicationId }: TailoredResumePanelProps) {
   const queryClient = useQueryClient()
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
@@ -258,8 +307,12 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
       generateMutation.reset()
       // Reset preview so iframe remounts with the new file
       setShowPreview(false)
-    } catch {
-      setUploadError('Upload failed. Check your Drive connection and try again.')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string }; status?: number } })?.response?.data?.detail
+        ?? (err as Error)?.message
+        ?? 'Unknown error'
+      console.error('Upload failed:', err)
+      setUploadError(`Upload failed: ${msg}`)
     } finally {
       setUploading(false)
     }
@@ -268,6 +321,9 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
       <div className="space-y-3">
+        {isGenerating && (
+          <p className="text-xs text-indigo-500 animate-pulse">Generating resume…</p>
+        )}
         {loadingExisting ? (
           <div className="h-24 bg-gray-50 rounded-lg animate-pulse" />
         ) : resume ? (
@@ -283,6 +339,10 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
                   : ''}
               </span>
               <div className="flex items-center gap-3 flex-wrap">
+                {applicationId != null && (
+                  <MarkAppliedButton applicationId={applicationId} />
+                )}
+
                 {resume?.drive_file_id && (
                   <a
                     href={`https://drive.google.com/uc?export=download&id=${resume.drive_file_id}`}
@@ -310,7 +370,7 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
                 {!readOnly && (
                   <button
                     onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
-                    disabled={!driveConnected || uploading}
+                    disabled={!driveConnected || uploading || isGenerating}
                     className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
                     title={driveConnected ? (effectiveDriveLink ? 'Re-upload to Google Drive' : 'Upload resume to Google Drive') : 'Connect Google Drive first'}
                     aria-label="Upload resume to Google Drive"
@@ -330,7 +390,7 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
                 {!readOnly && (
                   <button
                     onClick={() => generateMutation.mutate()}
-                    disabled={generateMutation.isPending}
+                    disabled={generateMutation.isPending || isGenerating}
                     className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors"
                   >
                     {generateMutation.isPending ? 'Regenerating…' : '↺ Regenerate'}
@@ -374,9 +434,12 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">No resume yet</span>
               <div className="flex items-center gap-3 flex-wrap">
+                {applicationId != null && (
+                  <MarkAppliedButton applicationId={applicationId} />
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
-                  disabled={!driveConnected || uploading}
+                  disabled={!driveConnected || uploading || isGenerating}
                   className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
                   title={driveConnected ? 'Upload resume to Google Drive' : 'Connect Google Drive first'}
                   aria-label="Upload resume to Google Drive"
@@ -385,7 +448,7 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false }
                 </button>
                 <button
                   onClick={() => generateMutation.mutate()}
-                  disabled={generateMutation.isPending}
+                  disabled={generateMutation.isPending || isGenerating}
                   className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors font-medium"
                 >
                   {generateMutation.isPending ? 'Generating…' : '✦ Generate'}

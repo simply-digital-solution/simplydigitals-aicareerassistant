@@ -1277,6 +1277,41 @@ async def generate_resume(
     }
 
 
+class BulkGenerateResumeRequest(BaseModel):
+    job_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+@router.post("/research/jobs/bulk-generate-resume", status_code=202)
+async def bulk_generate_resumes(
+    body: BulkGenerateResumeRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate tailored resumes for multiple jobs sequentially.
+    Returns {results: {job_id: true/false}}.
+    Rate limiting is handled globally by GeminiClient.
+    """
+    from app.pipeline.resume_generator import generate_resumes_for_jobs
+
+    # Verify ownership — silently drop IDs not owned by this user
+    placeholders = ",".join(f":id{i}" for i in range(len(body.job_ids)))
+    params: dict = {"uid": current_user.id}
+    for i, jid in enumerate(body.job_ids):
+        params[f"id{i}"] = jid
+
+    owned = await db.execute(
+        text(f"SELECT id FROM job_postings WHERE user_id = :uid AND id IN ({placeholders})"),
+        params,
+    )
+    owned_ids = [r[0] for r in owned.fetchall()]
+    if not owned_ids:
+        raise HTTPException(404, "No owned jobs found")
+
+    results = await generate_resumes_for_jobs(db, owned_ids, current_user.id)
+    return {"results": results}
+
+
 @router.get("/research/jobs/{job_id}/resume")
 async def get_generated_resume(
     job_id: int,
