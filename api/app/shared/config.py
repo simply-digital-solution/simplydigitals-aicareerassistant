@@ -28,9 +28,16 @@ class Settings(BaseSettings):
     # Claude
     anthropic_api_key: str = ""
 
+    # LLM provider — "ollama" (local) or "gemini" (Google Gemini API)
+    llm_provider: str = "ollama"
+
     # Ollama model (local, no API cost)
     coordinator_model: str = "llama3.1:8b"
     specialist_model: str = "llama3.1:8b"
+
+    # Gemini
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
 
     # Agent limits
     max_tool_iterations: int = 25
