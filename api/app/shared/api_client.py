@@ -56,6 +56,8 @@ class OllamaClient:
         db: Optional[AsyncSession] = None,
         application_id: Optional[int] = None,
         user_id: Optional[int] = None,
+        job_posting_id: Optional[int] = None,
+        request_type: str = "unknown",
         use_coordinator: bool = False,
         stream_callback: Optional[callable] = None,
     ) -> tuple[T | AgentError, dict]:
@@ -74,7 +76,10 @@ class OllamaClient:
 
         input_chars = sum(len(m["content"]) for m in messages)
         _log.info("TIMING [%s] LLM call start — input ~%d chars", agent_name, input_chars)
-        raw_text, usage = await self._call(messages, stream_callback)
+        raw_text, usage = await self._call(
+            messages, stream_callback,
+            user_id=user_id, job_posting_id=job_posting_id, request_type=request_type, db=db,
+        )
         t_llm = time.monotonic() - t0
         _log.info("TIMING [%s] LLM call done — %.2fs, output %d chars", agent_name, t_llm, len(raw_text))
 
@@ -94,7 +99,11 @@ class OllamaClient:
             messages.append({"role": "user", "content": correction_prompt})
 
             t_retry = time.monotonic()
-            raw_text, extra_usage = await self._call(messages, stream_callback)
+            raw_text, extra_usage = await self._call(
+                messages, stream_callback,
+                user_id=user_id, job_posting_id=job_posting_id,
+                request_type=f"{request_type}_retry{attempt}", db=db,
+            )
             _log.info("TIMING [%s] LLM retry %d — %.2fs, output %d chars", agent_name, attempt, time.monotonic() - t_retry, len(raw_text))
             usage = _merge_usage(usage, extra_usage)
             parsed, status = parse_agent_output(raw_text, output_schema)
@@ -148,8 +157,15 @@ class OllamaClient:
         self,
         messages: list[dict],
         stream_callback: Optional[callable] = None,
+        *,
+        user_id: Optional[int] = None,
+        job_posting_id: Optional[int] = None,
+        request_type: str = "unknown",
+        db: Optional[AsyncSession] = None,
     ) -> tuple[str, dict]:
         """POST to Ollama /api/chat. Streams if callback provided."""
+        from app.shared.llm_logger import log_llm_call
+
         payload = {
             "model": self._model,
             "messages": messages,
@@ -159,6 +175,7 @@ class OllamaClient:
 
         full_text = ""
         input_tokens = sum(len(m["content"].split()) for m in messages)
+        requested_at = datetime.now(timezone.utc)
 
         async with httpx.AsyncClient(timeout=300.0) as client:
             if stream_callback is not None:
@@ -184,7 +201,53 @@ class OllamaClient:
                 data = resp.json()
                 full_text = data.get("message", {}).get("content", "")
 
+        responded_at = datetime.now(timezone.utc)
+        duration_s = (responded_at - requested_at).total_seconds()
         output_tokens = len(full_text.split())
+
+        # Persist to file log
+        log_llm_call(
+            user_id=user_id,
+            job_posting_id=job_posting_id,
+            request_type=request_type,
+            model=self._model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            requested_at=requested_at.isoformat(),
+            responded_at=responded_at.isoformat(),
+            duration_s=duration_s,
+        )
+
+        # Persist to DB
+        if db is not None:
+            try:
+                await db.execute(
+                    text("""
+                        INSERT INTO llm_usage_logs
+                            (user_id, job_posting_id, request_type, model,
+                             input_tokens, output_tokens, requested_at, responded_at)
+                        VALUES
+                            (:user_id, :job_posting_id, :request_type, :model,
+                             :input_tokens, :output_tokens, :requested_at, :responded_at)
+                    """),
+                    {
+                        "user_id": user_id,
+                        "job_posting_id": job_posting_id,
+                        "request_type": request_type,
+                        "model": self._model,
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "requested_at": requested_at.isoformat(),
+                        "responded_at": responded_at.isoformat(),
+                    },
+                )
+                await db.commit()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "llm_usage_logs insert failed (non-fatal)", exc_info=True
+                )
+
         usage = {
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,

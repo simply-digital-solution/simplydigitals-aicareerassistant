@@ -91,6 +91,8 @@ async def run_research_agent(
     db: Optional[AsyncSession] = None,
     user_id: Optional[int] = None,
     application_id: Optional[int] = None,
+    job_posting_id: Optional[int] = None,
+    request_type: str = "research",
     stream_callback: Optional[callable] = None,
     feedback_examples: str = "",
     full_description: bool = False,
@@ -114,5 +116,7 @@ async def run_research_agent(
         db=db,
         application_id=application_id,
         user_id=user_id,
+        job_posting_id=job_posting_id,
+        request_type=request_type,
         stream_callback=stream_callback,
     )

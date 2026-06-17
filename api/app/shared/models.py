@@ -401,3 +401,21 @@ class BudgetRecord(Base):
     total_cache_creation_tokens = Column(Integer, default=0)
     total_cost_usd = Column(Float, default=0.0)
     call_count = Column(Integer, default=0)
+
+
+# ---------------------------------------------------------------------------
+# LLM usage logs — one row per LLM call
+# ---------------------------------------------------------------------------
+
+class LlmUsageLog(Base):
+    __tablename__ = "llm_usage_logs"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    user_id        = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    job_posting_id = Column(Integer, ForeignKey("job_postings.id"), nullable=True, index=True)
+    request_type   = Column(String(50), nullable=False)
+    model          = Column(String(100), nullable=False)
+    input_tokens   = Column(Integer, default=0)
+    output_tokens  = Column(Integer, default=0)
+    requested_at   = Column(DateTime(timezone=True), nullable=False)
+    responded_at   = Column(DateTime(timezone=True), nullable=False)

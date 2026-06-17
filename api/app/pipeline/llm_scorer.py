@@ -106,6 +106,8 @@ async def score_next_job(db: AsyncSession) -> bool:
             search_filters={},
             db=db,
             user_id=user_id,
+            job_posting_id=job_id,
+            request_type="scoring",
             feedback_examples=feedback_examples,
             full_description=True,
         )

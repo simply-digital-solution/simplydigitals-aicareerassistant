@@ -68,4 +68,5 @@ async def run_resume_generate_agent(
         db=db,
         application_id=application_id,
         user_id=user_id,
+        request_type="resume_generation",
     )
