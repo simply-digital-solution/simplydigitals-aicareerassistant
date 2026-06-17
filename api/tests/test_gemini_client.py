@@ -51,14 +51,14 @@ async def test_gemini_call_sends_correct_url_and_key():
 
         client = GeminiClient()
         client._api_key = "test-key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         await client._call([{"role": "user", "content": "hi"}])
 
     mock_http.post.assert_called_once()
     call_args = mock_http.post.call_args
-    assert call_args[0][0] == f"{GEMINI_BASE_URL}/gemini-2.0-flash:generateContent"
-    assert call_args[1]["params"]["key"] == "test-key"
+    assert call_args[0][0] == f"{GEMINI_BASE_URL}/gemini-flash-latest:generateContent"
+    assert call_args[1]["headers"]["X-goog-api-key"] == "test-key"
 
 
 @pytest.mark.asyncio
@@ -69,7 +69,7 @@ async def test_gemini_call_converts_messages_to_contents():
     mock_http = _make_mock_http(_make_gemini_response("ok"))
     captured_payload = {}
 
-    async def capture_post(url, *, json, params):
+    async def capture_post(url, *, json, headers):
         captured_payload.update(json)
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
@@ -83,7 +83,7 @@ async def test_gemini_call_converts_messages_to_contents():
 
         client = GeminiClient()
         client._api_key = "key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -106,7 +106,7 @@ async def test_gemini_call_assistant_message_maps_to_model_role():
 
     captured_payload = {}
 
-    async def capture_post(url, *, json, params):
+    async def capture_post(url, *, json, headers):
         captured_payload.update(json)
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
@@ -123,7 +123,7 @@ async def test_gemini_call_assistant_message_maps_to_model_role():
 
         client = GeminiClient()
         client._api_key = "key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         messages = [
             {"role": "user", "content": "Score this."},
@@ -154,7 +154,7 @@ async def test_gemini_call_extracts_text_from_candidates():
 
         client = GeminiClient()
         client._api_key = "key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         full_text, _ = await client._call([{"role": "user", "content": "hi"}])
 
@@ -173,7 +173,7 @@ async def test_gemini_call_uses_real_token_counts_from_usage_metadata():
 
         client = GeminiClient()
         client._api_key = "key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         _, usage = await client._call([{"role": "user", "content": "hi"}])
 
@@ -196,7 +196,7 @@ async def test_gemini_call_falls_back_to_word_count_when_no_usage_metadata():
 
         client = GeminiClient()
         client._api_key = "key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         _, usage = await client._call([{"role": "user", "content": "hi"}])
 
@@ -216,7 +216,7 @@ async def test_gemini_call_returns_empty_string_when_no_candidates():
 
         client = GeminiClient()
         client._api_key = "key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         full_text, usage = await client._call([{"role": "user", "content": "hi"}])
 
@@ -244,7 +244,7 @@ async def test_gemini_call_invokes_stream_callback_with_full_text():
 
         client = GeminiClient()
         client._api_key = "key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         await client._call([{"role": "user", "content": "hi"}], callback)
 
@@ -263,7 +263,7 @@ async def test_gemini_call_calls_log_llm_call():
 
         client = GeminiClient()
         client._api_key = "key"
-        client._model = "gemini-2.0-flash"
+        client._model = "gemini-flash-latest"
 
         await client._call(
             [{"role": "user", "content": "score"}],
@@ -275,7 +275,7 @@ async def test_gemini_call_calls_log_llm_call():
     mock_log.assert_called_once()
     kw = mock_log.call_args[1]
     assert kw["request_type"] == "scoring"
-    assert kw["model"] == "gemini-2.0-flash"
+    assert kw["model"] == "gemini-flash-latest"
     assert kw["input_tokens"] == 10
     assert kw["output_tokens"] == 5
     assert kw["user_id"] == 3
@@ -296,7 +296,7 @@ def test_get_claude_client_returns_gemini_when_key_is_set():
 
     mock_settings = MagicMock()
     mock_settings.gemini_api_key = "some-key"
-    mock_settings.gemini_model = "gemini-2.0-flash"
+    mock_settings.gemini_model = "gemini-flash-latest"
     mock_settings.max_self_corrections = 3
 
     with patch("app.shared.api_client.get_settings", return_value=mock_settings):

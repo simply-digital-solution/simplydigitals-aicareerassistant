@@ -415,10 +415,10 @@ class GeminiClient(BaseLLMClient):
         full_text = ""
 
         url = f"{GEMINI_BASE_URL}/{self._model}:generateContent"
-        params = {"key": self._api_key}
+        headers = {"X-goog-api-key": self._api_key, "Content-Type": "application/json"}
 
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, json=payload, params=params)
+            resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
 
