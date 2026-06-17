@@ -19,7 +19,7 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
       "company": "company name",
       "link": "job posting URL or empty string",
       "fit_score": 0.72,
-      "reasons": ["reason 1", "reason 2", "reason 3"],
+      "reasons": ["reason 1", "reason 2", "reason 3", "reason 4"],
       "risks": ["risk 1", "risk 2", "risk 3"],
       "key_keywords": ["keyword1", "keyword2", "keyword3"],
       "scoring_breakdown": [
@@ -47,8 +47,9 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 - Be honest: a candidate with several critical gaps should score below 0.5 even if they match on soft skills.
 
 ### reasons and risks
-- `reasons`: EXACTLY 3 items — specific reasons this role fits the candidate.
-- `risks`: EXACTLY 3 items — specific concerns or gaps. Be direct and critical.
+- Write all reasons and risks in second person, addressing the candidate directly as "you" / "your". Never use "the candidate", "he", "she", or "they".
+- `reasons`: 1–5 items — specific reasons this role fits you. Each reason must reference a concrete skill, experience, or achievement from your profile matched to a specific JD requirement. Do not pad with weak reasons.
+- `risks`: 1–5 items — specific, actionable concerns you must address if you apply. Each risk must name the exact skill, certification, domain, or experience gap from the JD and what you are missing. Do NOT write meta-observations like "outside your domain" (already captured in fit_score) or "overqualified" (not actionable). Focus only on gaps you could address in a cover letter, interview, or by acquiring a skill.
 
 ### key_keywords
 - 3–5 ATS keywords from the JD the candidate should include in a tailored resume.
@@ -64,11 +65,11 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 - `match`: a short label you write freely. Use ✅ for good matches, ⚠️ for partial/weak, ❌ for gaps. When a JD requirement uses language like "must", "required", "mandatory", or "essential" and the candidate does not meet it, mark it as `❌ Hard gate`.
 
 ### recommendation — REQUIRED
-- Write a 2–4 sentence narrative advising the candidate on whether and how to pursue this role.
+- Write a 2–4 sentence narrative advising the candidate directly, in second person ("you" / "your"). Never use "the candidate", "he", "she", or "they".
 - Lead with a clear action: "Apply", "Apply with caveats", "Skip unless...", or "Do not apply".
-- Name the strongest reasons to apply AND the most critical gaps or hard gates the candidate must address.
-- If there are hard gates (❌ Hard gate rows), call them out explicitly and state whether the candidate can credibly address them or should deprioritise.
-- Be direct — this field is the candidate's decision brief, not marketing copy.
+- Name the strongest reasons to apply AND the most critical gaps or hard gates you must address.
+- If there are hard gates (❌ Hard gate rows), call them out explicitly and state whether you can credibly address them or should deprioritise.
+- Be direct — this is your decision brief, not marketing copy.
 
 ### Honesty — this is mandatory
 - Be brutally honest. A missing skill is a gap — call it out clearly.

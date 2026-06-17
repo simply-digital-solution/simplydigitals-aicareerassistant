@@ -539,6 +539,18 @@ export default function ResearchPanel() {
     },
   })
 
+  const rescoreAllMutation = useMutation({
+    mutationFn: () => researchApi.rescoreAllJobs(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stored-jobs'] }),
+  })
+
+  const handleRescoreAll = () => {
+    const total = data?.total ?? 0
+    const msg = `Are you sure you want to rescore all ${total} job${total !== 1 ? 's' : ''}? This may take a few minutes.`
+    if (!window.confirm(msg)) return
+    rescoreAllMutation.mutate()
+  }
+
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
@@ -631,13 +643,23 @@ export default function ResearchPanel() {
               )}
             </h3>
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="text-xs bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
-          >
-            {refreshing ? 'Scraping…' : '↻ Refresh'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRescoreAll}
+              disabled={rescoreAllMutation.isPending || rescoringIds.size > 0 || bulkRescoreMutation.isPending}
+              className="text-xs bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+              title="Rescore all jobs for your profile"
+            >
+              {rescoreAllMutation.isPending ? '↻ Rescoring all…' : '↻ Rescore All'}
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="text-xs bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            >
+              {refreshing ? 'Scraping…' : '↻ Refresh'}
+            </button>
+          </div>
         </div>
 
         {/* Filters */}

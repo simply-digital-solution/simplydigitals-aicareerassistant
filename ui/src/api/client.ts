@@ -270,6 +270,7 @@ export const researchApi = {
   bulkArchiveJobs: (jobIds: number[]) => api.post('/research/jobs/bulk-archive', { job_ids: jobIds }),
   rescoreJob: (id: number) => api.post<StoredJob>(`/research/jobs/${id}/rescore`),
   bulkRescoreJobs: (jobIds: number[]) => api.post<{ jobs: StoredJob[] }>('/research/jobs/bulk-rescore', { job_ids: jobIds }),
+  rescoreAllJobs: () => api.post<{ count: number }>('/research/jobs/rescore-all'),
   bulkGenerateResumes: (jobIds: number[]) =>
     api.post<{ results: Record<number, boolean> }>('/research/jobs/bulk-generate-resume', { job_ids: jobIds }),
   generateResume: (jobId: number) =>

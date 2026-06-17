@@ -1277,6 +1277,38 @@ async def generate_resume(
     }
 
 
+@router.post("/research/jobs/rescore-all")
+async def rescore_all_jobs(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rescore every unarchived job for the current user in one LLM call."""
+    from app.pipeline.llm_scorer import score_jobs_by_ids
+
+    rows = await db.execute(
+        text("SELECT id FROM job_postings WHERE user_id = :uid AND archived = 0"),
+        {"uid": current_user.id},
+    )
+    all_ids = [r[0] for r in rows.fetchall()]
+    if not all_ids:
+        raise HTTPException(404, "No jobs found")
+
+    await db.execute(
+        text("""
+            UPDATE job_postings SET
+                scored = 0, fit_score = NULL, reasons = NULL, risks = NULL,
+                key_keywords = NULL, scoring_breakdown = NULL, recommendation = NULL,
+                inferred_industries = '[]', score_error = NULL, scored_at = NULL
+            WHERE user_id = :uid AND archived = 0
+        """),
+        {"uid": current_user.id},
+    )
+    await db.commit()
+
+    await score_jobs_by_ids(db, all_ids)
+    return {"count": len(all_ids)}
+
+
 class BulkGenerateResumeRequest(BaseModel):
     job_ids: list[int] = Field(min_length=1, max_length=100)
 
