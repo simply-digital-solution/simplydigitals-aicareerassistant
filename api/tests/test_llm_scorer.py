@@ -3,16 +3,16 @@ Unit tests for api/app/pipeline/llm_scorer.py
 
 All DB and agent calls are mocked — no live database or LLM needed.
 
-DB execute() call sequence inside score_next_job:
-  1. SELECT job_postings (job SELECT)
+DB execute() call sequence inside score_next_batch:
+  1. SELECT job_postings (batch SELECT)
   2. SELECT job_feedback (feedback examples)
-  3. UPDATE job_postings  (write score back)
+  3..N. UPDATE job_postings (one per job in batch)
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
-from app.pipeline.llm_scorer import score_next_job, _build_feedback_examples
+from app.pipeline.llm_scorer import score_next_batch, _build_feedback_examples
 
 
 # ---------------------------------------------------------------------------
@@ -26,26 +26,28 @@ def _feedback_exec(rows=None):
     return m
 
 
-def _db_with_job(job_row=None, feedback_rows=None):
+def _batch_select_result(job_rows):
+    """Simulates the batch job SELECT returning multiple rows."""
+    m = MagicMock()
+    m.mappings.return_value.all.return_value = job_rows
+    return m
+
+
+def _db_with_batch(job_rows=None, feedback_rows=None):
     """
-    Return a mock AsyncSession.
+    Return a mock AsyncSession for a batch of jobs.
     execute() side_effect sequence:
-      [0] job SELECT
+      [0] batch job SELECT
       [1] feedback SELECT
-      [2] UPDATE (only reached when a job was found)
+      [2..N] UPDATE per job (only reached when jobs were found)
     """
     db = AsyncMock()
-
-    select_result = MagicMock()
-    if job_row is None:
-        select_result.mappings.return_value.first.return_value = None
-    else:
-        select_result.mappings.return_value.first.return_value = job_row
-
+    select_result   = _batch_select_result(job_rows or [])
     feedback_result = _feedback_exec(feedback_rows)
     update_result   = MagicMock()
 
-    db.execute.side_effect = [select_result, feedback_result, update_result]
+    # Provide enough update results for any batch size
+    db.execute.side_effect = [select_result, feedback_result] + [update_result] * 20
     return db
 
 
@@ -72,24 +74,28 @@ def _make_score_row(category="Technical", requirement="Python, SQL",
                     your_profile=your_profile, match=match)
 
 
-def _make_opportunity(fit_score=0.85, reasons=None, risks=None, keywords=None, breakdown=None):
+def _make_opportunity(job_id=1, fit_score=0.85, reasons=None, risks=None,
+                      keywords=None, breakdown=None):
     opp = MagicMock()
+    opp.job_id          = job_id
     opp.fit_score       = fit_score
-    opp.reasons         = reasons   or ["Strong ML skills match"]
-    opp.risks           = risks     or ["No Python 3.11 mentioned"]
-    opp.key_keywords    = keywords  or ["PyTorch", "SQL"]
+    opp.reasons         = reasons  or ["Strong ML skills match"]
+    opp.risks           = risks    or ["No Python 3.11 mentioned"]
+    opp.key_keywords    = keywords or ["PyTorch", "SQL"]
     opp.scoring_breakdown = breakdown if breakdown is not None else []
     return opp
 
 
-def _make_research_result(opp=None):
+def _make_research_result(opps):
     result = MagicMock()
-    result.opportunities = [opp or _make_opportunity()]
+    result.opportunities = opps if isinstance(opps, list) else [opps]
     return result
 
 
-def _make_feedback_row(job_title="Data Engineer", company="ACME", relevance="relevant", reason=None):
-    return {"job_title": job_title, "company": company, "relevance": relevance, "reason": reason}
+def _make_feedback_row(job_title="Data Engineer", company="ACME",
+                       relevance="relevant", reason=None):
+    return {"job_title": job_title, "company": company,
+            "relevance": relevance, "reason": reason}
 
 
 # ---------------------------------------------------------------------------
@@ -98,129 +104,204 @@ def _make_feedback_row(job_title="Data Engineer", company="ACME", relevance="rel
 
 @pytest.mark.asyncio
 async def test_empty_queue_returns_false():
-    db = _db_with_job(job_row=None)
+    db = _db_with_batch(job_rows=[])
 
-    had_work = await score_next_job(db)
+    had_work = await score_next_batch(db)
 
     assert had_work is False
-    # Only the job SELECT should have been issued — feedback query never reached
     db.execute.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
-# Happy path: job scored successfully
+# Happy path: single job batch scored successfully
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_successful_score_writes_result():
-    job_row = _make_job_row()
-    db      = _db_with_job(job_row)
+    job_row = _make_job_row(job_id=1)
+    db      = _db_with_batch([job_row])
 
-    opp    = _make_opportunity(fit_score=0.78)
-    result = _make_research_result(opp)
+    opp    = _make_opportunity(job_id=1, fit_score=0.78)
+    result = _make_research_result([opp])
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
         patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
     ):
-        had_work = await score_next_job(db)
+        had_work = await score_next_batch(db)
 
     assert had_work is True
     db.commit.assert_called()
 
-    # Verify the UPDATE was executed with fit_score (3rd execute call, index 2)
-    update_call = db.execute.call_args_list[2]
-    params = update_call.args[1]
+    # UPDATE is call index 2
+    params = db.execute.call_args_list[2].args[1]
     assert params["fit_score"] == 0.78
     assert params["id"] == 1
-    # Happy path must clear score_error
-    update_sql = update_call.args[0].text
+    update_sql = db.execute.call_args_list[2].args[0].text
     assert "score_error" in update_sql
 
 
 # ---------------------------------------------------------------------------
-# Agent raises exception → scored stays 0, score_error is set
+# Batch of 3 jobs — all scored, matched by job_id
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_agent_exception_sets_score_error():
-    job_row = _make_job_row()
-    db      = _db_with_job(job_row)
+async def test_batch_scores_multiple_jobs():
+    rows = [_make_job_row(job_id=i) for i in [10, 20, 30]]
+    db   = _db_with_batch(rows)
+
+    opps   = [_make_opportunity(job_id=i, fit_score=round(0.5 + i * 0.01, 2)) for i in [10, 20, 30]]
+    result = _make_research_result(opps)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        had_work = await score_next_batch(db)
+
+    assert had_work is True
+    # 1 batch SELECT + 1 feedback SELECT + 3 UPDATEs = 5 execute calls
+    assert db.execute.call_count == 5
+
+    scored_ids = {db.execute.call_args_list[i].args[1]["id"] for i in range(2, 5)}
+    assert scored_ids == {10, 20, 30}
+
+
+# ---------------------------------------------------------------------------
+# Reordered response — matched correctly by job_id
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_batch_matches_by_job_id_not_position():
+    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
+    db   = _db_with_batch(rows)
+
+    # LLM returns opportunities in reverse order
+    opps   = [_make_opportunity(job_id=2, fit_score=0.9),
+              _make_opportunity(job_id=1, fit_score=0.4)]
+    result = _make_research_result(opps)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_batch(db)
+
+    # job_id=1 should get fit_score=0.4, job_id=2 should get fit_score=0.9
+    update_calls = {
+        db.execute.call_args_list[i].args[1]["id"]:
+        db.execute.call_args_list[i].args[1]["fit_score"]
+        for i in range(2, 4)
+    }
+    assert update_calls[1] == 0.4
+    assert update_calls[2] == 0.9
+
+
+# ---------------------------------------------------------------------------
+# Missing job_id in response — marked as failed individually
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_missing_job_id_marked_as_failed():
+    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
+    db   = _db_with_batch(rows)
+
+    # LLM only returns job_id=1, skips job_id=2
+    opps   = [_make_opportunity(job_id=1, fit_score=0.75)]
+    result = _make_research_result(opps)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_batch(db)
+
+    # job_id=1 scored, job_id=2 marked as error
+    call_params = [db.execute.call_args_list[i].args[1] for i in range(2, 4)]
+    scored   = next(p for p in call_params if p.get("id") == 1)
+    failed   = next(p for p in call_params if p.get("id") == 2)
+    assert scored["fit_score"] == 0.75
+    assert "Missing" in failed["err"]
+
+
+# ---------------------------------------------------------------------------
+# Agent raises exception → all jobs in batch marked failed
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_agent_exception_marks_all_jobs_failed():
+    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
+    db   = _db_with_batch(rows)
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
         patch("app.pipeline.llm_scorer.run_research_agent",
               AsyncMock(side_effect=RuntimeError("LLM timed out"))),
     ):
-        had_work = await score_next_job(db)
+        had_work = await score_next_batch(db)
 
     assert had_work is True
     db.commit.assert_called()
 
-    # job SELECT + feedback SELECT + UPDATE = 3 calls
-    assert db.execute.call_count == 3
-
-    update_params = db.execute.call_args_list[2].args[1]
-    assert update_params["err"] is not None
-    assert "RuntimeError" in update_params["err"]
-    # scored stays 0 so job can be retried after re-score
-    update_sql = db.execute.call_args_list[2].args[0].text
-    assert "scored=0" in update_sql
+    # Both jobs should have score_error set
+    update_calls = db.execute.call_args_list[2:]
+    assert len(update_calls) == 2
+    for call in update_calls:
+        params = call.args[1]
+        assert "RuntimeError" in params["err"]
+        assert "scored=0" in call.args[0].text
 
 
 # ---------------------------------------------------------------------------
-# Agent returns AgentError → scored stays 0, score_error is set
+# Agent returns AgentError → all jobs in batch marked failed
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_agent_error_result_sets_score_error():
+async def test_agent_error_result_marks_all_jobs_failed():
     from app.shared.schemas import AgentError
 
-    job_row = _make_job_row()
-    db      = _db_with_job(job_row)
+    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
+    db   = _db_with_batch(rows)
 
     agent_err = AgentError(error="parse failed")
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
-        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(agent_err, {}))),
+        patch("app.pipeline.llm_scorer.run_research_agent",
+              AsyncMock(return_value=(agent_err, {}))),
     ):
-        had_work = await score_next_job(db)
+        had_work = await score_next_batch(db)
 
     assert had_work is True
-    db.commit.assert_called()
-
-    update_params = db.execute.call_args_list[2].args[1]
-    assert update_params["err"] == "parse failed"
-    update_sql = db.execute.call_args_list[2].args[0].text
-    assert "scored=0" in update_sql
+    update_calls = db.execute.call_args_list[2:]
+    assert len(update_calls) == 2
+    for call in update_calls:
+        assert call.args[1]["err"] == "parse failed"
 
 
 # ---------------------------------------------------------------------------
-# Agent returns result with empty opportunities → scored stays 0
+# job_id is passed in each job dict sent to the agent
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_empty_opportunities_sets_score_error():
-    job_row = _make_job_row()
-    db      = _db_with_job(job_row)
+async def test_job_id_passed_in_job_dicts():
+    rows = [_make_job_row(job_id=99), _make_job_row(job_id=100)]
+    db   = _db_with_batch(rows)
 
-    empty_result = MagicMock()
-    empty_result.opportunities = []
+    captured = {}
+
+    async def fake_agent(profile, job_postings, **kwargs):
+        captured["job_postings"] = job_postings
+        opps = [_make_opportunity(job_id=j["job_id"]) for j in job_postings]
+        return _make_research_result(opps), {}
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
-        patch("app.pipeline.llm_scorer.run_research_agent",
-              AsyncMock(return_value=(empty_result, {}))),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
     ):
-        had_work = await score_next_job(db)
+        await score_next_batch(db)
 
-    assert had_work is True
-    db.commit.assert_called()
-
-    update_sql = db.execute.call_args_list[2].args[0].text
-    assert "scored=0" in update_sql
-    assert "score_error" in update_sql
+    assert [j["job_id"] for j in captured["job_postings"]] == [99, 100]
 
 
 # ---------------------------------------------------------------------------
@@ -229,25 +310,22 @@ async def test_empty_opportunities_sets_score_error():
 
 @pytest.mark.asyncio
 async def test_inferred_industries_deserialized():
-    job_row = _make_job_row(inferred_industries='["Banking & Financial Services", "FinTech"]')
-    db      = _db_with_job(job_row)
+    row = _make_job_row(job_id=1, inferred_industries='["Banking & Financial Services", "FinTech"]')
+    db  = _db_with_batch([row])
 
-    opp    = _make_opportunity()
-    result = _make_research_result(opp)
-
-    captured_job = {}
+    captured = {}
 
     async def fake_agent(profile, job_postings, **kwargs):
-        captured_job.update(job_postings[0])
-        return result, {}
+        captured["industries"] = job_postings[0]["inferred_industries"]
+        return _make_research_result([_make_opportunity(job_id=1)]), {}
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
         patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
     ):
-        await score_next_job(db)
+        await score_next_batch(db)
 
-    assert captured_job["inferred_industries"] == ["Banking & Financial Services", "FinTech"]
+    assert captured["industries"] == ["Banking & Financial Services", "FinTech"]
 
 
 # ---------------------------------------------------------------------------
@@ -256,22 +334,68 @@ async def test_inferred_industries_deserialized():
 
 @pytest.mark.asyncio
 async def test_score_fields_json_encoded_in_update():
-    job_row = _make_job_row()
-    db      = _db_with_job(job_row)
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
 
-    opp = _make_opportunity(reasons=["r1"], risks=["risk1"], keywords=["k1", "k2"])
-    result = _make_research_result(opp)
+    opp    = _make_opportunity(job_id=1, reasons=["r1"], risks=["risk1"], keywords=["k1", "k2"])
+    result = _make_research_result([opp])
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
         patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
     ):
-        await score_next_job(db)
+        await score_next_batch(db)
 
     params = db.execute.call_args_list[2].args[1]
     assert json.loads(params["reasons"])  == ["r1"]
     assert json.loads(params["risks"])    == ["risk1"]
     assert json.loads(params["keywords"]) == ["k1", "k2"]
+
+
+# ---------------------------------------------------------------------------
+# scoring_breakdown is JSON-encoded in the UPDATE
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_scoring_breakdown_json_encoded_in_update():
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
+
+    score_row = _make_score_row(category="Technical", requirement="Python, SQL",
+                                your_profile="Python, PostgreSQL", match="✅ Strong")
+    opp    = _make_opportunity(job_id=1, breakdown=[score_row])
+    result = _make_research_result([opp])
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_batch(db)
+
+    params    = db.execute.call_args_list[2].args[1]
+    breakdown = json.loads(params["breakdown"])
+    assert len(breakdown) == 1
+    assert breakdown[0]["category"]    == "Technical"
+    assert breakdown[0]["requirement"] == "Python, SQL"
+    assert breakdown[0]["match"]       == "✅ Strong"
+
+
+@pytest.mark.asyncio
+async def test_scoring_breakdown_empty_list_when_not_provided():
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
+
+    opp    = _make_opportunity(job_id=1, breakdown=[])
+    result = _make_research_result([opp])
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_batch(db)
+
+    params = db.execute.call_args_list[2].args[1]
+    assert json.loads(params["breakdown"]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -281,24 +405,18 @@ async def test_score_fields_json_encoded_in_update():
 @pytest.mark.asyncio
 async def test_build_feedback_examples_empty_returns_empty_string():
     db = AsyncMock()
-    feedback_result = _feedback_exec([])
-    db.execute.return_value = feedback_result
-
-    result = await _build_feedback_examples(db, user_id=1)
-
-    assert result == ""
+    db.execute.return_value = _feedback_exec([])
+    assert await _build_feedback_examples(db, user_id=1) == ""
 
 
 @pytest.mark.asyncio
 async def test_build_feedback_examples_relevant_jobs_included():
     db = AsyncMock()
     db.execute.return_value = _feedback_exec([
-        _make_feedback_row("Data Engineer", "ACME", "relevant"),
-        _make_feedback_row("ML Engineer",   "Stripe", "relevant"),
+        _make_feedback_row("Data Engineer", "ACME",   "relevant"),
+        _make_feedback_row("ML Engineer",  "Stripe",  "relevant"),
     ])
-
     result = await _build_feedback_examples(db, user_id=1)
-
     assert "RELEVANT" in result
     assert "Data Engineer at ACME" in result
     assert "ML Engineer at Stripe" in result
@@ -308,11 +426,9 @@ async def test_build_feedback_examples_relevant_jobs_included():
 async def test_build_feedback_examples_not_relevant_jobs_included():
     db = AsyncMock()
     db.execute.return_value = _feedback_exec([
-        _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant", reason=None),
+        _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant"),
     ])
-
     result = await _build_feedback_examples(db, user_id=1)
-
     assert "NOT RELEVANT" in result
     assert "Sales Manager at Telco Corp" in result
 
@@ -323,9 +439,7 @@ async def test_build_feedback_examples_reason_included_in_output():
     db.execute.return_value = _feedback_exec([
         _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant", reason="Wrong industry"),
     ])
-
     result = await _build_feedback_examples(db, user_id=1)
-
     assert "reason: Wrong industry" in result
 
 
@@ -333,12 +447,10 @@ async def test_build_feedback_examples_reason_included_in_output():
 async def test_build_feedback_examples_both_groups_included():
     db = AsyncMock()
     db.execute.return_value = _feedback_exec([
-        _make_feedback_row("Data Engineer", "ACME",      "relevant"),
+        _make_feedback_row("Data Engineer", "ACME",       "relevant"),
         _make_feedback_row("Sales Manager", "Telco Corp", "not_relevant"),
     ])
-
     result = await _build_feedback_examples(db, user_id=1)
-
     assert "RELEVANT" in result
     assert "NOT RELEVANT" in result
 
@@ -349,51 +461,45 @@ async def test_build_feedback_examples_both_groups_included():
 
 @pytest.mark.asyncio
 async def test_feedback_examples_passed_to_agent():
-    job_row = _make_job_row()
-    db = _db_with_job(job_row, feedback_rows=[
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row], feedback_rows=[
         _make_feedback_row("Data Engineer", "ACME", "relevant"),
     ])
 
-    opp    = _make_opportunity()
-    result = _make_research_result(opp)
-
-    captured_kwargs: dict = {}
+    captured: dict = {}
 
     async def fake_agent(profile, job_postings, **kwargs):
-        captured_kwargs.update(kwargs)
-        return result, {}
+        captured.update(kwargs)
+        return _make_research_result([_make_opportunity(job_id=1)]), {}
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
         patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
     ):
-        await score_next_job(db)
+        await score_next_batch(db)
 
-    assert "feedback_examples" in captured_kwargs
-    assert "Data Engineer at ACME" in captured_kwargs["feedback_examples"]
+    assert "feedback_examples" in captured
+    assert "Data Engineer at ACME" in captured["feedback_examples"]
 
 
 @pytest.mark.asyncio
 async def test_no_feedback_passes_empty_string_to_agent():
-    job_row = _make_job_row()
-    db = _db_with_job(job_row, feedback_rows=[])
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row], feedback_rows=[])
 
-    opp    = _make_opportunity()
-    result = _make_research_result(opp)
-
-    captured_kwargs: dict = {}
+    captured: dict = {}
 
     async def fake_agent(profile, job_postings, **kwargs):
-        captured_kwargs.update(kwargs)
-        return result, {}
+        captured.update(kwargs)
+        return _make_research_result([_make_opportunity(job_id=1)]), {}
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
         patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
     ):
-        await score_next_job(db)
+        await score_next_batch(db)
 
-    assert captured_kwargs.get("feedback_examples") == ""
+    assert captured.get("feedback_examples") == ""
 
 
 # ---------------------------------------------------------------------------
@@ -402,68 +508,19 @@ async def test_no_feedback_passes_empty_string_to_agent():
 
 @pytest.mark.asyncio
 async def test_full_description_flag_passed_to_agent():
-    job_row = _make_job_row()
-    db = _db_with_job(job_row)
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
 
-    opp    = _make_opportunity()
-    result = _make_research_result(opp)
-
-    captured_kwargs: dict = {}
+    captured: dict = {}
 
     async def fake_agent(profile, job_postings, **kwargs):
-        captured_kwargs.update(kwargs)
-        return result, {}
+        captured.update(kwargs)
+        return _make_research_result([_make_opportunity(job_id=1)]), {}
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
         patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
     ):
-        await score_next_job(db)
+        await score_next_batch(db)
 
-    assert captured_kwargs.get("full_description") is True
-
-
-# ---------------------------------------------------------------------------
-# scoring_breakdown is JSON-encoded in the UPDATE
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_scoring_breakdown_json_encoded_in_update():
-    job_row = _make_job_row()
-    db      = _db_with_job(job_row)
-
-    row    = _make_score_row(category="Technical", requirement="Python, SQL",
-                              your_profile="Python, PostgreSQL", match="✅ Strong")
-    opp    = _make_opportunity(breakdown=[row])
-    result = _make_research_result(opp)
-
-    with (
-        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
-        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
-    ):
-        await score_next_job(db)
-
-    params = db.execute.call_args_list[2].args[1]
-    breakdown = json.loads(params["breakdown"])
-    assert len(breakdown) == 1
-    assert breakdown[0]["category"] == "Technical"
-    assert breakdown[0]["requirement"] == "Python, SQL"
-    assert breakdown[0]["match"] == "✅ Strong"
-
-
-@pytest.mark.asyncio
-async def test_scoring_breakdown_empty_list_when_not_provided():
-    job_row = _make_job_row()
-    db      = _db_with_job(job_row)
-
-    opp    = _make_opportunity(breakdown=[])
-    result = _make_research_result(opp)
-
-    with (
-        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
-        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
-    ):
-        await score_next_job(db)
-
-    params = db.execute.call_args_list[2].args[1]
-    assert json.loads(params["breakdown"]) == []
+    assert captured.get("full_description") is True

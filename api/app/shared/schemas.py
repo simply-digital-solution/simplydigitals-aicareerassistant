@@ -18,6 +18,7 @@ class ScoreRow(AgentBaseModel):
 
 
 class JobOpportunity(AgentBaseModel):
+    job_id: int
     role: str
     company: str
     link: str

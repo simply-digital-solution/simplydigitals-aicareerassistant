@@ -14,6 +14,7 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 {
   "opportunities": [
     {
+      "job_id": 374,
       "role": "exact job title from posting",
       "company": "company name",
       "link": "job posting URL or empty string",
@@ -66,6 +67,8 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 - A candidate who matches on experience and education but fails on 5 technical requirements should have a low fit_score.
 
 ### General
+- Each job posting is given with a `job_id`. You MUST echo that exact `job_id` back in the corresponding opportunity.
 - The number of items in `opportunities` MUST equal the number of postings given to you. Do not skip any.
+- If a job cannot be analysed, still return it with its `job_id`, `fit_score: 0.0`, empty `scoring_breakdown`, and a `risks` entry explaining why.
 - Do NOT invent job postings. Only analyze postings provided to you.
 - Return ONLY valid JSON. Start with { and end with }. No markdown fences, no explanation.

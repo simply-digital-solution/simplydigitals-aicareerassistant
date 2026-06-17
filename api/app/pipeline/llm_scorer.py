@@ -16,12 +16,13 @@ from sqlalchemy import text
 
 from app.modules.agents.research_agent import run_research_agent
 from app.modules.agents.router import _load_profile
+from app.shared.config import get_settings
 from app.shared.schemas import AgentError
 
 logger = logging.getLogger(__name__)
 
-SLEEP_BETWEEN_JOBS = 30       # seconds between scoring each job
-SLEEP_QUEUE_EMPTY  = 300      # seconds to wait when no unscored jobs remain
+SLEEP_BETWEEN_BATCHES = 30    # seconds between scoring batches
+SLEEP_QUEUE_EMPTY     = 300   # seconds to wait when no unscored jobs remain
 
 
 async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
@@ -61,12 +62,15 @@ async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
     return "\n".join(lines)
 
 
-async def score_next_job(db: AsyncSession) -> bool:
+async def score_next_batch(db: AsyncSession) -> bool:
     """
-    Pick one unscored job (oldest posted_at first), score it, write back.
-    Returns True if a job was processed, False if queue was empty.
+    Pick up to batch_size unscored jobs, score them in one LLM call, write back.
+    Matches results by job_id — missing or failed jobs are marked individually.
+    Returns True if any jobs were processed, False if queue was empty.
     """
-    row = await db.execute(
+    batch_size = get_settings().scorer_batch_size
+
+    rows = await db.execute(
         text("""
             SELECT jp.id, jp.user_id, jp.title, jp.company, jp.url,
                    jp.description, jp.inferred_industries
@@ -74,107 +78,124 @@ async def score_next_job(db: AsyncSession) -> bool:
             WHERE jp.scored = 0
               AND jp.score_error IS NULL
             ORDER BY jp.posted_at ASC, jp.scraped_at ASC
-            LIMIT 1
-        """)
+            LIMIT :batch_size
+        """),
+        {"batch_size": batch_size},
     )
-    job_row = row.mappings().first()
-    if not job_row:
+    job_rows = rows.mappings().all()
+    if not job_rows:
         return False
 
-    job_id   = job_row["id"]
-    user_id  = job_row["user_id"]
-    logger.info("llm_scorer: scoring job_id=%d (%s @ %s) for user_id=%d",
-                job_id, job_row["title"], job_row["company"], user_id)
+    # All jobs in a batch must belong to the same user (scorer loops per-user queue)
+    user_id = job_rows[0]["user_id"]
+    job_ids = [r["id"] for r in job_rows]
+    logger.info("llm_scorer: scoring batch of %d jobs %s for user_id=%d", len(job_rows), job_ids, user_id)
 
     profile = await _load_profile(db, user_id)
-
     feedback_examples = await _build_feedback_examples(db, user_id)
 
-    job_dict = {
-        "title":               job_row["title"],
-        "company":             job_row["company"],
-        "url":                 job_row["url"],
-        "description":         job_row["description"] or "",
-        "inferred_industries": json.loads(job_row["inferred_industries"] or "[]"),
-    }
+    job_dicts = [
+        {
+            "job_id":              r["id"],
+            "title":               r["title"],
+            "company":             r["company"],
+            "url":                 r["url"],
+            "description":         r["description"] or "",
+            "inferred_industries": json.loads(r["inferred_industries"] or "[]"),
+        }
+        for r in job_rows
+    ]
 
     t_start = time.monotonic()
     try:
         result, _ = await run_research_agent(
             profile=profile,
-            job_postings=[job_dict],
+            job_postings=job_dicts,
             search_filters={},
             db=db,
             user_id=user_id,
-            job_posting_id=job_id,
             request_type="scoring",
             feedback_examples=feedback_examples,
             full_description=True,
         )
-        logger.info("llm_scorer: job_id=%d LLM call completed in %.1fs", job_id, time.monotonic() - t_start)
+        logger.info("llm_scorer: batch LLM call completed in %.1fs", time.monotonic() - t_start)
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
-        logger.error("llm_scorer: agent failed for job_id=%d after %.1fs: %s", job_id, time.monotonic() - t_start, error_msg)
-        await db.execute(
-            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
-            {"err": error_msg, "id": job_id},
-        )
+        logger.error("llm_scorer: batch failed after %.1fs: %s", time.monotonic() - t_start, error_msg)
+        for jid in job_ids:
+            await db.execute(
+                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                {"err": error_msg, "id": jid},
+            )
         await db.commit()
         return True
 
-    if isinstance(result, AgentError) or not result.opportunities:
-        error_msg = result.error if isinstance(result, AgentError) else "LLM returned no opportunities"
-        logger.warning("llm_scorer: no output for job_id=%d: %s", job_id, error_msg)
-        await db.execute(
-            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
-            {"err": error_msg, "id": job_id},
-        )
+    if isinstance(result, AgentError):
+        error_msg = result.error
+        logger.warning("llm_scorer: agent error for batch %s: %s", job_ids, error_msg)
+        for jid in job_ids:
+            await db.execute(
+                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                {"err": error_msg, "id": jid},
+            )
         await db.commit()
         return True
 
-    opp = result.opportunities[0]
-    breakdown = [b.model_dump() for b in opp.scoring_breakdown] if opp.scoring_breakdown else []
-    await db.execute(
-        text("""
-            UPDATE job_postings SET
-                scored             = 1,
-                fit_score          = :fit_score,
-                reasons            = :reasons,
-                risks              = :risks,
-                key_keywords       = :keywords,
-                scoring_breakdown  = :breakdown,
-                score_error        = NULL,
-                scored_at          = :now
-            WHERE id = :id
-        """),
-        {
-            "fit_score": opp.fit_score,
-            "reasons":   json.dumps(opp.reasons),
-            "risks":     json.dumps(opp.risks),
-            "keywords":  json.dumps(opp.key_keywords),
-            "breakdown": json.dumps(breakdown),
-            "now":       datetime.now(timezone.utc).isoformat(),
-            "id":        job_id,
-        },
-    )
+    # Match results by job_id
+    returned = {opp.job_id: opp for opp in result.opportunities}
+    for jid in job_ids:
+        opp = returned.get(jid)
+        if opp is None:
+            logger.warning("llm_scorer: job_id=%d missing from batch response", jid)
+            await db.execute(
+                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                {"err": "Missing from LLM batch response", "id": jid},
+            )
+            continue
+
+        breakdown = [b.model_dump() for b in opp.scoring_breakdown] if opp.scoring_breakdown else []
+        await db.execute(
+            text("""
+                UPDATE job_postings SET
+                    scored             = 1,
+                    fit_score          = :fit_score,
+                    reasons            = :reasons,
+                    risks              = :risks,
+                    key_keywords       = :keywords,
+                    scoring_breakdown  = :breakdown,
+                    score_error        = NULL,
+                    scored_at          = :now
+                WHERE id = :id
+            """),
+            {
+                "fit_score": opp.fit_score,
+                "reasons":   json.dumps(opp.reasons),
+                "risks":     json.dumps(opp.risks),
+                "keywords":  json.dumps(opp.key_keywords),
+                "breakdown": json.dumps(breakdown),
+                "now":       datetime.now(timezone.utc).isoformat(),
+                "id":        jid,
+            },
+        )
+        logger.info("llm_scorer: job_id=%d scored fit=%.2f", jid, opp.fit_score)
+
     await db.commit()
-    logger.info("llm_scorer: job_id=%d scored fit=%.2f", job_id, opp.fit_score)
     return True
 
 
 async def run_scorer_loop(get_db_fn) -> None:
     """
-    Infinite loop — call score_next_job() until queue is empty, then sleep.
+    Infinite loop — call score_next_batch() until queue is empty, then sleep.
     get_db_fn is a callable that returns an async context manager yielding a DB session.
     """
     logger.info("llm_scorer: loop started")
     while True:
         try:
             async with get_db_fn() as db:
-                had_work = await score_next_job(db)
-            sleep_secs = SLEEP_BETWEEN_JOBS if had_work else SLEEP_QUEUE_EMPTY
+                had_work = await score_next_batch(db)
+            sleep_secs = SLEEP_BETWEEN_BATCHES if had_work else SLEEP_QUEUE_EMPTY
         except Exception as exc:
             logger.error("llm_scorer: unexpected error: %s", exc)
-            sleep_secs = SLEEP_BETWEEN_JOBS
+            sleep_secs = SLEEP_BETWEEN_BATCHES
 
         await asyncio.sleep(sleep_secs)

@@ -66,8 +66,10 @@ def _build_user_message(
         desc = str(job.get('description', ''))
         desc_text = desc if full_description else desc[:DESC_SNIPPET_CHARS]
         desc_label = "Description" if full_description else "Snippet"
+        job_id_line = f"job_id: {job['job_id']}\n" if job.get('job_id') else ""
         postings_block += (
             f"\n[{i}] {job.get('title', 'Unknown')} at {job.get('company', 'Unknown')}\n"
+            f"{job_id_line}"
             f"URL: {job.get('url', '')}\n"
             f"{industry_line}"
             f"{desc_label}: {desc_text}\n"
