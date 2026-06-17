@@ -11,12 +11,14 @@ AI Career Assistant — an agentic system that automates job searching, ATS scor
 ### Backend (`api/`)
 
 ```bash
-cd api && uvicorn app.main:app --reload --port 8000
-cd api && python -m pytest
-cd api && alembic upgrade head
-cd api && alembic revision --autogenerate -m "description"
+cd api && make dev        # start dev server (excludes .venv from reload watcher)
+cd api && make test       # run pytest
+cd api && make migrate    # alembic upgrade head
+cd api && poetry run python -m alembic revision --autogenerate -m "description"
 cd api && poetry install
 ```
+
+> Never use `uvicorn app.main:app --reload` directly — it watches `.venv/` and crashes if packages are installed while the server is running. Always use `make dev`.
 
 ### Frontend (`ui/`)
 
