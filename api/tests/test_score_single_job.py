@@ -173,3 +173,25 @@ async def test_only_one_job_sent_to_agent():
 
     assert len(captured["job_postings"]) == 1
     assert captured["job_postings"][0]["job_id"] == 5
+
+
+# ---------------------------------------------------------------------------
+# max_self_corrections=0 passed to run_research_agent (no reflexion retries)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_single_score_passes_max_self_corrections_zero():
+    db = _make_db(_make_job_row(job_id=1))
+    captured = {}
+
+    async def fake_agent(profile, job_postings, **kwargs):
+        captured["max_self_corrections"] = kwargs.get("max_self_corrections")
+        return _make_result(job_id=1), {}
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
+    ):
+        await score_single_job(db, job_id=1)
+
+    assert captured["max_self_corrections"] == 0

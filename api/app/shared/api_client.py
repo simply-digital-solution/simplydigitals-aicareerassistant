@@ -7,6 +7,7 @@ reflexion loop, DB recording, usage logging, budget update.
 Concrete subclasses only implement _call() — the raw HTTP exchange.
 Provider is selected at startup via the llm_provider config setting.
 """
+import asyncio
 import re
 import json
 import time
@@ -71,6 +72,7 @@ class BaseLLMClient(ABC):
         request_type: str = "unknown",
         use_coordinator: bool = False,
         stream_callback: Optional[callable] = None,
+        max_self_corrections: Optional[int] = None,
     ) -> tuple[T | AgentError, dict]:
         import logging
         _log = logging.getLogger("llm_timing")
@@ -100,15 +102,17 @@ class BaseLLMClient(ABC):
         _log.info("TIMING [%s] parse attempt 0: %s", agent_name, status)
 
         # Reflexion: retry on parse failure
+        max_corrections = max_self_corrections if max_self_corrections is not None else self._max_corrections
         attempt = 1
         last_error = status
-        while parsed is None and attempt <= self._max_corrections:
+        while parsed is None and attempt <= max_corrections:
             correction_prompt = build_reflexion_prompt(
-                raw_text, output_schema, attempt, self._max_corrections, last_error
+                raw_text, output_schema, attempt, max_corrections, last_error
             )
             messages.append({"role": "assistant", "content": raw_text})
             messages.append({"role": "user", "content": correction_prompt})
 
+            await asyncio.sleep(5)
             t_retry = time.monotonic()
             raw_text, extra_usage = await self._call(
                 messages, stream_callback,

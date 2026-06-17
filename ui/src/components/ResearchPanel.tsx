@@ -144,7 +144,11 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           {!!job.scored && job.fit_score !== null
             ? <FitBadge score={job.fit_score} />
             : (job.score_error || (job.scored && job.fit_score === null))
-            ? <span className="text-xs text-red-400 italic" title={job.score_error ?? 'Score incomplete'}>⚠ Something went wrong. Click Re-score</span>
+            ? <span className="text-xs text-red-400 italic" title={job.score_error ?? 'Score incomplete'}>
+                {job.score_error?.includes('429')
+                  ? '⚠ Rate limit reached — try again after a minute'
+                  : '⚠ Something went wrong. Click Re-score'}
+              </span>
             : <span className="text-xs text-gray-400 italic">Scoring…</span>
           }
           {!readOnly && <button title="Relevant" disabled={saving} onClick={handleThumbUp}

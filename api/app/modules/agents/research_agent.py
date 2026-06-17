@@ -98,6 +98,7 @@ async def run_research_agent(
     stream_callback: Optional[callable] = None,
     feedback_examples: str = "",
     full_description: bool = False,
+    max_self_corrections: Optional[int] = None,
 ) -> tuple[ResearchOutput | AgentError, dict]:
     """
     Run the research agent against a list of job postings.
@@ -121,4 +122,5 @@ async def run_research_agent(
         job_posting_id=job_posting_id,
         request_type=request_type,
         stream_callback=stream_callback,
+        max_self_corrections=max_self_corrections,
     )

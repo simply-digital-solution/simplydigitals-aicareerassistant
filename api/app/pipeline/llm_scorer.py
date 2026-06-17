@@ -234,6 +234,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
             request_type="scoring",
             feedback_examples=feedback_examples,
             full_description=True,
+            max_self_corrections=0,
         )
         logger.info("llm_scorer: single job LLM call completed in %.1fs", time.monotonic() - t_start)
     except Exception as exc:
