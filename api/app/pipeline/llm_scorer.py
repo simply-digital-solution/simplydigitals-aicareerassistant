@@ -157,15 +157,16 @@ async def score_next_batch(db: AsyncSession) -> bool:
         await db.execute(
             text("""
                 UPDATE job_postings SET
-                    scored             = 1,
-                    fit_score          = :fit_score,
-                    reasons            = :reasons,
-                    risks              = :risks,
-                    key_keywords       = :keywords,
-                    scoring_breakdown  = :breakdown,
-                    recommendation     = :recommendation,
-                    score_error        = NULL,
-                    scored_at          = :now
+                    scored               = 1,
+                    fit_score            = :fit_score,
+                    reasons              = :reasons,
+                    risks                = :risks,
+                    key_keywords         = :keywords,
+                    scoring_breakdown    = :breakdown,
+                    recommendation       = :recommendation,
+                    inferred_industries  = :industries,
+                    score_error          = NULL,
+                    scored_at            = :now
                 WHERE id = :id
             """),
             {
@@ -175,6 +176,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
                 "keywords":       json.dumps(opp.key_keywords),
                 "breakdown":      json.dumps(breakdown),
                 "recommendation": opp.recommendation or None,
+                "industries":     json.dumps(opp.inferred_industries),
                 "now":            datetime.now(timezone.utc).isoformat(),
                 "id":             jid,
             },

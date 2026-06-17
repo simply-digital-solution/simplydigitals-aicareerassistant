@@ -1050,15 +1050,16 @@ async def rescore_job(
     await db.execute(
         text("""
             UPDATE job_postings SET
-                scored            = 0,
-                fit_score         = NULL,
-                reasons           = NULL,
-                risks             = NULL,
-                key_keywords      = NULL,
-                scoring_breakdown = NULL,
-                recommendation    = NULL,
-                score_error       = NULL,
-                scored_at         = NULL
+                scored              = 0,
+                fit_score           = NULL,
+                reasons             = NULL,
+                risks               = NULL,
+                key_keywords        = NULL,
+                scoring_breakdown   = NULL,
+                recommendation      = NULL,
+                inferred_industries = '[]',
+                score_error         = NULL,
+                scored_at           = NULL
             WHERE id = :id AND user_id = :uid
         """),
         {"id": job_id, "uid": current_user.id},
