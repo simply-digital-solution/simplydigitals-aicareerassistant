@@ -2,7 +2,7 @@
 Unit tests for POST /research/jobs/rescore-all
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, call
 from fastapi import HTTPException
 
 
@@ -35,7 +35,7 @@ async def test_no_jobs_raises_404():
 
 
 # ---------------------------------------------------------------------------
-# Happy path — returns count of jobs rescored
+# Happy path — returns count of all jobs
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -74,3 +74,53 @@ async def test_only_unarchived_queried():
 
     select_sql = db.execute.call_args_list[0].args[0].text
     assert "archived = 0" in select_sql
+
+
+# ---------------------------------------------------------------------------
+# Jobs are sent in batches of scorer_batch_size, not all at once
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_jobs_batched_by_scorer_batch_size():
+    # 25 jobs with batch_size=20 → 2 calls: chunk of 20, then chunk of 5
+    all_ids = list(range(1, 26))
+    db = _make_db(job_ids=all_ids)
+
+    captured_chunks = []
+    async def fake_scorer(db, chunk):
+        captured_chunks.append(chunk)
+        return {jid: True for jid in chunk}
+
+    with (
+        patch("app.pipeline.llm_scorer.score_jobs_by_ids", fake_scorer),
+        patch("app.shared.config.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value.scorer_batch_size = 20
+        await _call_rescore_all(db)
+
+    assert len(captured_chunks) == 2
+    assert len(captured_chunks[0]) == 20
+    assert len(captured_chunks[1]) == 5
+    # All IDs covered, no duplicates
+    assert sorted(sum(captured_chunks, [])) == all_ids
+
+
+@pytest.mark.asyncio
+async def test_single_batch_when_jobs_fit():
+    # 5 jobs, batch_size=20 → exactly 1 call
+    db = _make_db(job_ids=[1, 2, 3, 4, 5])
+
+    captured_chunks = []
+    async def fake_scorer(db, chunk):
+        captured_chunks.append(chunk)
+        return {jid: True for jid in chunk}
+
+    with (
+        patch("app.pipeline.llm_scorer.score_jobs_by_ids", fake_scorer),
+        patch("app.shared.config.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value.scorer_batch_size = 20
+        await _call_rescore_all(db)
+
+    assert len(captured_chunks) == 1
+    assert captured_chunks[0] == [1, 2, 3, 4, 5]

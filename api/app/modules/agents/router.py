@@ -1282,8 +1282,9 @@ async def rescore_all_jobs(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Rescore every unarchived job for the current user in one LLM call."""
+    """Rescore every unarchived job for the current user in batches of scorer_batch_size."""
     from app.pipeline.llm_scorer import score_jobs_by_ids
+    from app.shared.config import get_settings
 
     rows = await db.execute(
         text("SELECT id FROM job_postings WHERE user_id = :uid AND archived = 0"),
@@ -1305,7 +1306,11 @@ async def rescore_all_jobs(
     )
     await db.commit()
 
-    await score_jobs_by_ids(db, all_ids)
+    batch_size = get_settings().scorer_batch_size
+    for i in range(0, len(all_ids), batch_size):
+        chunk = all_ids[i : i + batch_size]
+        await score_jobs_by_ids(db, chunk)
+
     return {"count": len(all_ids)}
 
 
