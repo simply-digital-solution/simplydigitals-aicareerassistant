@@ -276,6 +276,102 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
     return True
 
 
+async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, bool]:
+    """
+    Score a specific list of jobs in one LLM call — used by bulk rescore endpoint.
+    Returns a dict mapping job_id → True (scored) / False (failed/missing).
+    All jobs must belong to the same user; caller must verify ownership.
+    """
+    if not job_ids:
+        return {}
+
+    placeholders = ",".join(f":id{i}" for i in range(len(job_ids)))
+    params = {f"id{i}": jid for i, jid in enumerate(job_ids)}
+    rows = await db.execute(
+        text(f"""
+            SELECT id, user_id, title, company, url, description, inferred_industries
+            FROM job_postings
+            WHERE id IN ({placeholders})
+        """),
+        params,
+    )
+    job_rows = rows.mappings().all()
+    if not job_rows:
+        return {jid: False for jid in job_ids}
+
+    user_id = job_rows[0]["user_id"]
+    logger.info("llm_scorer: bulk rescoring %d jobs %s for user_id=%d", len(job_rows), job_ids, user_id)
+
+    profile = await _load_profile(db, user_id)
+    feedback_examples = await _build_feedback_examples(db, user_id)
+
+    job_dicts = [
+        {
+            "job_id":              r["id"],
+            "title":               r["title"],
+            "company":             r["company"],
+            "url":                 r["url"],
+            "description":         r["description"] or "",
+            "inferred_industries": json.loads(r["inferred_industries"] or "[]"),
+        }
+        for r in job_rows
+    ]
+
+    found_ids = {r["id"] for r in job_rows}
+    results: dict[int, bool] = {jid: False for jid in job_ids}
+
+    t_start = time.monotonic()
+    try:
+        result, meta = await run_research_agent(
+            profile=profile,
+            job_postings=job_dicts,
+            search_filters={},
+            db=db,
+            user_id=user_id,
+            request_type="scoring",
+            feedback_examples=feedback_examples,
+            full_description=True,
+        )
+        logger.info("llm_scorer: bulk rescore LLM call completed in %.1fs", time.monotonic() - t_start)
+    except Exception as exc:
+        error_msg = f"{type(exc).__name__}: {exc}"
+        logger.error("llm_scorer: bulk rescore failed: %s", error_msg)
+        for jid in found_ids:
+            await db.execute(
+                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                {"err": error_msg, "id": jid},
+            )
+        await db.commit()
+        return results
+
+    if isinstance(result, AgentError):
+        logger.warning("llm_scorer: bulk rescore agent error: %s", result.error)
+        for jid in found_ids:
+            await db.execute(
+                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                {"err": result.error, "id": jid},
+            )
+        await db.commit()
+        return results
+
+    bulk_model = meta.get("model")
+    returned = {opp.job_id: opp for opp in result.opportunities}
+    for jid in found_ids:
+        opp = returned.get(jid)
+        if opp is None:
+            logger.warning("llm_scorer: job_id=%d missing from bulk response", jid)
+            await db.execute(
+                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                {"err": "Missing from LLM bulk response", "id": jid},
+            )
+        else:
+            await _write_score(db, jid, opp, model=bulk_model)
+            results[jid] = True
+
+    await db.commit()
+    return results
+
+
 async def run_scorer_loop(get_db_fn) -> None:
     """
     Infinite loop — call score_next_batch() until queue is empty, then sleep.

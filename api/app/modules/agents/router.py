@@ -1056,6 +1056,68 @@ async def bulk_archive_jobs(
     await db.commit()
 
 
+class BulkRescoreRequest(BaseModel):
+    job_ids: list[int] = Field(min_length=2, max_length=100)
+
+
+@router.post("/research/jobs/bulk-rescore")
+async def bulk_rescore_jobs(
+    body: BulkRescoreRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Score multiple jobs in one LLM call. Returns updated job rows keyed by id."""
+    from app.pipeline.llm_scorer import score_jobs_by_ids
+
+    # Verify ownership — silently drop IDs not owned by this user
+    placeholders = ",".join(f":id{i}" for i in range(len(body.job_ids)))
+    params: dict = {"uid": current_user.id}
+    for i, jid in enumerate(body.job_ids):
+        params[f"id{i}"] = jid
+
+    owned = await db.execute(
+        text(f"SELECT id FROM job_postings WHERE user_id = :uid AND id IN ({placeholders})"),
+        params,
+    )
+    owned_ids = [r[0] for r in owned.fetchall()]
+    if not owned_ids:
+        raise HTTPException(404, "No owned jobs found")
+
+    # Reset fields before scoring
+    reset_params: dict = {"uid": current_user.id}
+    reset_placeholders = ",".join(f":id{i}" for i in range(len(owned_ids)))
+    for i, jid in enumerate(owned_ids):
+        reset_params[f"id{i}"] = jid
+    await db.execute(
+        text(f"""
+            UPDATE job_postings SET
+                scored = 0, fit_score = NULL, reasons = NULL, risks = NULL,
+                key_keywords = NULL, scoring_breakdown = NULL, recommendation = NULL,
+                inferred_industries = '[]', score_error = NULL, scored_at = NULL
+            WHERE user_id = :uid AND id IN ({reset_placeholders})
+        """),
+        reset_params,
+    )
+    await db.commit()
+
+    await score_jobs_by_ids(db, owned_ids)
+
+    # Fetch and return updated rows
+    rows = await db.execute(
+        text(f"""
+            SELECT id, mcf_uuid, title, company, url, location,
+                   inferred_industries, posted_at, scraped_at,
+                   scored, fit_score, reasons, risks, key_keywords,
+                   scoring_breakdown, recommendation, score_error, scored_at, scored_by_model
+            FROM job_postings
+            WHERE id IN ({reset_placeholders})
+        """),
+        reset_params,
+    )
+    jobs = [dict(r) for r in rows.mappings().all()]
+    return {"jobs": jobs}
+
+
 @router.post("/research/jobs/{job_id}/archive", status_code=204)
 async def archive_job(
     job_id: int,

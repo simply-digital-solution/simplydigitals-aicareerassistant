@@ -518,6 +518,27 @@ export default function ResearchPanel() {
     },
   })
 
+  const bulkRescoreMutation = useMutation({
+    mutationFn: (ids: number[]) => researchApi.bulkRescoreJobs(ids).then(r => ({ ids, jobs: r.data.jobs })),
+    onMutate: (ids) => {
+      setRescoringIds(prev => new Set([...prev, ...ids]))
+    },
+    onSuccess: ({ ids, jobs }) => {
+      setRescoringIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next })
+      setSelectedIds(new Set())
+      const jobMap = Object.fromEntries(jobs.map(j => [j.id, j]))
+      queryClient.setQueryData<StoredJobsResponse>(
+        ['stored-jobs', page, filterRole, filterDays, filterScore],
+        old => old
+          ? { ...old, jobs: old.jobs.map(j => jobMap[j.id] ? { ...j, ...jobMap[j.id] } : j) }
+          : old
+      )
+    },
+    onError: (_err, ids) => {
+      setRescoringIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next })
+    },
+  })
+
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
@@ -697,27 +718,37 @@ export default function ResearchPanel() {
           </div>
         )}
 
-        {/* Bulk action bar */}
+        {/* Floating bulk action bar */}
         {selectedIds.size > 0 && (
-          <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2.5">
-            <span className="text-sm text-indigo-700 font-medium">
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+            <span className="text-sm font-medium text-gray-200">
               {selectedIds.size} job{selectedIds.size > 1 ? 's' : ''} selected
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSelectedIds(new Set())}
-                className="text-xs text-indigo-500 hover:text-indigo-700 px-2 py-1 rounded"
-              >
-                Clear
-              </button>
-              <button
-                onClick={() => bulkArchiveMutation.mutate(Array.from(selectedIds))}
-                disabled={bulkArchiveMutation.isPending}
-                className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
-              >
-                {bulkArchiveMutation.isPending ? 'Archiving…' : `Archive ${selectedIds.size} job${selectedIds.size > 1 ? 's' : ''}`}
-              </button>
-            </div>
+            <div className="w-px h-4 bg-gray-600" />
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs text-gray-400 hover:text-white transition-colors px-1"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => bulkArchiveMutation.mutate(Array.from(selectedIds))}
+              disabled={bulkArchiveMutation.isPending || bulkRescoreMutation.isPending}
+              className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 transition-colors"
+            >
+              {bulkArchiveMutation.isPending ? 'Archiving…' : 'Archive'}
+            </button>
+            <button
+              onClick={() => bulkRescoreMutation.mutate(Array.from(selectedIds))}
+              disabled={selectedIds.size < 2 || bulkRescoreMutation.isPending || bulkArchiveMutation.isPending}
+              title={selectedIds.size < 2 ? 'Select at least 2 jobs to rescore' : `Rescore ${selectedIds.size} jobs in one call`}
+              className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-3.5 h-3.5 ${bulkRescoreMutation.isPending ? 'animate-spin' : ''}`}>
+                <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.389Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0v2.43l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z" clipRule="evenodd" />
+              </svg>
+              {bulkRescoreMutation.isPending ? 'Rescoring…' : 'Rescore'}
+            </button>
           </div>
         )}
 
