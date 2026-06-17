@@ -163,18 +163,20 @@ async def score_next_batch(db: AsyncSession) -> bool:
                     risks              = :risks,
                     key_keywords       = :keywords,
                     scoring_breakdown  = :breakdown,
+                    recommendation     = :recommendation,
                     score_error        = NULL,
                     scored_at          = :now
                 WHERE id = :id
             """),
             {
-                "fit_score": opp.fit_score,
-                "reasons":   json.dumps(opp.reasons),
-                "risks":     json.dumps(opp.risks),
-                "keywords":  json.dumps(opp.key_keywords),
-                "breakdown": json.dumps(breakdown),
-                "now":       datetime.now(timezone.utc).isoformat(),
-                "id":        jid,
+                "fit_score":      opp.fit_score,
+                "reasons":        json.dumps(opp.reasons),
+                "risks":          json.dumps(opp.risks),
+                "keywords":       json.dumps(opp.key_keywords),
+                "breakdown":      json.dumps(breakdown),
+                "recommendation": opp.recommendation or None,
+                "now":            datetime.now(timezone.utc).isoformat(),
+                "id":             jid,
             },
         )
         logger.info("llm_scorer: job_id=%d scored fit=%.2f", jid, opp.fit_score)

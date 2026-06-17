@@ -28,6 +28,7 @@ class JobOpportunity(AgentBaseModel):
     key_keywords: list[str] = Field(min_length=1, max_length=10)
     inferred_industries: list[str] = Field(default_factory=list)
     scoring_breakdown: list[ScoreRow] = Field(default_factory=list)
+    recommendation: str = ""
 
 
 class ResearchOutput(AgentBaseModel):

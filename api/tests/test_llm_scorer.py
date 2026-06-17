@@ -75,14 +75,15 @@ def _make_score_row(category="Technical", requirement="Python, SQL",
 
 
 def _make_opportunity(job_id=1, fit_score=0.85, reasons=None, risks=None,
-                      keywords=None, breakdown=None):
+                      keywords=None, breakdown=None, recommendation="Apply — good fit."):
     opp = MagicMock()
-    opp.job_id          = job_id
-    opp.fit_score       = fit_score
-    opp.reasons         = reasons  or ["Strong ML skills match"]
-    opp.risks           = risks    or ["No Python 3.11 mentioned"]
-    opp.key_keywords    = keywords or ["PyTorch", "SQL"]
+    opp.job_id            = job_id
+    opp.fit_score         = fit_score
+    opp.reasons           = reasons  or ["Strong ML skills match"]
+    opp.risks             = risks    or ["No Python 3.11 mentioned"]
+    opp.key_keywords      = keywords or ["PyTorch", "SQL"]
     opp.scoring_breakdown = breakdown if breakdown is not None else []
+    opp.recommendation    = recommendation
     return opp
 
 
@@ -396,6 +397,46 @@ async def test_scoring_breakdown_empty_list_when_not_provided():
 
     params = db.execute.call_args_list[2].args[1]
     assert json.loads(params["breakdown"]) == []
+
+
+# ---------------------------------------------------------------------------
+# recommendation stored in the UPDATE
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_recommendation_stored_in_update():
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
+
+    opp    = _make_opportunity(job_id=1, recommendation="Apply — strong match.")
+    result = _make_research_result([opp])
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_batch(db)
+
+    params = db.execute.call_args_list[2].args[1]
+    assert params["recommendation"] == "Apply — strong match."
+
+
+@pytest.mark.asyncio
+async def test_empty_recommendation_stored_as_none():
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
+
+    opp    = _make_opportunity(job_id=1, recommendation="")
+    result = _make_research_result([opp])
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_batch(db)
+
+    params = db.execute.call_args_list[2].args[1]
+    assert params["recommendation"] is None
 
 
 # ---------------------------------------------------------------------------

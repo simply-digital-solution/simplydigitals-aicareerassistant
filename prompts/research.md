@@ -26,12 +26,13 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
         { "category": "Experience",  "requirement": "12+ years IT, 3+ in Banking/FI",              "your_profile": "20+ years, all in capital markets technology",                      "match": "✅ Exceeds" },
         { "category": "Experience",  "requirement": "8+ years technical project management",        "your_profile": "PO/PEM/SFA roles — BA/PO-flavoured, not pure technical PM",          "match": "⚠️ Partial" },
         { "category": "Education",   "requirement": "Degree in IT/CS",                             "your_profile": "B.Tech CS&E",                                                       "match": "✅ Strong" },
-        { "category": "Domain",      "requirement": "KYC/AML system implementation",               "your_profile": "No evidence anywhere",                                              "match": "❌ Hard gap" },
+        { "category": "Domain",      "requirement": "KYC/AML system implementation",               "your_profile": "No evidence anywhere",                                              "match": "❌ Hard gate" },
         { "category": "Technical",   "requirement": "Unix Shell Scripting",                        "your_profile": "No evidence — technical depth is Murex/interface specs, not scripting", "match": "❌ Critical gap" },
         { "category": "Technical",   "requirement": "Oracle",                                      "your_profile": "No evidence",                                                      "match": "❌ Gap" },
         { "category": "Technical",   "requirement": "Java",                                        "your_profile": "No evidence",                                                      "match": "❌ Gap" },
         { "category": "Soft Skills", "requirement": "Stakeholder communication, business translation", "your_profile": "Strong — core strength across all roles",                   "match": "✅ Strong" }
-      ]
+      ],
+      "recommendation": "Apply — strong experience and domain match, but prepare to address the KYC/AML gap directly in the cover letter. The hard gate on KYC/AML makes this a stretch; if the JD says 'mandatory', deprioritise."
     }
   ]
 }
@@ -53,12 +54,20 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 
 ### scoring_breakdown — CRITICAL INSTRUCTIONS
 - Extract every meaningful, distinct requirement from the JD as its own row.
+- Copy the requirement text verbatim or near-verbatim from the JD — do not paraphrase into generic terms.
 - If two requirements have different match levels, they MUST be separate rows. Do not group them.
 - If two requirements are closely related AND have the same match level, you may group them in one row.
 - `category`: assign one of — Technical, Experience, Education, Domain, Soft Skills, Certification, Location. Use your judgement for anything that does not fit.
 - `requirement`: the specific JD requirement, concise but precise (copy key phrases from the JD).
 - `your_profile`: what the candidate actually brings for that specific requirement. Be specific — reference their actual background, not generic praise.
-- `match`: a short label you write freely. Examples: ✅ Exceeds, ✅ Strong, ✅ Partial, ⚠️ Partial, ⚠️ Weak, ❌ Gap, ❌ Hard gap, ❌ Critical gap. Use ✅ for good matches, ⚠️ for partial/weak, ❌ for gaps.
+- `match`: a short label you write freely. Use ✅ for good matches, ⚠️ for partial/weak, ❌ for gaps. When a JD requirement uses language like "must", "required", "mandatory", or "essential" and the candidate does not meet it, mark it as `❌ Hard gate`.
+
+### recommendation — REQUIRED
+- Write a 2–4 sentence narrative advising the candidate on whether and how to pursue this role.
+- Lead with a clear action: "Apply", "Apply with caveats", "Skip unless...", or "Do not apply".
+- Name the strongest reasons to apply AND the most critical gaps or hard gates the candidate must address.
+- If there are hard gates (❌ Hard gate rows), call them out explicitly and state whether the candidate can credibly address them or should deprioritise.
+- Be direct — this field is the candidate's decision brief, not marketing copy.
 
 ### Honesty — this is mandatory
 - Be brutally honest. A missing skill is a gap — call it out clearly.
