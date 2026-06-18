@@ -284,6 +284,11 @@ export const researchApi = {
     api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/retry-drive-upload`),
 }
 
+// Account status API
+export const accountApi = {
+  status: () => api.get<{ scoring_suspended: boolean }>('/me/status'),
+}
+
 // Stats API
 export interface DayStat { date: string; count: number }
 export interface MonthStat { month: string; count: number }

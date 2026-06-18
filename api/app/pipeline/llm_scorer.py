@@ -100,8 +100,10 @@ async def score_next_batch(db: AsyncSession) -> bool:
             SELECT jp.id, jp.user_id, jp.title, jp.company, jp.url,
                    jp.description, jp.inferred_industries
             FROM job_postings jp
+            JOIN users u ON u.id = jp.user_id
             WHERE jp.scored = 0
               AND jp.rescoring = 0
+              AND u.scoring_suspended = 0
               AND (
                 jp.score_error IS NULL
                 OR jp.scored_at < datetime('now', '-30 minutes')

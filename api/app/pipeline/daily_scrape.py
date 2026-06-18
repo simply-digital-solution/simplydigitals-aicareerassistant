@@ -150,7 +150,11 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
 async def scrape_for_all_users(db: AsyncSession) -> None:
     """Called by the scheduler — scrapes for every user who has a profile."""
     t_start = time.monotonic()
-    rows = await db.execute(text("SELECT user_id FROM profiles"))
+    rows = await db.execute(text("""
+        SELECT p.user_id FROM profiles p
+        JOIN users u ON u.id = p.user_id
+        WHERE u.scoring_suspended = 0
+    """))
     user_ids = [r[0] for r in rows.fetchall()]
     logger.info("scrape_for_all_users: starting — found %d users: %s", len(user_ids), user_ids)
 

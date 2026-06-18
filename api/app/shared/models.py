@@ -22,6 +22,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)
+    scoring_suspended = Column(Boolean, default=False, nullable=False)
 
     applications = relationship("Application", back_populates="user", lazy="dynamic")
     profile = relationship("Profile", back_populates="user", uselist=False)
@@ -103,11 +104,12 @@ class GeneratedResume(Base):
     user_id        = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     job_posting_id = Column(Integer, ForeignKey("job_postings.id"), nullable=False)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True)
-    resume_json    = Column(Text, nullable=False)
-    drive_file_id  = Column(Text)
-    drive_link     = Column(Text)
-    created_at     = Column(DateTime(timezone=True), default=_now)
-    updated_at     = Column(DateTime(timezone=True), default=_now, onupdate=_now)
+    resume_json      = Column(Text, nullable=False)
+    drive_file_id    = Column(Text)
+    drive_link       = Column(Text)
+    drive_pdf_file_id = Column(Text)
+    created_at       = Column(DateTime(timezone=True), default=_now)
+    updated_at       = Column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
 # ---------------------------------------------------------------------------

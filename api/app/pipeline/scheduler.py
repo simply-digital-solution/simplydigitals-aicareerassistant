@@ -1,8 +1,11 @@
 """
-Scheduler — APScheduler cron job + scorer loop launcher.
+Scheduler — APScheduler cron jobs + scorer loop launcher.
 
-Cron:  daily at 07:00 Asia/Singapore  → scrape_for_all_users()
-Loop:  continuous asyncio task         → run_scorer_loop()
+Crons:
+  05:00 SGT daily  → scrape_for_all_users()
+  06:00 SGT daily  → suspend_inactive_users()
+Loop:
+  continuous asyncio task → run_scorer_loop()
 """
 import asyncio
 import logging
@@ -28,6 +31,15 @@ async def _run_daily_scrape() -> None:
             logger.info("scheduler: next scrape scheduled at %s", job.next_run_time.isoformat(timespec='seconds'))
 
 
+async def _run_daily_suspension() -> None:
+    from app.shared.database import get_db_context
+    from app.pipeline.suspension import suspend_inactive_users
+    logger.info("scheduler: daily suspension check triggered")
+    async with get_db_context() as db:
+        suspended = await suspend_inactive_users(db)
+    logger.info("scheduler: suspension check done — %d user(s) suspended", len(suspended))
+
+
 def start(get_db_context_fn) -> None:
     """Start the scheduler and scorer loop. Call once from app lifespan."""
     global _scheduler, _scorer_task
@@ -40,8 +52,15 @@ def start(get_db_context_fn) -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _run_daily_suspension,
+        trigger=CronTrigger(hour=6, minute=0, timezone="Asia/Singapore"),
+        id="daily_suspension",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
-    logger.info("scheduler: started — daily scrape at 05:00 SGT")
+    logger.info("scheduler: started — scrape 05:00 SGT, suspension check 06:00 SGT")
 
     from app.pipeline.llm_scorer import run_scorer_loop
     _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))

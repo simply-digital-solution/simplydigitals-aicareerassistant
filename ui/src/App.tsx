@@ -12,6 +12,7 @@ import ProfilePanel from './components/ProfilePanel'
 import StatsPanel from './components/StatsPanel'
 import GoogleDriveButton from './components/GoogleDriveButton'
 import HelpButton from './components/HelpButton'
+import SuspendedBanner from './components/SuspendedBanner'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -150,6 +151,7 @@ function Layout({
       </nav>
 
       <DriveBanner />
+      <SuspendedBanner />
 
       <main>
         <TabContent tab={activeTab} onTabChange={onTabChange} />

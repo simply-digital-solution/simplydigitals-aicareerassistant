@@ -13,6 +13,7 @@ from app.modules.agents.router import router as agents_router
 from app.modules.profile.router import router as profile_router
 from app.modules.scoring.router import router as scoring_router
 from app.modules.stats.router import router as stats_router
+from app.modules.admin.router import router as admin_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ app.include_router(agents_router)
 app.include_router(profile_router)
 app.include_router(scoring_router)
 app.include_router(stats_router)
+app.include_router(admin_router)
 
 
 @app.exception_handler(Exception)
