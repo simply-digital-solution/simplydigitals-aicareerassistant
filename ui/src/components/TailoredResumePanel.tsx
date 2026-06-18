@@ -300,6 +300,7 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false, 
   const retryMutation = useMutation({
     mutationFn: () => researchApi.retryDriveUpload(jobId).then(r => r.data),
     onSuccess: (data) => {
+      generateMutation.reset()  // clear stale 207 data so cache (with no drive_error) wins
       queryClient.setQueryData(['generated-resume', jobId], data)
       setGenerateError('')
     },

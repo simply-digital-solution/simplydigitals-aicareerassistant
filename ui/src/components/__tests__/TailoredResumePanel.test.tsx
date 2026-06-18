@@ -266,7 +266,7 @@ describe('TailoredResumePanel', () => {
     expect(screen.getByRole('button', { name: /retry drive upload/i })).toBeInTheDocument()
   })
 
-  it('calls retryDriveUpload when Retry Upload is clicked', async () => {
+  it('calls retryDriveUpload when Retry Upload is clicked and hides button on success', async () => {
     mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
     const resumeWith207 = { ...makeResume(), drive_error: 'Connection timed out' }
     mockResearchApi.generateResume.mockResolvedValue({ data: resumeWith207 } as never)
@@ -280,6 +280,10 @@ describe('TailoredResumePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /retry drive upload/i }))
     await waitFor(() => expect(mockResearchApi.retryDriveUpload).toHaveBeenCalledWith(5))
+    // Retry button should disappear after successful upload
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /retry drive upload/i })).not.toBeInTheDocument(),
+    )
   })
 
   it('shows generation error when generate fails', async () => {
