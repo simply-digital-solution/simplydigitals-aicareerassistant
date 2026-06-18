@@ -257,6 +257,7 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [generateError, setGenerateError] = useState('')
   const [additionalContext, setAdditionalContext] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -277,10 +278,15 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
   })
 
   const generateMutation = useMutation({
-    mutationFn: (ctx: string) => researchApi.generateResume(jobId, ctx).then(r => r.data),
+    mutationFn: (ctx: string) => { setGenerateError(''); return researchApi.generateResume(jobId, ctx).then(r => r.data) },
     onSuccess: (data) => {
       queryClient.setQueryData(['generated-resume', jobId], data)
       setAdditionalContext('')
+      setGenerateError('')
+    },
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      const detail = err?.response?.data?.detail ?? 'Generation failed. Please try again.'
+      setGenerateError(detail)
     },
   })
 
@@ -411,6 +417,7 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
             </div>
 
             {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
+            {generateError && <p className="text-xs text-red-500">{generateError}</p>}
 
             {!readOnly && (
               <input
@@ -482,11 +489,7 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
               aria-label="Select resume file to upload to Drive"
             />
             {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
-            {generateMutation.isError && (
-              <p className="text-xs text-red-500">
-                {(generateMutation.error as Error)?.message ?? 'Generation failed. Please try again.'}
-              </p>
-            )}
+            {generateError && <p className="text-xs text-red-500">{generateError}</p>}
           </>
         ) : null}
       </div>
