@@ -657,7 +657,7 @@ export default function ResearchPanel() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setConfirmRescoreAll(true)}
-              disabled={confirmRescoreAll || rescoreAllMutation.isPending || rescoringIds.size > 0 || bulkRescoreMutation.isPending}
+              disabled={!data?.total || confirmRescoreAll || rescoreAllMutation.isPending || rescoringIds.size > 0 || bulkRescoreMutation.isPending}
               className="text-xs bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
               title="Rescore all jobs for your profile"
             >
