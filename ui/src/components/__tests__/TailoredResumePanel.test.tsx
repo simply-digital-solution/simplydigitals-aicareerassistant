@@ -195,11 +195,11 @@ describe('TailoredResumePanel', () => {
     expect(screen.getByRole('button', { name: /regenerate/i })).toBeDisabled()
   })
 
-  it('does not show Download button when no drive_file_id yet', async () => {
+  it('does not show Download link when no drive_file_id yet', async () => {
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     renderPanel()
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
-    expect(screen.queryByRole('button', { name: /download resume/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /download resume from google drive/i })).not.toBeInTheDocument()
   })
 
   it('renders experience bullets', async () => {
@@ -235,27 +235,12 @@ describe('TailoredResumePanel', () => {
     expect(screen.getByRole('button', { name: /toggle resume preview/i })).toBeInTheDocument()
   })
 
-  it('shows Download dropdown button when drive_file_id exists', async () => {
+  it('shows Download link when drive_file_id exists', async () => {
     const resumeWithDrive = { ...makeResume(), drive_file_id: 'abc123', drive_link: 'https://drive.google.com/file/d/abc123/view' }
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithDrive } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     renderPanel()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /download resume/i })).toBeInTheDocument(),
-    )
-  })
-
-  it('shows .docx and .pdf options when Download is clicked', async () => {
-    const resumeWithDrive = { ...makeResume(), drive_file_id: 'abc123', drive_link: 'https://drive.google.com/file/d/abc123/view' }
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithDrive } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
-    renderPanel()
-    await waitFor(() => screen.getByRole('button', { name: /download resume/i }))
-    fireEvent.click(screen.getByRole('button', { name: /download resume/i }))
-    expect(screen.getByRole('link', { name: /download as docx/i })).toHaveAttribute(
-      'href', 'https://drive.google.com/uc?export=download&id=abc123',
-    )
-    expect(screen.getByRole('link', { name: /download as pdf/i })).toHaveAttribute(
-      'href', 'https://drive.google.com/uc?export=pdf&id=abc123',
-    )
+    const link = await screen.findByRole('link', { name: /download resume from google drive/i })
+    expect(link).toHaveAttribute('href', 'https://drive.google.com/uc?export=download&id=abc123')
   })
 
   it('shows Open in Drive link when drive_link exists', async () => {
