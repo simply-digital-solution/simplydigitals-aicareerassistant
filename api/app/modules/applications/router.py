@@ -92,7 +92,7 @@ async def get_pipeline(
     result = await db.execute(
         select(Application)
         .where(Application.user_id == current_user.id)
-        .order_by(Application.fit_score.desc())
+        .order_by(Application.status_updated_at.desc())
     )
     apps = result.scalars().all()
 
@@ -114,8 +114,9 @@ async def move_pipeline(
         raise HTTPException(400, f"Invalid status. Must be one of: {VALID_STATUSES}")
     app = await _get_or_404(db, body.application_id, current_user.id)
     app.status = body.new_status
+    from datetime import date, datetime, timezone
+    app.status_updated_at = datetime.now(timezone.utc)
     if body.new_status == 'applied' and not app.applied_at:
-        from datetime import date
         app.applied_at = date.today()
     await db.flush()
     await db.refresh(app)

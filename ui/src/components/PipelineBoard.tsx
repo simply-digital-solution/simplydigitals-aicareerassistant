@@ -2,13 +2,16 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { applicationsApi } from '../api/client'
 import type { Application, PipelineBoard } from '../api/client'
+import type { Tab } from '../App'
 
-const COLUMNS: { key: string; label: string; color: string }[] = [
-  { key: 'selected', label: 'Selected', color: 'bg-gray-100 border-gray-300' },
-  { key: 'applied', label: 'Applied', color: 'bg-blue-50 border-blue-300' },
-  { key: 'interviewing', label: 'Interviewing', color: 'bg-yellow-50 border-yellow-300' },
-  { key: 'offered', label: 'Offered', color: 'bg-green-50 border-green-300' },
-  { key: 'rejected', label: 'Rejected', color: 'bg-red-50 border-red-300' },
+const LANE_LIMIT = 4
+
+const COLUMNS: { key: string; label: string; color: string; tab: Tab }[] = [
+  { key: 'selected',     label: 'Selected',     color: 'bg-gray-100 border-gray-300',   tab: 'Selected' },
+  { key: 'applied',      label: 'Applied',       color: 'bg-blue-50 border-blue-300',    tab: 'Applied' },
+  { key: 'interviewing', label: 'Interviewing',  color: 'bg-yellow-50 border-yellow-300', tab: 'Pipeline' },
+  { key: 'offered',      label: 'Offered',       color: 'bg-green-50 border-green-300',  tab: 'Pipeline' },
+  { key: 'rejected',     label: 'Rejected',      color: 'bg-red-50 border-red-300',      tab: 'Pipeline' },
 ]
 
 function ScoreBadge({ score }: { score?: number }) {
@@ -84,7 +87,7 @@ function AddApplicationModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   )
 }
 
-export default function PipelineBoard() {
+export default function PipelineBoard({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const queryClient = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
 
@@ -122,6 +125,8 @@ export default function PipelineBoard() {
       <div className="flex gap-4 overflow-x-auto pb-4">
         {COLUMNS.map(col => {
           const apps = board?.[col.key] ?? []
+          const visible = apps.slice(0, LANE_LIMIT)
+          const overflow = apps.length - visible.length
           return (
             <div key={col.key} className="shrink-0 w-64">
               <div className={`rounded-xl border-2 ${col.color} p-3 min-h-96`}>
@@ -132,13 +137,21 @@ export default function PipelineBoard() {
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {apps.map(app => (
+                  {visible.map(app => (
                     <ApplicationCard key={app.id} app={app} />
                   ))}
                   {apps.length === 0 && (
                     <p className="text-center text-gray-400 text-xs py-8">No applications</p>
                   )}
                 </div>
+                {overflow > 0 && (
+                  <button
+                    onClick={() => onNavigate(col.tab)}
+                    className="mt-3 w-full text-xs text-indigo-600 hover:text-indigo-800 font-medium py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+                  >
+                    View all ({apps.length})
+                  </button>
+                )}
               </div>
             </div>
           )

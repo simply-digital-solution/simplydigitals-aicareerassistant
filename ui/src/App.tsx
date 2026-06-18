@@ -16,13 +16,13 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 })
 
-type Tab = 'Pipeline' | 'Research' | 'Selected' | 'Applied' | 'Interview' | 'Drafts' | 'Profile'
+export type Tab = 'Pipeline' | 'Research' | 'Selected' | 'Applied' | 'Interview' | 'Drafts' | 'Profile'
 
 const TABS: Tab[] = ['Pipeline', 'Research', 'Selected', 'Applied', 'Interview', 'Drafts', 'Profile']
 
-function TabContent({ tab }: { tab: Tab }) {
+function TabContent({ tab, onTabChange }: { tab: Tab; onTabChange: (t: Tab) => void }) {
   switch (tab) {
-    case 'Pipeline':  return <PipelineBoard />
+    case 'Pipeline':  return <PipelineBoard onNavigate={onTabChange} />
     case 'Research':  return <ResearchPanel />
     case 'Selected':  return <SelectedJobsPanel />
     case 'Applied':   return <AppliedJobsPanel />
@@ -91,7 +91,7 @@ function Layout({
         </div>
       </nav>
       <main>
-        <TabContent tab={activeTab} />
+        <TabContent tab={activeTab} onTabChange={onTabChange} />
       </main>
 
       {driveToast && (

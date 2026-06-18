@@ -83,6 +83,7 @@ class Application(Base):
     resume_version = Column(String(50))   # which resume version was used
     notes = Column(Text)
     job_posting_id = Column(Integer, ForeignKey("job_postings.id"), nullable=True, index=True)
+    status_updated_at = Column(DateTime(timezone=True), default=_now)
     created_at = Column(DateTime(timezone=True), default=_now)
     updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)
 

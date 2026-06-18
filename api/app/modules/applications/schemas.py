@@ -41,6 +41,7 @@ class ApplicationResponse(BaseModel):
     applied_at: Optional[date]
     notes: Optional[str]
     job_posting_id: Optional[int]
+    status_updated_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
 
