@@ -36,10 +36,6 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash-lite"
 
-    # Groq (scoring provider — higher free-tier quota than Gemini)
-    groq_api_key: str = ""
-    groq_model: str = "llama-3.1-8b-instant"
-
     # Agent limits
     max_tool_iterations: int = 25
     max_self_corrections: int = 3

@@ -16,7 +16,7 @@ from sqlalchemy import text
 
 from app.modules.agents.research_agent import run_research_agent
 from app.modules.agents.router import _load_profile
-from app.shared.api_client import get_scoring_client
+from app.shared.api_client import get_claude_client
 from app.shared.config import get_settings
 from app.shared.schemas import AgentError
 
@@ -164,7 +164,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
             request_type="scoring",
             feedback_examples=feedback_examples,
             full_description=True,
-            llm_client=get_scoring_client(),
+            llm_client=get_claude_client(),
         )
         logger.info("llm_scorer: batch LLM call completed in %.1fs", time.monotonic() - t_start)
     except Exception as exc:
@@ -324,7 +324,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
             feedback_examples=feedback_examples,
             full_description=True,
             max_self_corrections=0,
-            llm_client=get_scoring_client(),
+            llm_client=get_claude_client(),
         )
         logger.info("llm_scorer: single job LLM call completed in %.1fs", time.monotonic() - t_start)
     except Exception as exc:
@@ -461,7 +461,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
             request_type="scoring",
             feedback_examples=feedback_examples,
             full_description=True,
-            llm_client=get_scoring_client(),
+            llm_client=get_claude_client(),
         )
         logger.info("llm_scorer: bulk rescore LLM call completed in %.1fs", time.monotonic() - t_start)
     except Exception as exc:

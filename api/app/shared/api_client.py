@@ -464,84 +464,6 @@ class GeminiClient(BaseLLMClient):
 
 
 # ------------------------------------------------------------------
-# Groq provider (OpenAI-compatible, higher free-tier quota)
-# ------------------------------------------------------------------
-
-GROQ_BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
-
-
-class GroqClient(BaseLLMClient):
-    def __init__(self):
-        settings = get_settings()
-        self._model = settings.groq_model
-        self._api_key = settings.groq_api_key
-        self._max_corrections = settings.max_self_corrections
-
-    async def _call(
-        self,
-        messages: list[dict],
-        stream_callback: Optional[callable] = None,
-        *,
-        user_id: Optional[int] = None,
-        job_posting_id: Optional[int] = None,
-        request_type: str = "unknown",
-        db: Optional[AsyncSession] = None,
-    ) -> tuple[str, dict]:
-        from app.shared.rate_limiter import groq_rate_limiter
-        await groq_rate_limiter.acquire()
-
-        payload = {
-            "model": self._model,
-            "messages": messages,
-            "temperature": 0.1,
-            "max_tokens": 8192,
-        }
-
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-        }
-
-        input_tokens = sum(len(m["content"].split()) for m in messages)
-        requested_at = datetime.now(timezone.utc)
-
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(GROQ_BASE_URL, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-
-        choice = data.get("choices", [{}])[0]
-        full_text = choice.get("message", {}).get("content", "")
-
-        usage_data = data.get("usage", {})
-        input_tokens = usage_data.get("prompt_tokens", input_tokens)
-        output_tokens = usage_data.get("completion_tokens", len(full_text.split()))
-
-        responded_at = datetime.now(timezone.utc)
-
-        if stream_callback is not None:
-            await stream_callback(full_text)
-
-        await self._persist_usage(
-            user_id=user_id,
-            job_posting_id=job_posting_id,
-            request_type=request_type,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            requested_at=requested_at,
-            responded_at=responded_at,
-            db=db,
-        )
-
-        return full_text, {
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "cache_read_tokens": 0,
-            "cache_creation_tokens": 0,
-        }
-
-
-# ------------------------------------------------------------------
 # Module-level helpers
 # ------------------------------------------------------------------
 
@@ -572,31 +494,14 @@ async def _update_budget(db: AsyncSession, agent_name: str, usage: dict):
     )
 
 
-# Singletons
+# Singleton
 _client: Optional[BaseLLMClient] = None
-_scoring_client: Optional[BaseLLMClient] = None
 
 
 def get_claude_client() -> BaseLLMClient:
-    """Returns GeminiClient if GEMINI_API_KEY is set, otherwise OllamaClient.
-    Used for resume generation and other quality-sensitive tasks."""
+    """Returns GeminiClient if GEMINI_API_KEY is set, otherwise OllamaClient."""
     global _client
     if _client is None:
         settings = get_settings()
         _client = GeminiClient() if settings.gemini_api_key else OllamaClient()
     return _client
-
-
-def get_scoring_client() -> BaseLLMClient:
-    """Returns the best available client for bulk scoring.
-    Prefers Groq (higher free-tier quota) → Gemini → Ollama."""
-    global _scoring_client
-    if _scoring_client is None:
-        settings = get_settings()
-        if settings.groq_api_key:
-            _scoring_client = GroqClient()
-        elif settings.gemini_api_key:
-            _scoring_client = GeminiClient()
-        else:
-            _scoring_client = OllamaClient()
-    return _scoring_client
