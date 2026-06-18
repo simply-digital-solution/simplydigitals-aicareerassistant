@@ -23,12 +23,23 @@ def _make_job_row(job_id=1, user_id=42):
 
 def _make_db(job_rows=None):
     db = AsyncMock()
+    # [0] job SELECT
     select_result = MagicMock()
     select_result.mappings.return_value.all.return_value = job_rows or []
+    # [1..N] rescoring=1 UPDATEs (one per job found)
+    rescoring_update = MagicMock()
+    # [N+1] feedback SELECT
     feedback_result = MagicMock()
     feedback_result.mappings.return_value.all.return_value = []
+    # remaining: score writes or error updates
     update_result = MagicMock()
-    db.execute.side_effect = [select_result, feedback_result] + [update_result] * 20
+    n_jobs = len(job_rows or [])
+    db.execute.side_effect = (
+        [select_result]
+        + [rescoring_update] * max(n_jobs, 1)
+        + [feedback_result]
+        + [update_result] * 20
+    )
     return db
 
 
@@ -115,8 +126,8 @@ async def test_agent_error_marks_all_false():
 
     assert result == {1: False, 2: False}
     db.commit.assert_called()
-    # Both jobs should have score_error written (calls after the two SELECTs)
-    update_calls = [c for c in db.execute.call_args_list[2:] if c.args[1].get("err")]
+    # Both jobs should have score_error written — find calls with an "err" param
+    update_calls = [c for c in db.execute.call_args_list if c.args[1].get("err")]
     assert len(update_calls) == 2
 
 
@@ -177,6 +188,6 @@ async def test_scored_by_model_written():
     ):
         await score_jobs_by_ids(db, [1])
 
-    # The UPDATE call after the two SELECTs should include the model param
-    update_params = db.execute.call_args_list[2].args[1]
-    assert update_params["model"] == "gemini-flash-latest"
+    # Find the _write_score UPDATE call — it has a "model" param
+    write_calls = [c for c in db.execute.call_args_list if c.args[1].get("model") is not None or "model" in c.args[1]]
+    assert any(c.args[1].get("model") == "gemini-flash-latest" for c in write_calls)

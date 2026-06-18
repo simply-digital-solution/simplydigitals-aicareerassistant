@@ -108,6 +108,7 @@ export interface StoredJob {
   score_error: string | null
   scored_at: string | null
   scored_by_model: string | null
+  rescoring: boolean
   archived: boolean
 }
 

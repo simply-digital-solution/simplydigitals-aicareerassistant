@@ -924,7 +924,7 @@ async def get_stored_jobs(
     where_clauses = [
         "user_id = :uid",
         "archived = 0",
-        "scored = 1",
+        "(scored = 1 OR rescoring = 1)",
         "id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND job_posting_id IS NOT NULL)",
     ]
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
@@ -963,7 +963,8 @@ async def get_stored_jobs(
         text(f"""
             SELECT id, mcf_uuid, title, company, url, location,
                    inferred_industries, posted_at, scraped_at,
-                   scored, fit_score, reasons, risks, key_keywords, scoring_breakdown, recommendation, score_error, scored_at, scored_by_model
+                   scored, fit_score, reasons, risks, key_keywords, scoring_breakdown, recommendation, score_error, scored_at, scored_by_model,
+                   rescoring
             FROM job_postings
             WHERE {where_sql}
             ORDER BY posted_at DESC, scraped_at DESC
@@ -1083,36 +1084,24 @@ async def bulk_rescore_jobs(
     if not owned_ids:
         raise HTTPException(404, "No owned jobs found")
 
-    # Reset fields before scoring
-    reset_params: dict = {"uid": current_user.id}
-    reset_placeholders = ",".join(f":id{i}" for i in range(len(owned_ids)))
-    for i, jid in enumerate(owned_ids):
-        reset_params[f"id{i}"] = jid
-    await db.execute(
-        text(f"""
-            UPDATE job_postings SET
-                scored = 0, fit_score = NULL, reasons = NULL, risks = NULL,
-                key_keywords = NULL, scoring_breakdown = NULL, recommendation = NULL,
-                inferred_industries = '[]', score_error = NULL, scored_at = NULL
-            WHERE user_id = :uid AND id IN ({reset_placeholders})
-        """),
-        reset_params,
-    )
-    await db.commit()
-
     await score_jobs_by_ids(db, owned_ids)
 
     # Fetch and return updated rows
+    owned_placeholders = ",".join(f":id{i}" for i in range(len(owned_ids)))
+    owned_params: dict = {}
+    for i, jid in enumerate(owned_ids):
+        owned_params[f"id{i}"] = jid
     rows = await db.execute(
         text(f"""
             SELECT id, mcf_uuid, title, company, url, location,
                    inferred_industries, posted_at, scraped_at,
                    scored, fit_score, reasons, risks, key_keywords,
-                   scoring_breakdown, recommendation, score_error, scored_at, scored_by_model
+                   scoring_breakdown, recommendation, score_error, scored_at, scored_by_model,
+                   rescoring
             FROM job_postings
-            WHERE id IN ({reset_placeholders})
+            WHERE id IN ({owned_placeholders})
         """),
-        reset_params,
+        owned_params,
     )
     jobs = [dict(r) for r in rows.mappings().all()]
     return {"jobs": jobs}
@@ -1154,26 +1143,6 @@ async def rescore_job(
     if not result.fetchone():
         raise HTTPException(404, "Job not found")
 
-    # Reset fields then score immediately
-    await db.execute(
-        text("""
-            UPDATE job_postings SET
-                scored              = 0,
-                fit_score           = NULL,
-                reasons             = NULL,
-                risks               = NULL,
-                key_keywords        = NULL,
-                scoring_breakdown   = NULL,
-                recommendation      = NULL,
-                inferred_industries = '[]',
-                score_error         = NULL,
-                scored_at           = NULL
-            WHERE id = :id AND user_id = :uid
-        """),
-        {"id": job_id, "uid": current_user.id},
-    )
-    await db.commit()
-
     await score_single_job(db, job_id)
 
     row = await db.execute(
@@ -1181,7 +1150,8 @@ async def rescore_job(
             SELECT id, mcf_uuid, title, company, url, location,
                    inferred_industries, posted_at, scraped_at,
                    scored, fit_score, reasons, risks, key_keywords,
-                   scoring_breakdown, recommendation, score_error, scored_at, scored_by_model
+                   scoring_breakdown, recommendation, score_error, scored_at, scored_by_model,
+                   rescoring
             FROM job_postings WHERE id = :id
         """),
         {"id": job_id},
@@ -1293,18 +1263,6 @@ async def rescore_all_jobs(
     all_ids = [r[0] for r in rows.fetchall()]
     if not all_ids:
         raise HTTPException(404, "No jobs found")
-
-    await db.execute(
-        text("""
-            UPDATE job_postings SET
-                scored = 0, fit_score = NULL, reasons = NULL, risks = NULL,
-                key_keywords = NULL, scoring_breakdown = NULL, recommendation = NULL,
-                inferred_industries = '[]', score_error = NULL, scored_at = NULL
-            WHERE user_id = :uid AND archived = 0
-        """),
-        {"uid": current_user.id},
-    )
-    await db.commit()
 
     batch_size = get_settings().scorer_batch_size
     for i in range(0, len(all_ids), batch_size):

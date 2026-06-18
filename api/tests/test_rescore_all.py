@@ -17,8 +17,7 @@ def _make_db(job_ids=None):
     db = AsyncMock()
     select_result = MagicMock()
     select_result.fetchall.return_value = [(jid,) for jid in (job_ids or [])]
-    reset_result = MagicMock()
-    db.execute.side_effect = [select_result, reset_result]
+    db.execute.side_effect = [select_result]
     return db
 
 
@@ -47,19 +46,20 @@ async def test_returns_count():
 
 
 # ---------------------------------------------------------------------------
-# Reset is called before scoring
+# No pre-reset — old scores preserved until new ones arrive
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_reset_called_before_score():
+async def test_no_pre_reset_before_score():
     db = _make_db(job_ids=[1, 2])
     with patch("app.pipeline.llm_scorer.score_jobs_by_ids", AsyncMock(return_value={})):
         await _call_rescore_all(db)
 
-    reset_sql = db.execute.call_args_list[1].args[0].text
-    assert "scored = 0" in reset_sql
-    assert "fit_score = NULL" in reset_sql
-    assert "archived = 0" in reset_sql
+    # Only 1 execute call — the initial SELECT; no destructive reset
+    assert db.execute.call_count == 1
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "scored = 0" not in select_sql
+    assert "fit_score = NULL" not in select_sql
 
 
 # ---------------------------------------------------------------------------

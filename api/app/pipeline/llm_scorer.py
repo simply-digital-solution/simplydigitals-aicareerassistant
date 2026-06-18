@@ -166,6 +166,7 @@ async def _write_score(db: AsyncSession, job_id: int, opp, model: str | None = N
         text("""
             UPDATE job_postings SET
                 scored               = 1,
+                rescoring            = 0,
                 fit_score            = :fit_score,
                 reasons              = :reasons,
                 risks                = :risks,
@@ -214,6 +215,13 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
     user_id = job["user_id"]
     logger.info("llm_scorer: scoring single job_id=%d for user_id=%d", job_id, user_id)
 
+    # Mark in-progress — old score stays visible until new one arrives
+    await db.execute(
+        text("UPDATE job_postings SET rescoring=1, score_error=NULL WHERE id=:id"),
+        {"id": job_id},
+    )
+    await db.commit()
+
     profile = await _load_profile(db, user_id)
     feedback_examples = await _build_feedback_examples(db, user_id)
 
@@ -244,7 +252,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: single job_id=%d failed: %s", job_id, error_msg)
         await db.execute(
-            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+            text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
             {"err": error_msg, "id": job_id},
         )
         await db.commit()
@@ -253,7 +261,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
     if isinstance(result, AgentError):
         logger.warning("llm_scorer: single job_id=%d agent error: %s", job_id, result.error)
         await db.execute(
-            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+            text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
             {"err": result.error, "id": job_id},
         )
         await db.commit()
@@ -265,7 +273,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
     if opp is None:
         logger.warning("llm_scorer: job_id=%d missing from single response", job_id)
         await db.execute(
-            text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+            text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
             {"err": "Missing from LLM response", "id": job_id},
         )
         await db.commit()
@@ -280,7 +288,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
     """
     Score a specific list of jobs in one LLM call — used by bulk rescore endpoint.
     Returns a dict mapping job_id → True (scored) / False (failed/missing).
-    All jobs must belong to the same user; caller must verify ownership.
+    Old scores are preserved until new ones arrive; failures set score_error only.
     """
     if not job_ids:
         return {}
@@ -300,7 +308,16 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         return {jid: False for jid in job_ids}
 
     user_id = job_rows[0]["user_id"]
-    logger.info("llm_scorer: bulk rescoring %d jobs %s for user_id=%d", len(job_rows), job_ids, user_id)
+    found_ids = {r["id"] for r in job_rows}
+    logger.info("llm_scorer: bulk rescoring %d jobs for user_id=%d", len(job_rows), user_id)
+
+    # Mark as in-progress — old score fields untouched so jobs stay visible
+    for jid in found_ids:
+        await db.execute(
+            text("UPDATE job_postings SET rescoring=1, score_error=NULL WHERE id=:id"),
+            {"id": jid},
+        )
+    await db.commit()
 
     profile = await _load_profile(db, user_id)
     feedback_examples = await _build_feedback_examples(db, user_id)
@@ -317,7 +334,6 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         for r in job_rows
     ]
 
-    found_ids = {r["id"] for r in job_rows}
     results: dict[int, bool] = {jid: False for jid in job_ids}
 
     t_start = time.monotonic()
@@ -338,7 +354,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         logger.error("llm_scorer: bulk rescore failed: %s", error_msg)
         for jid in found_ids:
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
                 {"err": error_msg, "id": jid},
             )
         await db.commit()
@@ -348,7 +364,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         logger.warning("llm_scorer: bulk rescore agent error: %s", result.error)
         for jid in found_ids:
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
                 {"err": result.error, "id": jid},
             )
         await db.commit()
@@ -361,7 +377,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         if opp is None:
             logger.warning("llm_scorer: job_id=%d missing from bulk response", jid)
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
+                text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
                 {"err": "Missing from LLM bulk response", "id": jid},
             )
         else:

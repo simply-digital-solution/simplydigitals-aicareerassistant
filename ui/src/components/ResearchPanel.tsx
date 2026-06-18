@@ -146,13 +146,13 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
         <div className="flex items-center gap-2 shrink-0">
           {!!job.scored && job.fit_score !== null
             ? <FitBadge score={job.fit_score} />
-            : (job.score_error || (job.scored && job.fit_score === null))
-            ? <span className="text-xs text-red-400 italic" title={job.score_error ?? 'Score incomplete'}>
-                {job.score_error?.includes('429')
-                  ? '⚠ Rate limit reached — try again after a minute'
-                  : '⚠ Something went wrong. Click Re-score'}
+            : !rescoring && !job.rescoring && job.score_error
+            ? <span className="text-xs text-red-400 italic" title={job.score_error}>
+                ⚠ Not yet scored
               </span>
-            : <span className="text-xs text-gray-400 italic">Scoring…</span>
+            : !rescoring && !job.rescoring
+            ? <span className="text-xs text-gray-400 italic">Scoring…</span>
+            : null
           }
           {!readOnly && <button title="Relevant" disabled={saving} onClick={handleThumbUp}
             className={`text-base leading-none px-1.5 py-0.5 rounded transition-colors ${
@@ -216,8 +216,20 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           )}
         </div>
       </div>
-      {rescoring && (
+      {(rescoring || job.rescoring) && (
         <p className="text-xs text-indigo-400 italic animate-pulse mt-1">Rescoring…</p>
+      )}
+      {!rescoring && !job.rescoring && job.score_error && job.fit_score !== null && (
+        <p className="text-xs text-amber-600 mt-1" title={job.score_error}>
+          ⚠ Last rescore failed — previous score shown.{' '}
+          <button className="underline" onClick={() => onRescore(job.id)}>Try again</button>
+        </p>
+      )}
+      {!rescoring && !job.rescoring && job.score_error && job.fit_score === null && (
+        <p className="text-xs text-red-500 mt-1" title={job.score_error}>
+          ⚠ Scoring failed —{' '}
+          <button className="underline" onClick={() => onRescore(job.id)}>try again</button>
+        </p>
       )}
 
       {pickingReason && (
@@ -752,7 +764,7 @@ export default function ResearchPanel() {
                 onArchive={(id) => archiveMutation.mutate(id)}
                 onSave={(j) => saveMutation.mutate(j)}
                 onRescore={(id) => rescoreMutation.mutate(id)}
-                rescoring={rescoringIds.has(job.id)}
+                rescoring={rescoringIds.has(job.id) || !!job.rescoring}
                 selected={selectedIds.has(job.id)}
                 onToggleSelect={id => setSelectedIds(prev => {
                   const next = new Set(prev)
