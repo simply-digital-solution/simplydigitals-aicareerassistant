@@ -1301,13 +1301,13 @@ async def generate_resume(
                 {"at": new_token_data["access_token"], "exp": new_token_data["expiry_iso"], "uid": current_user.id},
             )
 
-        # Success: store drive info, clear resume_json from DB
+        # Success: store drive info, clear resume_json (sentinel '{}' — column is NOT NULL)
         await db.execute(
             text("""
                 UPDATE generated_resumes
                 SET drive_file_id = :fid,
                     drive_link    = :link,
-                    resume_json   = NULL,
+                    resume_json   = '{}',
                     updated_at    = :now
                 WHERE user_id = :uid AND job_posting_id = :jid
             """),
@@ -1425,7 +1425,7 @@ async def retry_drive_upload(
             UPDATE generated_resumes
             SET drive_file_id = :fid,
                 drive_link    = :link,
-                resume_json   = NULL,
+                resume_json   = '{}',
                 updated_at    = :now
             WHERE user_id = :uid AND job_posting_id = :jid
         """),
@@ -1531,7 +1531,8 @@ async def get_generated_resume(
         raise HTTPException(404, "No generated resume found for this job")
 
     import json as _json
-    resume_data = _json.loads(resume["resume_json"]) if resume["resume_json"] else None
+    raw = resume["resume_json"]
+    resume_data = _json.loads(raw) if raw and raw != '{}' else None
     return {
         "job_posting_id": job_id,
         "resume": resume_data,
