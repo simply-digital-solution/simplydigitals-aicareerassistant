@@ -29,16 +29,19 @@ def _make_db(job_rows=None, advanced_ids=None):
     # [1] advanced-status check SELECT
     adv_check = MagicMock()
     adv_check.fetchall.return_value = [(jid,) for jid in (advanced_ids or [])]
-    # [2..N+1] rescoring=1 UPDATEs (one per scoreable job)
+    # [2] daily scoring usage SELECT (0 = under limit)
+    usage_result = MagicMock()
+    usage_result.fetchone.return_value = (0,)
+    # [3..N+2] rescoring=1 UPDATEs (one per scoreable job)
     rescoring_update = MagicMock()
-    # [N+2] feedback SELECT
+    # [N+3] feedback SELECT
     feedback_result = MagicMock()
     feedback_result.mappings.return_value.all.return_value = []
-    # remaining: score writes or error updates
+    # remaining: score writes, error updates, increment INSERT
     update_result = MagicMock()
     n_jobs = len(job_rows or [])
     db.execute.side_effect = (
-        [select_result, adv_check]
+        [select_result, adv_check, usage_result]
         + [rescoring_update] * max(n_jobs, 1)
         + [feedback_result]
         + [update_result] * 20
@@ -101,6 +104,7 @@ async def test_all_jobs_scored_returns_true():
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
         patch("app.pipeline.llm_scorer.run_research_agent",
               AsyncMock(return_value=(llm_result, {"model": "gemini-flash-latest"}))),
     ):
@@ -122,6 +126,7 @@ async def test_agent_error_marks_all_false():
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
         patch("app.pipeline.llm_scorer.run_research_agent",
               AsyncMock(return_value=(AgentError(error="parse failed"), {}))),
     ):
@@ -145,6 +150,7 @@ async def test_agent_exception_marks_all_false():
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
         patch("app.pipeline.llm_scorer.run_research_agent",
               AsyncMock(side_effect=RuntimeError("timeout"))),
     ):
@@ -165,6 +171,7 @@ async def test_partial_response_marks_missing_as_false():
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
         patch("app.pipeline.llm_scorer.run_research_agent",
               AsyncMock(return_value=(llm_result, {}))),
     ):
@@ -186,6 +193,7 @@ async def test_scored_by_model_written():
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
         patch("app.pipeline.llm_scorer.run_research_agent",
               AsyncMock(return_value=(llm_result, {"model": "gemini-flash-latest"}))),
     ):
@@ -213,6 +221,7 @@ async def test_advanced_status_jobs_excluded_from_scoring():
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
         patch("app.pipeline.llm_scorer.run_research_agent", fake_scorer),
     ):
         result = await score_jobs_by_ids(db, [1, 2])

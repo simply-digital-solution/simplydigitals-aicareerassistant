@@ -26,6 +26,31 @@ SLEEP_BETWEEN_BATCHES = 30    # seconds between scoring batches
 SLEEP_QUEUE_EMPTY     = 300   # seconds to wait when no unscored jobs remain
 
 
+async def _get_scorings_today(db: AsyncSession, user_id: int) -> int:
+    """Return how many jobs this user has already had scored today."""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    row = await db.execute(
+        text("SELECT jobs_scored FROM daily_scoring_usage WHERE user_id=:uid AND date=:date"),
+        {"uid": user_id, "date": today},
+    )
+    result = row.fetchone()
+    return result[0] if result else 0
+
+
+async def _increment_scorings_today(db: AsyncSession, user_id: int, count: int) -> None:
+    """Increment the daily scoring counter for the user by count."""
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    await db.execute(
+        text("""
+            INSERT INTO daily_scoring_usage (user_id, date, jobs_scored, created_at)
+            VALUES (:uid, :date, :count, :now)
+            ON CONFLICT(user_id, date) DO UPDATE SET
+                jobs_scored = jobs_scored + excluded.jobs_scored
+        """),
+        {"uid": user_id, "date": today, "count": count, "now": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")},
+    )
+
+
 async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
     """
     Fetch up to 5 relevant and 5 not_relevant feedback rows for the user and
@@ -99,8 +124,19 @@ async def score_next_batch(db: AsyncSession) -> bool:
 
     # All jobs in a batch must belong to the same user (scorer loops per-user queue)
     user_id = job_rows[0]["user_id"]
+
+    # Enforce daily scoring cap
+    daily_limit = get_settings().max_scorings_per_user_per_day
+    scored_today = await _get_scorings_today(db, user_id)
+    remaining = daily_limit - scored_today
+    if remaining <= 0:
+        logger.info("llm_scorer: user_id=%d has reached daily scoring limit (%d)", user_id, daily_limit)
+        return False
+    job_rows = list(job_rows)[:remaining]
+
     job_ids = [r["id"] for r in job_rows]
-    logger.info("llm_scorer: scoring batch of %d jobs %s for user_id=%d", len(job_rows), job_ids, user_id)
+    logger.info("llm_scorer: scoring batch of %d jobs %s for user_id=%d (%d/%d used today)",
+                len(job_rows), job_ids, user_id, scored_today, daily_limit)
 
     profile = await _load_profile(db, user_id)
     feedback_examples = await _build_feedback_examples(db, user_id)
@@ -134,7 +170,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: batch failed after %.1fs: %s", time.monotonic() - t_start, error_msg)
-        now = datetime.utcnow().isoformat()
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         for jid in job_ids:
             await db.execute(
                 text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
@@ -146,7 +182,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     if isinstance(result, AgentError):
         error_msg = result.error
         logger.warning("llm_scorer: agent error for batch %s: %s", job_ids, error_msg)
-        now = datetime.utcnow().isoformat()
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         for jid in job_ids:
             await db.execute(
                 text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
@@ -158,7 +194,8 @@ async def score_next_batch(db: AsyncSession) -> bool:
     # Match results by job_id
     batch_model = meta.get("model")
     returned = {opp.job_id: opp for opp in result.opportunities}
-    now = datetime.utcnow().isoformat()
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    scored_count = 0
     for jid in job_ids:
         opp = returned.get(jid)
         if opp is None:
@@ -169,7 +206,9 @@ async def score_next_batch(db: AsyncSession) -> bool:
             )
             continue
         await _write_score(db, jid, opp, model=batch_model)
+        scored_count += 1
 
+    await _increment_scorings_today(db, user_id, scored_count)
     await db.commit()
     return True
 
@@ -203,7 +242,7 @@ async def _write_score(db: AsyncSession, job_id: int, opp, model: str | None = N
             "recommendation": opp.recommendation or None,
             "industries":     json.dumps(opp.inferred_industries),
             "model":          model,
-            "now":            datetime.utcnow().isoformat(),
+            "now":            datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
             "id":             job_id,
         },
     )
@@ -242,7 +281,17 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
         return False
 
     user_id = job["user_id"]
-    logger.info("llm_scorer: scoring single job_id=%d for user_id=%d", job_id, user_id)
+
+    # Enforce daily scoring cap
+    daily_limit = get_settings().max_scorings_per_user_per_day
+    scored_today = await _get_scorings_today(db, user_id)
+    if scored_today >= daily_limit:
+        logger.info("llm_scorer: user_id=%d daily limit reached (%d), skipping single rescore of job_id=%d",
+                    user_id, daily_limit, job_id)
+        return False
+
+    logger.info("llm_scorer: scoring single job_id=%d for user_id=%d (%d/%d used today)",
+                job_id, user_id, scored_today, daily_limit)
 
     # Mark in-progress — old score stays visible until new one arrives
     await db.execute(
@@ -310,6 +359,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
         return False
 
     await _write_score(db, job_id, opp, model=single_model)
+    await _increment_scorings_today(db, user_id, 1)
     await db.commit()
     return True
 
@@ -360,7 +410,19 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
     if not found_ids:
         return {jid: False for jid in job_ids}
 
-    logger.info("llm_scorer: bulk rescoring %d jobs for user_id=%d", len(found_ids), user_id)
+    # Enforce daily scoring cap
+    daily_limit = get_settings().max_scorings_per_user_per_day
+    scored_today = await _get_scorings_today(db, user_id)
+    remaining = daily_limit - scored_today
+    if remaining <= 0:
+        logger.info("llm_scorer: user_id=%d daily limit reached (%d), skipping bulk rescore", user_id, daily_limit)
+        return {jid: False for jid in job_ids}
+    if len(found_ids) > remaining:
+        logger.info("llm_scorer: trimming bulk rescore from %d to %d (daily limit)", len(found_ids), remaining)
+        found_ids = set(list(found_ids)[:remaining])
+
+    logger.info("llm_scorer: bulk rescoring %d jobs for user_id=%d (%d/%d used today)",
+                len(found_ids), user_id, scored_today, daily_limit)
 
     # Mark as in-progress — old score fields untouched so jobs stay visible
     for jid in found_ids:
@@ -425,6 +487,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
 
     bulk_model = meta.get("model")
     returned = {opp.job_id: opp for opp in result.opportunities}
+    scored_count = 0
     for jid in found_ids:
         opp = returned.get(jid)
         if opp is None:
@@ -436,7 +499,9 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         else:
             await _write_score(db, jid, opp, model=bulk_model)
             results[jid] = True
+            scored_count += 1
 
+    await _increment_scorings_today(db, user_id, scored_count)
     await db.commit()
     return results
 

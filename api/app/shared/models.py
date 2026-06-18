@@ -340,6 +340,21 @@ class JobFeedback(Base):
 
 
 # ---------------------------------------------------------------------------
+# Daily scoring usage (cost guard — 50 scorings/user/day)
+# ---------------------------------------------------------------------------
+
+class DailyScoringUsage(Base):
+    __tablename__ = "daily_scoring_usage"
+    __table_args__ = (UniqueConstraint("user_id", "date"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False)
+    jobs_scored = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now)
+
+
+# ---------------------------------------------------------------------------
 # Title skill map (required skills per target title, derived from JD keywords)
 # ---------------------------------------------------------------------------
 

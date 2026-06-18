@@ -11,6 +11,7 @@ from app.shared.database import init_db, get_db_context
 from app.modules.applications.router import router as applications_router
 from app.modules.agents.router import router as agents_router
 from app.modules.profile.router import router as profile_router
+from app.modules.scoring.router import router as scoring_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ app.add_middleware(
 app.include_router(applications_router)
 app.include_router(agents_router)
 app.include_router(profile_router)
+app.include_router(scoring_router)
 
 
 @app.exception_handler(Exception)

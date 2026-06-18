@@ -30,14 +30,20 @@ def _make_db(job_row=None, advanced_status=False):
     # [1] application status check SELECT
     app_check = MagicMock()
     app_check.fetchone.return_value = (1,) if advanced_status else None
-    # [2] rescoring=1 UPDATE
+    # [2] daily scoring usage SELECT (0 = under limit)
+    usage_result = MagicMock()
+    usage_result.fetchone.return_value = (0,)
+    # [3] rescoring=1 UPDATE
     rescoring_update = MagicMock()
-    # [3] feedback SELECT
+    # [4] feedback SELECT
     feedback_result = MagicMock()
     feedback_result.mappings.return_value.all.return_value = []
-    # [4] score write or error UPDATE
+    # [5] score write or error UPDATE
     update_result = MagicMock()
-    db.execute.side_effect = [select_result, app_check, rescoring_update, feedback_result, update_result]
+    # [6] _increment_scorings_today INSERT
+    increment_result = MagicMock()
+    db.execute.side_effect = [select_result, app_check, usage_result, rescoring_update,
+                               feedback_result, update_result, increment_result]
     return db
 
 
@@ -95,11 +101,11 @@ async def test_successful_single_score():
 
     assert ok is True
     db.commit.assert_called()
-    # [2] is the rescoring=1 UPDATE
-    rescoring_sql = db.execute.call_args_list[2].args[0].text
+    # [3] is the rescoring=1 UPDATE
+    rescoring_sql = db.execute.call_args_list[3].args[0].text
     assert "rescoring=1" in rescoring_sql
-    # [4] is the score write (_write_score)
-    update_params = db.execute.call_args_list[4].args[1]
+    # [5] is the score write (_write_score)
+    update_params = db.execute.call_args_list[5].args[1]
     assert update_params["fit_score"] == 0.82
     assert update_params["id"] == 1
 
@@ -121,10 +127,10 @@ async def test_agent_error_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    update_params = db.execute.call_args_list[4].args[1]
+    update_params = db.execute.call_args_list[5].args[1]
     assert "parse failed" in update_params["err"]
     # Must NOT reset scored/fit_score — only rescoring=0 and score_error
-    update_sql = db.execute.call_args_list[4].args[0].text
+    update_sql = db.execute.call_args_list[5].args[0].text
     assert "rescoring=0" in update_sql
     assert "scored=0" not in update_sql
     assert "fit_score = NULL" not in update_sql
@@ -146,9 +152,9 @@ async def test_agent_exception_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    update_params = db.execute.call_args_list[4].args[1]
+    update_params = db.execute.call_args_list[5].args[1]
     assert "RuntimeError" in update_params["err"]
-    update_sql = db.execute.call_args_list[4].args[0].text
+    update_sql = db.execute.call_args_list[5].args[0].text
     assert "rescoring=0" in update_sql
     assert "scored=0" not in update_sql
 
@@ -169,7 +175,7 @@ async def test_missing_job_id_in_response_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    update_params = db.execute.call_args_list[4].args[1]
+    update_params = db.execute.call_args_list[5].args[1]
     assert "Missing" in update_params["err"]
 
 
@@ -232,6 +238,7 @@ async def test_skips_scoring_when_application_in_advanced_status():
     assert ok is False
     db.commit.assert_not_called()
     # No rescoring=1 UPDATE, no LLM call — only 2 execute calls (job SELECT + app check)
+    # Daily usage check is skipped because we return early on advanced status
     assert db.execute.call_count == 2
 
 

@@ -553,6 +553,12 @@ export default function ResearchPanel() {
 
   const [confirmRescoreAll, setConfirmRescoreAll] = useState(false)
 
+  const { data: scoringUsage } = useQuery<{ jobs_scored_today: number; daily_limit: number; remaining: number }>({
+    queryKey: ['scoring-usage'],
+    queryFn: () => api.get('/scoring/usage').then(r => r.data),
+    refetchInterval: 60_000,
+  })
+
   const rescoreAllMutation = useMutation({
     mutationFn: () => researchApi.rescoreAllJobs(),
     onSuccess: () => {
@@ -581,6 +587,19 @@ export default function ResearchPanel() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
+      {/* ── Daily scoring limit banner ── */}
+      {scoringUsage && scoringUsage.remaining === 0 && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
+          <span className="text-amber-500 text-lg leading-none mt-0.5">⚠</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Daily scoring limit reached</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              You've used all {scoringUsage.daily_limit} job scorings for today. Scoring resumes automatically tomorrow.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Targeting (collapsible, read-only) ── */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <button
