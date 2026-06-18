@@ -88,6 +88,7 @@ class GeneratedResumeSection(AgentBaseModel):
 class GeneratedResumeOutput(AgentBaseModel):
     name: str
     headline: str
+    header_lines: list[str] = []
     sections: list[GeneratedResumeSection]
 
 

@@ -239,6 +239,7 @@ export interface GeneratedResumeSection {
 export interface GeneratedResumeOutput {
   name: string
   headline: string
+  header_lines?: string[]
   sections: GeneratedResumeSection[]
 }
 

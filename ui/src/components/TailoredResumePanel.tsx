@@ -77,22 +77,22 @@ function experienceBlock(entry: GeneratedResumeExperience): Paragraph[] {
 
 export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''): Promise<void> {
   const children: Paragraph[] = [
-    // Candidate name — large, centered, bold
+    // Candidate name — large, left-aligned, bold
     new Paragraph({
       children: [
         run(resume.name, { bold: true, size: 56, font: BODY_FONT }),  // 28pt
       ],
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 60 },
+      alignment: AlignmentType.LEFT,
+      spacing: { after: 40 },
     }),
-    // Headline — italic, centered, grey
-    ...(resume.headline
-      ? [new Paragraph({
-          children: [run(resume.headline, { italics: true, color: '555555' })],
-          alignment: AlignmentType.CENTER,
-          spacing: { after: 200 },
-        })]
-      : []),
+    // Header lines — verbatim from resume (title bar, contact line, etc.)
+    ...(resume.header_lines ?? []).map((line, i) =>
+      new Paragraph({
+        children: [run(line, { color: '555555' })],
+        alignment: AlignmentType.LEFT,
+        spacing: { after: i === (resume.header_lines ?? []).length - 1 ? 200 : 40 },
+      })
+    ),
   ]
 
   for (const section of resume.sections) {
@@ -188,11 +188,11 @@ function ResumeSectionBlock({ section }: { section: GeneratedResumeSection }) {
 function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm">
-      <div className="text-center mb-6">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{resume.name}</h1>
-        {resume.headline && (
-          <p className="mt-1 text-sm text-gray-500 italic">{resume.headline}</p>
-        )}
+        {(resume.header_lines ?? []).map((line, i) => (
+          <p key={i} className="text-sm text-gray-500 mt-0.5">{line}</p>
+        ))}
       </div>
       {resume.sections.map((s, i) => (
         <ResumeSectionBlock key={i} section={s} />

@@ -23,8 +23,12 @@ Return ONLY valid JSON matching this exact schema:
 
 ```
 {
-  "name": "Candidate full name",
+  "name": "Candidate full name — exactly as it appears on the resume",
   "headline": "Tailored one-line professional headline for this role (under 120 chars)",
+  "header_lines": [
+    "copy line 2 of the resume header verbatim e.g. 'Technology Leader  |  Product Owner  |  PMP'",
+    "copy line 3 of the resume header verbatim e.g. 'email  |  phone  |  linkedin  |  location'"
+  ],
   "sections": [
     {
       "section_type": "summary",
@@ -67,6 +71,7 @@ Return ONLY valid JSON matching this exact schema:
 ## Rules
 
 - **Never invent** achievements, skills, companies, dates, or qualifications not in the candidate's resume.
+- **`header_lines`**: copy every line of the resume header block verbatim — these are the lines that appear between the candidate's name and the first section heading (e.g. title bar, contact line). Preserve exact spacing, separators, and order. If the resume has no header lines beyond the name, return an empty array.
 - Preserve the candidate's **exact section titles** — do not rename them.
 - Preserve the candidate's **section order** — do not reorder sections.
 - For `section_type`: use `summary`, `experience`, `skills`, `education`, or `other` for any other section.
