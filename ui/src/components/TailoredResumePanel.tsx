@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Document, Packer, Paragraph, TextRun,
@@ -203,6 +203,61 @@ function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
 }
 
 // ---------------------------------------------------------------------------
+// Download dropdown — .docx and .pdf from Drive
+// ---------------------------------------------------------------------------
+
+function DownloadDropdown({ fileId }: { fileId: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="text-xs text-green-600 hover:text-green-800 font-medium"
+        aria-label="Download resume"
+        aria-expanded={open}
+      >
+        ↓ Download ▾
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+          <a
+            href={`https://drive.google.com/uc?export=download&id=${fileId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpen(false)}
+            className="block px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+            aria-label="Download as DOCX"
+          >
+            ↓ Word (.docx)
+          </a>
+          <a
+            href={`https://drive.google.com/uc?export=pdf&id=${fileId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpen(false)}
+            className="block px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+            aria-label="Download as PDF"
+          >
+            ↓ PDF (.pdf)
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main panel
 // ---------------------------------------------------------------------------
 
@@ -363,17 +418,9 @@ export default function TailoredResumePanel({ jobId, company, jobUrl, readOnly =
                   <MarkAppliedButton applicationId={applicationId} jobUrl={jobUrl} />
                 )}
 
-                {/* Download from Drive */}
+                {/* Download from Drive — dropdown for .docx / .pdf */}
                 {resume.drive_file_id && (
-                  <a
-                    href={`https://drive.google.com/uc?export=download&id=${resume.drive_file_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-green-600 hover:text-green-800 font-medium"
-                    aria-label="Download resume from Google Drive"
-                  >
-                    ↓ Download
-                  </a>
+                  <DownloadDropdown fileId={resume.drive_file_id} />
                 )}
 
                 {/* Open in Drive */}
