@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { applicationsApi } from '../api/client'
 import type { Application, PipelineBoard } from '../api/client'
 import type { Tab } from '../App'
@@ -39,66 +38,11 @@ function ApplicationCard({ app }: { app: Application }) {
   )
 }
 
-function AddApplicationModal({ onClose, onAdd }: { onClose: () => void; onAdd: (data: Partial<Application>) => void }) {
-  const [form, setForm] = useState({ company_name: '', role_title: '', source_url: '', notes: '' })
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold mb-4">Add Application</h2>
-        <div className="space-y-3">
-          <input
-            placeholder="Company name *"
-            value={form.company_name}
-            onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <input
-            placeholder="Role title *"
-            value={form.role_title}
-            onChange={e => setForm(f => ({ ...f, role_title: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <input
-            placeholder="Job URL (optional)"
-            value={form.source_url}
-            onChange={e => setForm(f => ({ ...f, source_url: e.target.value }))}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <textarea
-            placeholder="Notes (optional)"
-            value={form.notes}
-            onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-            rows={2}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <div className="flex gap-2 mt-4">
-          <button onClick={onClose} className="flex-1 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
-          <button
-            onClick={() => { if (form.company_name && form.role_title) { onAdd(form); onClose() } }}
-            className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
-          >
-            Add
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function PipelineBoard({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
-  const queryClient = useQueryClient()
-  const [showAdd, setShowAdd] = useState(false)
-
   const { data: board, isLoading } = useQuery<PipelineBoard>({
     queryKey: ['kanban'],
     queryFn: () => applicationsApi.kanban().then(r => r.data),
-  })
-
-  const addMutation = useMutation({
-    mutationFn: (data: Partial<Application>) => applicationsApi.create(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kanban'] }),
   })
 
   if (isLoading) return (
@@ -109,17 +53,9 @@ export default function PipelineBoard({ onNavigate }: { onNavigate: (tab: Tab) =
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Job Pipeline</h1>
-          <p className="text-sm text-gray-500 mt-1">{totalApps} applications tracked</p>
-        </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-        >
-          + Add Application
-        </button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Job Pipeline</h1>
+        <p className="text-sm text-gray-500 mt-1">{totalApps} applications tracked</p>
       </div>
 
       <div className="flex gap-4 overflow-x-auto pb-4">
@@ -158,12 +94,6 @@ export default function PipelineBoard({ onNavigate }: { onNavigate: (tab: Tab) =
         })}
       </div>
 
-      {showAdd && (
-        <AddApplicationModal
-          onClose={() => setShowAdd(false)}
-          onAdd={(data) => addMutation.mutate(data)}
-        />
-      )}
     </div>
   )
 }
