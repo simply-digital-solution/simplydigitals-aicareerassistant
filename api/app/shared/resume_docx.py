@@ -121,6 +121,14 @@ def build_docx_bytes(resume: GeneratedResumeOutput) -> bytes:
                 r4 = p_title.add_run(entry.dates)
                 _set_run(r4, entry.dates, color=DATE_GRAY)
 
+                # 2-line role summary (job-relevant highlights)
+                if entry.summary:
+                    p_sum = doc.add_paragraph()
+                    p_sum.paragraph_format.space_before = Pt(3)
+                    p_sum.paragraph_format.space_after = Pt(3)
+                    r_sum = p_sum.add_run(entry.summary)
+                    _set_run(r_sum, entry.summary, color=GRAY_TEXT)
+
                 for bullet in entry.bullets:
                     p_b = doc.add_paragraph(style="List Bullet")
                     p_b.paragraph_format.space_before = Pt(1)

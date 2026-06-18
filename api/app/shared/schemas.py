@@ -75,6 +75,7 @@ class GeneratedResumeExperience(AgentBaseModel):
     title: str
     company: str
     dates: str
+    summary: str = ""
     bullets: list[str]
 
 

@@ -26,6 +26,7 @@ def _make_user(user_id: int = 1):
 
 
 def _make_resume_output():
+    from app.shared.schemas import GeneratedResumeExperience
     return GeneratedResumeOutput(
         name="Jane Doe",
         headline="Senior Data Engineer tailored for Fintech",
@@ -35,6 +36,20 @@ def _make_resume_output():
                 title="Professional Summary",
                 content=["Experienced data engineer with 8 years in fintech."],
                 experience=[],
+            ),
+            GeneratedResumeSection(
+                section_type="experience",
+                title="Professional Experience",
+                content=[],
+                experience=[
+                    GeneratedResumeExperience(
+                        title="Data Engineer",
+                        company="ACME Corp",
+                        dates="Jan 2020 – Present",
+                        summary="Led data platform delivery across fintech clients. Engineered pipelines processing 1M+ daily records.",
+                        bullets=["Delivered end-to-end data pipelines", "Reduced SLAs by 40%"],
+                    )
+                ],
             ),
         ],
     )
