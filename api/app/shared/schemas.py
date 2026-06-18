@@ -23,9 +23,9 @@ class JobOpportunity(AgentBaseModel):
     company: str
     link: str
     fit_score: float = Field(ge=0.0, le=1.0)
-    reasons: list[str] = Field(min_length=1, max_length=5)
-    risks: list[str] = Field(min_length=1, max_length=5)
-    key_keywords: list[str] = Field(min_length=1, max_length=10)
+    reasons: list[str] = Field(default_factory=list, max_length=5)
+    risks: list[str] = Field(default_factory=list, max_length=5)
+    key_keywords: list[str] = Field(default_factory=list, max_length=10)
     inferred_industries: list[str] = Field(default_factory=list)
     scoring_breakdown: list[ScoreRow] = Field(default_factory=list)
     recommendation: str = ""
