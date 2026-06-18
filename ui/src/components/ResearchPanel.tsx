@@ -219,13 +219,13 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
       {(rescoring || job.rescoring) && (
         <p className="text-xs text-indigo-400 italic animate-pulse mt-1">Rescoring…</p>
       )}
-      {!rescoring && !job.rescoring && job.score_error && job.fit_score !== null && (
+      {!readOnly && !rescoring && !job.rescoring && job.score_error && job.fit_score !== null && (
         <p className="text-xs text-amber-600 mt-1" title={job.score_error}>
           ⚠ Last rescore failed — previous score shown.{' '}
           <button className="underline" onClick={() => onRescore(job.id)}>Try again</button>
         </p>
       )}
-      {!rescoring && !job.rescoring && job.score_error && job.fit_score === null && (
+      {!readOnly && !rescoring && !job.rescoring && job.score_error && job.fit_score === null && (
         <p className="text-xs text-red-500 mt-1" title={job.score_error}>
           ⚠ Scoring failed —{' '}
           <button className="underline" onClick={() => onRescore(job.id)}>try again</button>

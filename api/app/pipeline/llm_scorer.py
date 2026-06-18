@@ -132,7 +132,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: batch failed after %.1fs: %s", time.monotonic() - t_start, error_msg)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.utcnow().isoformat()
         for jid in job_ids:
             await db.execute(
                 text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
@@ -144,7 +144,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     if isinstance(result, AgentError):
         error_msg = result.error
         logger.warning("llm_scorer: agent error for batch %s: %s", job_ids, error_msg)
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.utcnow().isoformat()
         for jid in job_ids:
             await db.execute(
                 text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
@@ -156,7 +156,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     # Match results by job_id
     batch_model = meta.get("model")
     returned = {opp.job_id: opp for opp in result.opportunities}
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.utcnow().isoformat()
     for jid in job_ids:
         opp = returned.get(jid)
         if opp is None:
@@ -201,7 +201,7 @@ async def _write_score(db: AsyncSession, job_id: int, opp, model: str | None = N
             "recommendation": opp.recommendation or None,
             "industries":     json.dumps(opp.inferred_industries),
             "model":          model,
-            "now":            datetime.now(timezone.utc).isoformat(),
+            "now":            datetime.utcnow().isoformat(),
             "id":             job_id,
         },
     )
