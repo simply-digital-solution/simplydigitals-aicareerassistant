@@ -103,9 +103,10 @@ function renderPanel(jobId = 1, company = 'ACME Corp') {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  // Stub browser APIs used by downloadAsDocx
+  // Stub browser APIs used by downloadAsDocx and window.open
   global.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
   global.URL.revokeObjectURL = vi.fn()
+  global.window.open = vi.fn()
   // Default: Drive connected (required for Generate button to be enabled)
   mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: true } } as never)
 })
@@ -297,6 +298,63 @@ describe('TailoredResumePanel', () => {
     await waitFor(() =>
       expect(screen.getByText(/gemini 503/i)).toBeInTheDocument(),
     )
+  })
+})
+
+describe('MarkAppliedButton', () => {
+  function renderWithApply(jobUrl?: string) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as never)
+    vi.mocked(clientModule.applicationsApi.move).mockResolvedValue({ data: {} } as never)
+    render(
+      <QueryClientProvider client={client}>
+        <TailoredResumePanel jobId={1} company="ACME Corp" applicationId={42} jobUrl={jobUrl} />
+      </QueryClientProvider>,
+    )
+  }
+
+  it('opens the job URL in a new tab when Apply is clicked', async () => {
+    renderWithApply('https://jobs.example.com/12345')
+    await waitFor(() => screen.getByRole('button', { name: /mark job as applied/i }))
+    fireEvent.click(screen.getByRole('button', { name: /mark job as applied/i }))
+    expect(global.window.open).toHaveBeenCalledWith(
+      'https://jobs.example.com/12345', '_blank', 'noopener,noreferrer',
+    )
+  })
+
+  it('does not call window.open when jobUrl is not provided', async () => {
+    renderWithApply(undefined)
+    await waitFor(() => screen.getByRole('button', { name: /mark job as applied/i }))
+    fireEvent.click(screen.getByRole('button', { name: /mark job as applied/i }))
+    expect(global.window.open).not.toHaveBeenCalled()
+  })
+
+  it('shows confirmation message after Apply is clicked', async () => {
+    renderWithApply('https://jobs.example.com/12345')
+    await waitFor(() => screen.getByRole('button', { name: /mark job as applied/i }))
+    fireEvent.click(screen.getByRole('button', { name: /mark job as applied/i }))
+    expect(screen.getByText(/resume uploaded to the listing/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /confirm mark as applied/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
+  })
+
+  it('calls applicationsApi.move on "Yes, Applied" click', async () => {
+    renderWithApply('https://jobs.example.com/12345')
+    await waitFor(() => screen.getByRole('button', { name: /mark job as applied/i }))
+    fireEvent.click(screen.getByRole('button', { name: /mark job as applied/i }))
+    fireEvent.click(screen.getByRole('button', { name: /confirm mark as applied/i }))
+    await waitFor(() =>
+      expect(vi.mocked(clientModule.applicationsApi.move)).toHaveBeenCalledWith(42, 'applied'),
+    )
+  })
+
+  it('dismisses confirmation on Cancel', async () => {
+    renderWithApply('https://jobs.example.com/12345')
+    await waitFor(() => screen.getByRole('button', { name: /mark job as applied/i }))
+    fireEvent.click(screen.getByRole('button', { name: /mark job as applied/i }))
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(screen.queryByText(/resume uploaded to the listing/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /mark job as applied/i })).toBeInTheDocument()
   })
 })
 

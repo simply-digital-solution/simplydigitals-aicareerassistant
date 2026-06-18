@@ -162,6 +162,7 @@ export default function SelectedJobsPanel() {
                 <TailoredResumePanel
                   jobId={job.id}
                   company={job.company}
+                  jobUrl={job.url}
                   isGenerating={generatingIds.has(job.id)}
                   applicationId={job.application_id}
                 />

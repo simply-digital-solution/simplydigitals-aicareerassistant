@@ -10,6 +10,7 @@ import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExpe
 interface TailoredResumePanelProps {
   jobId: number
   company: string
+  jobUrl?: string
   readOnly?: boolean
   isGenerating?: boolean
   applicationId?: number
@@ -205,7 +206,7 @@ function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
 // Main panel
 // ---------------------------------------------------------------------------
 
-function MarkAppliedButton({ applicationId }: { applicationId: number }) {
+function MarkAppliedButton({ applicationId, jobUrl }: { applicationId: number; jobUrl?: string }) {
   const queryClient = useQueryClient()
   const [confirming, setConfirming] = useState(false)
 
@@ -218,17 +219,23 @@ function MarkAppliedButton({ applicationId }: { applicationId: number }) {
     },
   })
 
+  const handleApplyClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (jobUrl) window.open(jobUrl, '_blank', 'noopener,noreferrer')
+    setConfirming(true)
+  }
+
   if (confirming) {
     return (
-      <span className="flex items-center gap-1.5">
-        <span className="text-xs text-gray-500">Applied?</span>
+      <span className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs text-gray-500">Resume uploaded to the listing?</span>
         <button
           onClick={() => applyMutation.mutate()}
           disabled={applyMutation.isPending}
           className="text-xs bg-green-600 text-white px-2.5 py-1 rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors font-medium"
           aria-label="Confirm mark as applied"
         >
-          {applyMutation.isPending ? 'Saving…' : 'Yes'}
+          {applyMutation.isPending ? 'Saving…' : 'Yes, Applied'}
         </button>
         <button
           onClick={() => setConfirming(false)}
@@ -243,7 +250,7 @@ function MarkAppliedButton({ applicationId }: { applicationId: number }) {
 
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); setConfirming(true) }}
+      onClick={handleApplyClick}
       className="text-xs border border-green-300 text-green-700 px-2.5 py-1 rounded-md hover:bg-green-50 transition-colors font-medium"
       aria-label="Mark job as applied"
     >
@@ -252,7 +259,7 @@ function MarkAppliedButton({ applicationId }: { applicationId: number }) {
   )
 }
 
-export default function TailoredResumePanel({ jobId, company, readOnly = false, isGenerating = false, applicationId }: TailoredResumePanelProps) {
+export default function TailoredResumePanel({ jobId, company, jobUrl, readOnly = false, isGenerating = false, applicationId }: TailoredResumePanelProps) {
   const queryClient = useQueryClient()
   const [showPreview, setShowPreview] = useState(false)
   const [generateError, setGenerateError] = useState('')
@@ -353,7 +360,7 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false, 
               </span>
               <div className="flex items-center gap-3 flex-wrap">
                 {applicationId != null && (
-                  <MarkAppliedButton applicationId={applicationId} />
+                  <MarkAppliedButton applicationId={applicationId} jobUrl={jobUrl} />
                 )}
 
                 {/* Download from Drive */}
@@ -447,7 +454,7 @@ export default function TailoredResumePanel({ jobId, company, readOnly = false, 
               <span className="text-xs text-gray-400">No resume yet</span>
               <div className="flex items-center gap-3 flex-wrap">
                 {applicationId != null && (
-                  <MarkAppliedButton applicationId={applicationId} />
+                  <MarkAppliedButton applicationId={applicationId} jobUrl={jobUrl} />
                 )}
                 <button
                   onClick={() => generateMutation.mutate(additionalContext)}
