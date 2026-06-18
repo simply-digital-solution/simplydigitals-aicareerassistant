@@ -649,3 +649,97 @@ async def test_full_description_flag_passed_to_agent():
         await score_next_batch(db)
 
     assert captured.get("full_description") is True
+
+
+# ---------------------------------------------------------------------------
+# Retry logic — failure path stamps scored_at so the 30-min clock starts
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_exception_failure_stamps_scored_at():
+    rows = [_make_job_row(job_id=1)]
+    db   = _db_with_batch(rows)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent",
+              AsyncMock(side_effect=RuntimeError("timeout"))),
+    ):
+        await score_next_batch(db)
+
+    update_call = db.execute.call_args_list[2]
+    sql    = update_call.args[0].text
+    params = update_call.args[1]
+    assert "scored_at" in sql
+    assert params.get("now") is not None
+
+
+@pytest.mark.asyncio
+async def test_agent_error_failure_stamps_scored_at():
+    from app.shared.schemas import AgentError
+    rows = [_make_job_row(job_id=1)]
+    db   = _db_with_batch(rows)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent",
+              AsyncMock(return_value=(AgentError(error="parse failed"), {}))),
+    ):
+        await score_next_batch(db)
+
+    update_call = db.execute.call_args_list[2]
+    sql    = update_call.args[0].text
+    params = update_call.args[1]
+    assert "scored_at" in sql
+    assert params.get("now") is not None
+
+
+@pytest.mark.asyncio
+async def test_missing_job_stamps_scored_at():
+    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
+    db   = _db_with_batch(rows)
+
+    # LLM returns only job 1; job 2 is missing
+    opps   = [_make_opportunity(job_id=1)]
+    result = _make_research_result(opps)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        await score_next_batch(db)
+
+    # Find the failure UPDATE (has an "err" param and "scored_at")
+    failure_calls = [c for c in db.execute.call_args_list if c.args[1].get("err")]
+    assert len(failure_calls) == 1
+    assert "scored_at" in failure_calls[0].args[0].text
+    assert failure_calls[0].args[1].get("now") is not None
+
+
+# ---------------------------------------------------------------------------
+# Retry loop query — picks up errored jobs after 30-min cooldown
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_loop_query_includes_errored_jobs_with_old_scored_at():
+    """The SELECT WHERE clause must include score_error IS NOT NULL with cooldown."""
+    db = _db_with_batch(job_rows=[])
+
+    await score_next_batch(db)
+
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "score_error IS NULL" in select_sql
+    # Also retries errored jobs after cooldown
+    assert "scored_at" in select_sql
+    assert "-30 minutes" in select_sql
+
+
+@pytest.mark.asyncio
+async def test_loop_query_excludes_jobs_currently_rescoring():
+    """Jobs with rescoring=1 must not be picked up by the loop."""
+    db = _db_with_batch(job_rows=[])
+
+    await score_next_batch(db)
+
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "rescoring = 0" in select_sql

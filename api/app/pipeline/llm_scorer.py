@@ -76,7 +76,12 @@ async def score_next_batch(db: AsyncSession) -> bool:
                    jp.description, jp.inferred_industries
             FROM job_postings jp
             WHERE jp.scored = 0
-              AND jp.score_error IS NULL
+              AND jp.rescoring = 0
+              AND (
+                jp.score_error IS NULL
+                OR jp.scored_at < datetime('now', '-30 minutes')
+                OR jp.scored_at IS NULL
+              )
             ORDER BY jp.posted_at ASC, jp.scraped_at ASC
             LIMIT :batch_size
         """),
@@ -122,10 +127,11 @@ async def score_next_batch(db: AsyncSession) -> bool:
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: batch failed after %.1fs: %s", time.monotonic() - t_start, error_msg)
+        now = datetime.now(timezone.utc).isoformat()
         for jid in job_ids:
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
-                {"err": error_msg, "id": jid},
+                text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
+                {"err": error_msg, "now": now, "id": jid},
             )
         await db.commit()
         return True
@@ -133,10 +139,11 @@ async def score_next_batch(db: AsyncSession) -> bool:
     if isinstance(result, AgentError):
         error_msg = result.error
         logger.warning("llm_scorer: agent error for batch %s: %s", job_ids, error_msg)
+        now = datetime.now(timezone.utc).isoformat()
         for jid in job_ids:
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
-                {"err": error_msg, "id": jid},
+                text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
+                {"err": error_msg, "now": now, "id": jid},
             )
         await db.commit()
         return True
@@ -144,13 +151,14 @@ async def score_next_batch(db: AsyncSession) -> bool:
     # Match results by job_id
     batch_model = meta.get("model")
     returned = {opp.job_id: opp for opp in result.opportunities}
+    now = datetime.now(timezone.utc).isoformat()
     for jid in job_ids:
         opp = returned.get(jid)
         if opp is None:
             logger.warning("llm_scorer: job_id=%d missing from batch response", jid)
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err WHERE id=:id"),
-                {"err": "Missing from LLM batch response", "id": jid},
+                text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
+                {"err": "Missing from LLM batch response", "now": now, "id": jid},
             )
             continue
         await _write_score(db, jid, opp, model=batch_model)
