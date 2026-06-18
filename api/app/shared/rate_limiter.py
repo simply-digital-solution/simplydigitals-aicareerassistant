@@ -69,8 +69,14 @@ class SlidingWindowRateLimiter:
         return max(0, self._max - self.slots_used)
 
 
-# Module-level singleton — shared across all requests in the process
+# Module-level singletons — shared across all requests in the process
 gemini_rate_limiter = SlidingWindowRateLimiter(
     max_per_window=DEFAULT_MAX_RPM,
+    window_seconds=WINDOW_SECONDS,
+)
+
+# Groq free tier: 30 RPM for Llama 3.1 8B Instant
+groq_rate_limiter = SlidingWindowRateLimiter(
+    max_per_window=25,   # stay safely under the 30 RPM cap
     window_seconds=WINDOW_SECONDS,
 )

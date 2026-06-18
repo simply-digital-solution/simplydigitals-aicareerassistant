@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.api_client import get_claude_client
+from app.shared.api_client import get_claude_client, BaseLLMClient
 from app.shared.schemas import ResearchOutput, AgentError
 
 PROMPT_FILE = Path(__file__).parents[4] / "prompts" / "research.md"
@@ -99,13 +99,14 @@ async def run_research_agent(
     feedback_examples: str = "",
     full_description: bool = False,
     max_self_corrections: Optional[int] = None,
+    llm_client: Optional[BaseLLMClient] = None,
 ) -> tuple[ResearchOutput | AgentError, dict]:
     """
     Run the research agent against a list of job postings.
 
     Returns (ResearchOutput | AgentError, run_metadata).
     """
-    client = get_claude_client()
+    client = llm_client or get_claude_client()
     system_prompt = _load_system_prompt()
     user_message = _build_user_message(
         profile, job_postings, search_filters or {}, feedback_examples, full_description
