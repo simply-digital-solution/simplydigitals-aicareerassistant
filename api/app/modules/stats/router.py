@@ -76,12 +76,11 @@ async def get_dashboard_stats(
         "date", 30,
     )
 
-    # 3. Jobs selected per day — use created_at as the selection timestamp
-    #    (jobs enter the pipeline as "selected" by default)
+    # 3. Jobs selected per day — applications created in last 30 days
     r3 = await db.execute(text("""
         SELECT date(created_at) AS day, count(*) AS count
-        FROM job_postings
-        WHERE user_id = :uid AND status != 'archived' AND created_at >= :since
+        FROM applications
+        WHERE user_id = :uid AND created_at >= :since
         GROUP BY day ORDER BY day
     """), {"uid": uid, "since": since})
     selected_by_day = _fill_days(
@@ -92,7 +91,7 @@ async def get_dashboard_stats(
     # 4. Jobs applied per day (last 30 days)
     r4 = await db.execute(text("""
         SELECT date(applied_at) AS day, count(*) AS count
-        FROM job_postings
+        FROM applications
         WHERE user_id = :uid AND status = 'applied' AND applied_at >= :since
         GROUP BY day ORDER BY day
     """), {"uid": uid, "since": since})
@@ -104,7 +103,7 @@ async def get_dashboard_stats(
     # 5. Jobs called for interview per month (last 3 months)
     r5 = await db.execute(text("""
         SELECT strftime('%Y-%m', status_updated_at) AS month, count(*) AS count
-        FROM job_postings
+        FROM applications
         WHERE user_id = :uid AND status = 'interviewing'
           AND status_updated_at >= date('now', '-3 months')
         GROUP BY month ORDER BY month
