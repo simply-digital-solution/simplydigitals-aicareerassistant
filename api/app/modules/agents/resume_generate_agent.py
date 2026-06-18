@@ -25,9 +25,14 @@ def _build_user_message(
     resume_text: str,
     jd_text: str,
     candidate_name: str = "",
+    additional_context: str = "",
 ) -> str:
     jd_section = jd_text[:JD_MAX_CHARS]
     name_line  = f"Candidate name: {candidate_name}\n\n" if candidate_name else ""
+    context_section = (
+        f"--- CANDIDATE'S ADDITIONAL CONTEXT ---\n{additional_context.strip()}\n"
+        f"--- END ADDITIONAL CONTEXT ---\n\n"
+    ) if additional_context.strip() else ""
 
     return (
         f"{name_line}"
@@ -35,6 +40,7 @@ def _build_user_message(
         f"--- END RESUME ---\n\n"
         f"--- TARGET JOB DESCRIPTION ---\n{jd_section}\n"
         f"--- END JOB DESCRIPTION ---\n\n"
+        f"{context_section}"
         "Produce a complete tailored resume following the candidate's exact "
         "section structure and style. Return JSON only.\n\n"
         "REMINDER: Every sentence MUST be first person. "
@@ -47,6 +53,7 @@ async def run_resume_generate_agent(
     resume_text: str,
     jd_text: str,
     candidate_name: str = "",
+    additional_context: str = "",
     db: Optional[AsyncSession] = None,
     user_id: Optional[int] = None,
     application_id: Optional[int] = None,
@@ -58,7 +65,7 @@ async def run_resume_generate_agent(
     """
     client         = get_llm_client()
     system_prompt  = _load_system_prompt()
-    user_message   = _build_user_message(resume_text, jd_text, candidate_name)
+    user_message   = _build_user_message(resume_text, jd_text, candidate_name, additional_context)
 
     return await client.run_agent(
         agent_name=AGENT_NAME,

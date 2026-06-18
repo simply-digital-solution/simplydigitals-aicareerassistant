@@ -1160,9 +1160,14 @@ async def rescore_job(
     return dict(job) if job else {}
 
 
+class GenerateResumeRequest(BaseModel):
+    additional_context: str = ""
+
+
 @router.post("/research/jobs/{job_id}/generate-resume", status_code=201)
 async def generate_resume(
     job_id: int,
+    body: GenerateResumeRequest = GenerateResumeRequest(),
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1207,6 +1212,7 @@ async def generate_resume(
         resume_text=resume_text,
         jd_text=job["description"] or "",
         candidate_name=candidate_name,
+        additional_context=body.additional_context,
         db=db,
         user_id=current_user.id,
         application_id=application_id,

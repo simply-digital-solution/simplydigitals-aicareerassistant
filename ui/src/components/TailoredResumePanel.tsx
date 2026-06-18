@@ -257,6 +257,7 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [additionalContext, setAdditionalContext] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const { data: driveStatus } = useQuery({
@@ -276,9 +277,10 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
   })
 
   const generateMutation = useMutation({
-    mutationFn: () => researchApi.generateResume(jobId).then(r => r.data),
+    mutationFn: (ctx: string) => researchApi.generateResume(jobId, ctx).then(r => r.data),
     onSuccess: (data) => {
       queryClient.setQueryData(['generated-resume', jobId], data)
+      setAdditionalContext('')
     },
   })
 
@@ -328,6 +330,15 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
           <div className="h-24 bg-gray-50 rounded-lg animate-pulse" />
         ) : resume ? (
           <>
+            {!readOnly && (
+              <textarea
+                value={additionalContext}
+                onChange={e => setAdditionalContext(e.target.value)}
+                placeholder="Additional context for regeneration (optional) — e.g. I have hands-on ServiceNow experience from a 2023 project not listed in my resume"
+                rows={2}
+                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+              />
+            )}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">
                 {resume?.resume
@@ -389,7 +400,7 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
 
                 {!readOnly && (
                   <button
-                    onClick={() => generateMutation.mutate()}
+                    onClick={() => generateMutation.mutate(additionalContext)}
                     disabled={generateMutation.isPending || isGenerating}
                     className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors"
                   >
@@ -431,6 +442,13 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
           </>
         ) : !readOnly ? (
           <>
+            <textarea
+              value={additionalContext}
+              onChange={e => setAdditionalContext(e.target.value)}
+              placeholder="Additional context (optional) — e.g. I have hands-on ServiceNow experience from a 2023 project not listed in my resume"
+              rows={2}
+              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+            />
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">No resume yet</span>
               <div className="flex items-center gap-3 flex-wrap">
@@ -447,7 +465,7 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
                   {uploading ? 'Uploading…' : '↑ Upload to Drive'}
                 </button>
                 <button
-                  onClick={() => generateMutation.mutate()}
+                  onClick={() => generateMutation.mutate(additionalContext)}
                   disabled={generateMutation.isPending || isGenerating}
                   className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors font-medium"
                 >

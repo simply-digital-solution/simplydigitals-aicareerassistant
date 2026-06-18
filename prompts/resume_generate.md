@@ -75,4 +75,7 @@ Return ONLY valid JSON matching this exact schema:
 - Tailor bullet points to highlight relevance to the target role — rephrase, do not invent.
 - Skills section: reorder skills to put most relevant to the job first.
 - **Never use third person** — no "he", "she", "they", or the candidate's name in body text. Always use first person.
+- **Summary section**: maximum 2 paragraphs, 5–10 lines total. Each paragraph must be 2–3 sentences. Do not pad with additional paragraphs or long lists of "I am..." statements.
+- **Competencies section**: consolidate all competencies into a maximum of 5 categories. Any new skills required by the JD must be merged into the most relevant existing category — never added as standalone lines or extra categories beyond 5.
+- If a `CANDIDATE'S ADDITIONAL CONTEXT` section is provided, treat it as verified facts about the candidate. Use it to fill gaps identified in the JD — add relevant skills or experience into the appropriate resume sections. Never invent anything beyond what is stated there.
 - Return ONLY valid JSON. Nothing else.

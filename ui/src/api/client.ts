@@ -274,8 +274,8 @@ export const researchApi = {
   rescoreAllJobs: () => api.post<{ count: number }>('/research/jobs/rescore-all'),
   bulkGenerateResumes: (jobIds: number[]) =>
     api.post<{ results: Record<number, boolean> }>('/research/jobs/bulk-generate-resume', { job_ids: jobIds }),
-  generateResume: (jobId: number) =>
-    api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/generate-resume`),
+  generateResume: (jobId: number, additionalContext: string = "") =>
+    api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/generate-resume`, { additional_context: additionalContext }),
   getGeneratedResume: (jobId: number) =>
     api.get<GeneratedResumeResponse>(`/research/jobs/${jobId}/resume`),
   uploadToDrive: (jobId: number, file: File) => {
