@@ -413,7 +413,6 @@ class GeminiClient(BaseLLMClient):
             "contents": contents,
             "generationConfig": {
                 "temperature": 0.1,
-                "maxOutputTokens": 32768,
             },
         }
 
