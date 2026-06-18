@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     # Gemini
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-flash-latest"
+    gemini_model: str = "gemini-2.5-flash-lite"
 
     # Groq (scoring provider — higher free-tier quota than Gemini)
     groq_api_key: str = ""
