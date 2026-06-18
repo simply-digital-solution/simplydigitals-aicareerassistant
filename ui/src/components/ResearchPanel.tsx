@@ -216,7 +216,7 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           )}
         </div>
       </div>
-      {(rescoring || job.rescoring) && (
+      {(rescoring || !!job.rescoring) && (
         <p className="text-xs text-indigo-400 italic animate-pulse mt-1">Rescoring…</p>
       )}
       {!readOnly && !rescoring && !job.rescoring && job.score_error && job.fit_score !== null && (
@@ -587,17 +587,35 @@ export default function ResearchPanel() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* ── Daily scoring limit banner ── */}
-      {scoringUsage && scoringUsage.remaining === 0 && (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
-          <span className="text-amber-500 text-lg leading-none mt-0.5">⚠</span>
-          <div>
-            <p className="text-sm font-semibold text-amber-800">Daily scoring limit reached</p>
-            <p className="text-xs text-amber-700 mt-0.5">
-              You've used all {scoringUsage.daily_limit} job scorings for today. Scoring resumes automatically tomorrow.
-            </p>
+      {/* ── Daily scoring usage indicator ── */}
+      {scoringUsage && (
+        scoringUsage.remaining === 0 ? (
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
+            <span className="text-amber-500 text-lg leading-none mt-0.5">⚠</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Daily scoring limit reached</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                You've used all {scoringUsage.daily_limit} job scorings for today. Scoring resumes automatically tomorrow.
+              </p>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  scoringUsage.remaining <= 10 ? 'bg-amber-400' : 'bg-emerald-400'
+                }`}
+                style={{ width: `${(scoringUsage.jobs_scored_today / scoringUsage.daily_limit) * 100}%` }}
+              />
+            </div>
+            <span className={`text-xs font-medium whitespace-nowrap ${
+              scoringUsage.remaining <= 10 ? 'text-amber-600' : 'text-gray-400'
+            }`}>
+              {scoringUsage.remaining} / {scoringUsage.daily_limit} scorings left today
+            </span>
+          </div>
+        )
       )}
 
       {/* ── Targeting (collapsible, read-only) ── */}

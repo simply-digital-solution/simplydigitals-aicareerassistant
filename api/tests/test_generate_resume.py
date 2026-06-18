@@ -9,9 +9,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.shared.schemas import GeneratedResumeOutput, GeneratedResumeSection, AgentError
 
-# The agent function is imported locally inside the endpoint, so we patch
-# the source module directly so Python's import cache picks up the mock.
 _AGENT_PATCH = "app.modules.agents.resume_generate_agent.run_resume_generate_agent"
+_DRIVE_PATCH = "app.shared.google_drive.upload_or_update_file"
+_DOCX_PATCH = "app.shared.resume_docx.build_docx_bytes"
 
 
 # ---------------------------------------------------------------------------
@@ -57,41 +57,90 @@ def _make_profile_orm(resume_text: str = "My resume text here."):
     return p
 
 
-def _db_with_job(has_job: bool = True, resume_text: str = "My resume text here.", drive_file_id=None, drive_link=None):
+def _make_job_row(has_job: bool = True):
+    if not has_job:
+        return None
+    row = MagicMock()
+    row.__getitem__ = lambda self, k: {
+        "id": 1,
+        "title": "Data Engineer",
+        "company": "ACME Corp",
+        "description": "A Python data engineer role.",
+    }.get(k)
+    return row
+
+
+def _make_token_row(connected: bool = True, refresh_token: str = "rt123"):
+    """Simulate the profiles row for Drive token check."""
+    row = MagicMock()
+    row.__getitem__ = lambda self, k: {
+        "google_access_token": "at123" if connected else None,
+        "google_refresh_token": refresh_token if connected else None,
+        "google_token_expiry": "2099-01-01T00:00:00Z" if connected else None,
+    }.get(k)
+    return row
+
+
+def _make_db(
+    has_job: bool = True,
+    resume_text: str = "My resume text here.",
+    drive_connected: bool = True,
+    existing_drive_file_id=None,
+):
     """
-    DB mock serving execute calls in endpoint order:
-      1st → job row  (text SELECT)
-      2nd → profile  (ORM select → scalar_one_or_none)
-      3rd → app link (text SELECT)
-      4th → INSERT/upsert
-      5th → SELECT drive_file_id, drive_link (post-commit read-back)
+    Build an AsyncMock DB that serves execute calls in endpoint order:
+
+    1. Job lookup (text SELECT id, title, company, description)
+    2. Profile ORM select → scalar_one_or_none
+    3. Drive token check (SELECT google_* FROM profiles)
+    4. Application link lookup
+    5. INSERT generated_resumes (upsert)
+    6. [commit #1]
+    7. SELECT drive_file_id (existing file id for Drive update-vs-create)
+    8. UPDATE drive fields + clear resume_json
+    9. [commit #2]
     """
     db = AsyncMock()
 
-    # Call 1: job lookup
+    # 1: job row
     job_result = MagicMock()
-    job_row = MagicMock()
-    job_row.__getitem__ = lambda self, k: "A Python data engineer role." if k == "description" else 1
-    job_result.mappings.return_value.first.return_value = job_row if has_job else None
+    job_result.mappings.return_value.first.return_value = _make_job_row(has_job)
 
-    # Call 2: ORM profile select — _load_profile calls scalar_one_or_none()
+    # 2: ORM profile (used by _load_profile via scalar_one_or_none)
     profile_orm_result = MagicMock()
     profile_orm_result.scalar_one_or_none.return_value = _make_profile_orm(resume_text)
 
-    # Call 3: application link
+    # 3: Drive token check
+    token_result = MagicMock()
+    token_result.mappings.return_value.first.return_value = (
+        _make_token_row(connected=drive_connected) if drive_connected else None
+    )
+
+    # 4: application link
     app_result = MagicMock()
     app_result.mappings.return_value.first.return_value = None
 
-    # Call 4: INSERT
+    # 5: INSERT upsert
     insert_result = MagicMock()
 
-    # Call 5: read-back drive fields after commit
-    drive_row = MagicMock()
-    drive_row.__getitem__ = lambda self, k: drive_file_id if k == "drive_file_id" else drive_link
-    drive_result = MagicMock()
-    drive_result.mappings.return_value.first.return_value = drive_row
+    # 6: SELECT drive_file_id for existing_file_id
+    gr_row = MagicMock()
+    gr_row.__getitem__ = lambda self, k: existing_drive_file_id if k == "drive_file_id" else None
+    gr_result = MagicMock()
+    gr_result.mappings.return_value.first.return_value = gr_row
 
-    db.execute.side_effect = [job_result, profile_orm_result, app_result, insert_result, drive_result]
+    # 7: UPDATE drive fields
+    update_result = MagicMock()
+
+    db.execute.side_effect = [
+        job_result,
+        profile_orm_result,
+        token_result,
+        app_result,
+        insert_result,
+        gr_result,
+        update_result,
+    ]
     db.commit = AsyncMock()
     return db
 
@@ -100,8 +149,10 @@ def _db_for_get_resume(has_resume: bool = True):
     db = AsyncMock()
     result = MagicMock()
     row = MagicMock()
+    resume_json = json.dumps(_make_resume_output().model_dump())
     row.__getitem__ = lambda self, k: (
-        json.dumps(_make_resume_output().model_dump()) if k == "resume_json" else "2026-06-15T00:00:00Z"
+        resume_json if k == "resume_json"
+        else (None if k in ("drive_file_id", "drive_link") else "2026-06-15T00:00:00Z")
     )
     result.mappings.return_value.first.return_value = row if has_resume else None
     db.execute.return_value = result
@@ -117,28 +168,37 @@ async def test_generate_resume_returns_resume():
     from app.modules.agents.router import generate_resume
 
     resume_output = _make_resume_output()
-    db = _db_with_job()
+    db = _make_db()
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(resume_output, {}))):
-        result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
+        with patch(_DOCX_PATCH, return_value=b"fake-docx"):
+            with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid123", "https://drive.google.com/file/fid123/view", None))):
+                result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
-    assert result["job_posting_id"] == 1
-    assert result["resume"]["name"] == "Jane Doe"
-    assert result["resume"]["headline"] == "Senior Data Engineer tailored for Fintech"
+    body = result.body  # JSONResponse
+    data = json.loads(body)
+    assert data["job_posting_id"] == 1
+    assert data["resume"]["name"] == "Jane Doe"
+    assert data["resume"]["headline"] == "Senior Data Engineer tailored for Fintech"
+    assert data["drive_file_id"] == "fid123"
+    assert data["drive_link"] == "https://drive.google.com/file/fid123/view"
 
 
 @pytest.mark.asyncio
 async def test_generate_resume_upserts_to_db():
     from app.modules.agents.router import generate_resume
 
-    db = _db_with_job()
+    db = _make_db()
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
-        await generate_resume(job_id=1, current_user=_make_user(), db=db)
+        with patch(_DOCX_PATCH, return_value=b"fake-docx"):
+            with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid", "https://link", None))):
+                await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
-    db.commit.assert_awaited_once()
-    # 5 executes: job + profile + app_link + insert + drive read-back
-    assert db.execute.await_count == 5
+    # 2 commits: one after insert, one after drive update
+    assert db.commit.await_count == 2
+    # 7 executes: job + profile + drive_token + app_link + insert + drive_file_id + update
+    assert db.execute.await_count == 7
 
 
 @pytest.mark.asyncio
@@ -146,9 +206,8 @@ async def test_generate_resume_404_when_job_not_found():
     from fastapi import HTTPException
     from app.modules.agents.router import generate_resume
 
-    db = _db_with_job(has_job=False)
+    db = _make_db(has_job=False)
 
-    # 404 is raised before the agent is called; no patch needed
     with pytest.raises(HTTPException) as exc_info:
         await generate_resume(job_id=999, current_user=_make_user(), db=db)
 
@@ -160,9 +219,8 @@ async def test_generate_resume_422_when_no_resume_in_profile():
     from fastapi import HTTPException
     from app.modules.agents.router import generate_resume
 
-    db = _db_with_job(resume_text="")  # empty resume_text
+    db = _make_db(resume_text="")
 
-    # 422 is raised before the agent is called; no patch needed
     with pytest.raises(HTTPException) as exc_info:
         await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
@@ -170,29 +228,56 @@ async def test_generate_resume_422_when_no_resume_in_profile():
 
 
 @pytest.mark.asyncio
-async def test_generate_resume_includes_drive_fields_when_null():
+async def test_generate_resume_422_when_drive_not_connected():
+    from fastapi import HTTPException
     from app.modules.agents.router import generate_resume
 
-    db = _db_with_job(drive_file_id=None, drive_link=None)
+    db = _make_db(drive_connected=False)
 
-    with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
-        result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
+    with pytest.raises(HTTPException) as exc_info:
+        await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
-    assert result["drive_file_id"] is None
-    assert result["drive_link"] is None
+    assert exc_info.value.status_code == 422
+    assert "Google Drive not connected" in exc_info.value.detail
 
 
 @pytest.mark.asyncio
-async def test_generate_resume_includes_drive_fields_when_present():
+async def test_generate_resume_207_when_drive_upload_fails():
+    """When Drive upload raises an exception, endpoint returns 207 with drive_error."""
     from app.modules.agents.router import generate_resume
 
-    db = _db_with_job(drive_file_id="abc123", drive_link="https://drive.google.com/file/d/abc123/view")
+    db = _make_db()
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
-        result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
+        with patch(_DOCX_PATCH, return_value=b"fake-docx"):
+            with patch(_DRIVE_PATCH, new=AsyncMock(side_effect=Exception("Drive quota exceeded"))):
+                result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
-    assert result["drive_file_id"] == "abc123"
-    assert result["drive_link"] == "https://drive.google.com/file/d/abc123/view"
+    assert result.status_code == 207
+    data = json.loads(result.body)
+    assert "drive_error" in data
+    assert "Drive quota exceeded" in data["drive_error"]
+    assert data["resume"]["name"] == "Jane Doe"
+    # resume_json kept in DB: only 1 commit (the INSERT), not 2
+    assert db.commit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_resume_201_on_success():
+    """Successful generation + upload returns 201."""
+    from app.modules.agents.router import generate_resume
+
+    db = _make_db()
+
+    with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
+        with patch(_DOCX_PATCH, return_value=b"fake-docx"):
+            with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid", "https://link", None))):
+                result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
+
+    assert result.status_code == 201
+    data = json.loads(result.body)
+    assert "drive_error" not in data
+    assert data["drive_file_id"] == "fid"
 
 
 @pytest.mark.asyncio
@@ -200,7 +285,7 @@ async def test_generate_resume_502_when_agent_returns_error():
     from fastapi import HTTPException
     from app.modules.agents.router import generate_resume
 
-    db = _db_with_job()
+    db = _make_db()
     agent_error = AgentError(error="LLM timeout", raw_output=None)
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(agent_error, {}))):

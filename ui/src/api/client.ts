@@ -245,9 +245,10 @@ export interface GeneratedResumeOutput {
 
 export interface GeneratedResumeResponse {
   job_posting_id: number
-  resume: GeneratedResumeOutput
+  resume: GeneratedResumeOutput | null
   drive_file_id: string | null
   drive_link: string | null
+  drive_error?: string
   created_at?: string
   updated_at?: string
 }
@@ -279,13 +280,8 @@ export const researchApi = {
     api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/generate-resume`, { additional_context: additionalContext }),
   getGeneratedResume: (jobId: number) =>
     api.get<GeneratedResumeResponse>(`/research/jobs/${jobId}/resume`),
-  uploadToDrive: (jobId: number, file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return api.post<{ drive_link: string; drive_file_id: string }>(`/research/jobs/${jobId}/upload-to-drive`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-  },
+  retryDriveUpload: (jobId: number) =>
+    api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/retry-drive-upload`),
 }
 
 // Budget API

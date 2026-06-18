@@ -1164,7 +1164,7 @@ class GenerateResumeRequest(BaseModel):
     additional_context: str = ""
 
 
-@router.post("/research/jobs/{job_id}/generate-resume", status_code=201)
+@router.post("/research/jobs/{job_id}/generate-resume")
 async def generate_resume(
     job_id: int,
     body: GenerateResumeRequest = GenerateResumeRequest(),
@@ -1172,16 +1172,24 @@ async def generate_resume(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Generate a tailored resume for a selected job using the candidate's
-    profile resume text. Saves result to generated_resumes (upsert by user+job).
+    Generate a tailored resume for a selected job, then auto-upload to Google Drive.
+
+    Response codes:
+    - 201: Generation + Drive upload both succeeded; resume_json cleared from DB.
+    - 207: Generation succeeded but Drive upload failed; resume_json retained for retry.
+    - 422: No resume in profile, or Google Drive not connected.
+    - 502: LLM generation failed.
     """
     from datetime import datetime, timezone
+    from fastapi.responses import JSONResponse
     from app.modules.agents.resume_generate_agent import run_resume_generate_agent
     from app.shared.schemas import AgentError
+    from app.shared.resume_docx import build_docx_bytes
+    from app.shared.google_drive import upload_or_update_file
 
     # Fetch job
     job_row = await db.execute(
-        text("SELECT id, description FROM job_postings WHERE id = :id AND user_id = :uid"),
+        text("SELECT id, title, company, description FROM job_postings WHERE id = :id AND user_id = :uid"),
         {"id": job_id, "uid": current_user.id},
     )
     job = job_row.mappings().first()
@@ -1193,6 +1201,15 @@ async def generate_resume(
     resume_text = profile.get("resume_text") or ""
     if not resume_text.strip():
         raise HTTPException(422, "No resume found in profile. Please upload your resume first.")
+
+    # Check Drive connection before generating (fail fast)
+    prof_result = await db.execute(
+        text("SELECT google_access_token, google_refresh_token, google_token_expiry FROM profiles WHERE user_id = :uid"),
+        {"uid": current_user.id},
+    )
+    prof = prof_result.mappings().first()
+    if not prof or not prof["google_refresh_token"]:
+        raise HTTPException(422, "Google Drive not connected. Connect Drive first before generating a resume.")
 
     candidate_name = profile.get("full_name") or ""
 
@@ -1208,6 +1225,7 @@ async def generate_resume(
     app = app_row.mappings().first()
     application_id = app["id"] if app else None
 
+    # ── LLM generation ───────────────────────────────────────────────────────
     result, _ = await run_resume_generate_agent(
         resume_text=resume_text,
         jd_text=job["description"] or "",
@@ -1224,6 +1242,7 @@ async def generate_resume(
     now = datetime.now(timezone.utc).isoformat()
     resume_json = result.model_dump_json()
 
+    # ── Persist generated resume (always save JSON first as safety net) ──────
     await db.execute(
         text("""
             INSERT INTO generated_resumes
@@ -1231,25 +1250,200 @@ async def generate_resume(
             VALUES
                 (:uid, :jid, :aid, :resume_json, :now, :now)
             ON CONFLICT (user_id, job_posting_id) DO UPDATE SET
-                resume_json  = excluded.resume_json,
+                resume_json    = excluded.resume_json,
                 application_id = excluded.application_id,
-                updated_at   = excluded.updated_at
+                drive_file_id  = NULL,
+                drive_link     = NULL,
+                updated_at     = excluded.updated_at
         """),
         {"uid": current_user.id, "jid": job_id, "aid": application_id,
          "resume_json": resume_json, "now": now},
     )
     await db.commit()
 
-    dr = (await db.execute(
-        text("SELECT drive_file_id, drive_link FROM generated_resumes WHERE user_id = :uid AND job_posting_id = :jid"),
+    # ── Build .docx and upload to Drive ─────────────────────────────────────
+    company = job["company"] or "Company"
+    title = job["title"] or "Role"
+    folder_name = f"{company} - {title}"
+    company_slug = company.replace(".", "").replace(" ", "_")
+    filename = f"Resume_{company_slug}.docx"
+
+    # Load existing drive_file_id for update-vs-create decision
+    gr_result = await db.execute(
+        text("SELECT drive_file_id FROM generated_resumes WHERE user_id = :uid AND job_posting_id = :jid"),
         {"uid": current_user.id, "jid": job_id},
-    )).mappings().first()
+    )
+    gr = gr_result.mappings().first()
+    existing_file_id = gr["drive_file_id"] if gr else None
+
+    drive_error: str | None = None
+    drive_file_id: str | None = None
+    drive_link: str | None = None
+
+    try:
+        docx_bytes = build_docx_bytes(result)
+        file_id, web_link, new_token_data = await upload_or_update_file(
+            access_token=prof["google_access_token"],
+            refresh_token=prof["google_refresh_token"],
+            expiry_iso=prof["google_token_expiry"],
+            folder_name=folder_name,
+            filename=filename,
+            file_bytes=docx_bytes,
+            existing_file_id=existing_file_id,
+        )
+        drive_file_id = file_id
+        drive_link = web_link
+
+        # Persist refreshed tokens if rotated
+        if new_token_data:
+            await db.execute(
+                text("UPDATE profiles SET google_access_token=:at, google_token_expiry=:exp WHERE user_id=:uid"),
+                {"at": new_token_data["access_token"], "exp": new_token_data["expiry_iso"], "uid": current_user.id},
+            )
+
+        # Success: store drive info, clear resume_json from DB
+        await db.execute(
+            text("""
+                UPDATE generated_resumes
+                SET drive_file_id = :fid,
+                    drive_link    = :link,
+                    resume_json   = NULL,
+                    updated_at    = :now
+                WHERE user_id = :uid AND job_posting_id = :jid
+            """),
+            {"fid": drive_file_id, "link": drive_link, "now": now,
+             "uid": current_user.id, "jid": job_id},
+        )
+        await db.commit()
+
+        logger.info(
+            "generate_resume: Drive upload success — user_id=%d job_id=%d file_id=%s",
+            current_user.id, job_id, drive_file_id,
+        )
+
+    except Exception as exc:
+        logger.error(
+            "generate_resume: Drive upload failed — user_id=%d job_id=%d: %s",
+            current_user.id, job_id, exc, exc_info=True,
+        )
+        drive_error = str(exc)
+
+    payload = {
+        "job_posting_id": job_id,
+        "resume": result.model_dump(),
+        "drive_file_id": drive_file_id,
+        "drive_link": drive_link,
+    }
+
+    if drive_error:
+        payload["drive_error"] = drive_error
+        return JSONResponse(status_code=207, content=payload)
+
+    return JSONResponse(status_code=201, content=payload)
+
+
+@router.post("/research/jobs/{job_id}/retry-drive-upload", status_code=201)
+async def retry_drive_upload(
+    job_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-attempt Drive upload for a resume where generation succeeded but upload failed.
+    Requires resume_json to still be present in generated_resumes.
+    On success, clears resume_json from the DB row.
+    """
+    from fastapi.responses import JSONResponse
+    from app.shared.schemas import GeneratedResumeOutput
+    from app.shared.resume_docx import build_docx_bytes
+    from app.shared.google_drive import upload_or_update_file
+    import json as _json
+
+    # Load OAuth tokens
+    prof_result = await db.execute(
+        text("SELECT google_access_token, google_refresh_token, google_token_expiry FROM profiles WHERE user_id = :uid"),
+        {"uid": current_user.id},
+    )
+    prof = prof_result.mappings().first()
+    if not prof or not prof["google_refresh_token"]:
+        raise HTTPException(422, "Google Drive not connected.")
+
+    # Load stored resume JSON
+    gr_result = await db.execute(
+        text("SELECT resume_json, drive_file_id FROM generated_resumes WHERE user_id=:uid AND job_posting_id=:jid"),
+        {"uid": current_user.id, "jid": job_id},
+    )
+    gr = gr_result.mappings().first()
+    if not gr or not gr["resume_json"]:
+        raise HTTPException(404, "No stored resume found for retry. Please generate first.")
+
+    # Load job info for folder/filename
+    job_result = await db.execute(
+        text("SELECT title, company FROM job_postings WHERE id=:jid AND user_id=:uid"),
+        {"jid": job_id, "uid": current_user.id},
+    )
+    job = job_result.mappings().first()
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    resume = GeneratedResumeOutput.model_validate(_json.loads(gr["resume_json"]))
+    company = job["company"] or "Company"
+    title_str = job["title"] or "Role"
+    folder_name = f"{company} - {title_str}"
+    company_slug = company.replace(".", "").replace(" ", "_")
+    filename = f"Resume_{company_slug}.docx"
+
+    try:
+        docx_bytes = build_docx_bytes(resume)
+        file_id, web_link, new_token_data = await upload_or_update_file(
+            access_token=prof["google_access_token"],
+            refresh_token=prof["google_refresh_token"],
+            expiry_iso=prof["google_token_expiry"],
+            folder_name=folder_name,
+            filename=filename,
+            file_bytes=docx_bytes,
+            existing_file_id=gr["drive_file_id"],
+        )
+    except Exception as exc:
+        logger.error(
+            "retry_drive_upload: failed — user_id=%d job_id=%d: %s",
+            current_user.id, job_id, exc, exc_info=True,
+        )
+        raise HTTPException(502, f"Google Drive upload failed: {exc}")
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+
+    if new_token_data:
+        await db.execute(
+            text("UPDATE profiles SET google_access_token=:at, google_token_expiry=:exp WHERE user_id=:uid"),
+            {"at": new_token_data["access_token"], "exp": new_token_data["expiry_iso"], "uid": current_user.id},
+        )
+
+    await db.execute(
+        text("""
+            UPDATE generated_resumes
+            SET drive_file_id = :fid,
+                drive_link    = :link,
+                resume_json   = NULL,
+                updated_at    = :now
+            WHERE user_id = :uid AND job_posting_id = :jid
+        """),
+        {"fid": file_id, "link": web_link, "now": now,
+         "uid": current_user.id, "jid": job_id},
+    )
+    await db.commit()
+
+    logger.info(
+        "retry_drive_upload: success — user_id=%d job_id=%d file_id=%s",
+        current_user.id, job_id, file_id,
+    )
 
     return {
         "job_posting_id": job_id,
-        "resume": result.model_dump(),
-        "drive_file_id": dr["drive_file_id"] if dr else None,
-        "drive_link": dr["drive_link"] if dr else None,
+        "resume": resume.model_dump(),
+        "drive_file_id": file_id,
+        "drive_link": web_link,
     }
 
 
@@ -1319,7 +1513,11 @@ async def get_generated_resume(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return the previously generated resume for a job, or 404 if not yet generated."""
+    """Return the previously generated resume for a job, or 404 if not yet generated.
+
+    When Drive upload succeeded, resume_json is NULL — the response will have
+    resume=null but drive_file_id/drive_link will be populated.
+    """
     row = await db.execute(
         text("""
             SELECT resume_json, drive_file_id, drive_link, created_at, updated_at
@@ -1333,9 +1531,10 @@ async def get_generated_resume(
         raise HTTPException(404, "No generated resume found for this job")
 
     import json as _json
+    resume_data = _json.loads(resume["resume_json"]) if resume["resume_json"] else None
     return {
         "job_posting_id": job_id,
-        "resume": _json.loads(resume["resume_json"]),
+        "resume": resume_data,
         "drive_file_id": resume["drive_file_id"],
         "drive_link": resume["drive_link"],
         "created_at": resume["created_at"],

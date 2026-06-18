@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Document, Packer, Paragraph, TextRun,
@@ -252,14 +252,11 @@ function MarkAppliedButton({ applicationId }: { applicationId: number }) {
   )
 }
 
-export default function TailoredResumePanel({ jobId, readOnly = false, isGenerating = false, applicationId }: TailoredResumePanelProps) {
+export default function TailoredResumePanel({ jobId, company, readOnly = false, isGenerating = false, applicationId }: TailoredResumePanelProps) {
   const queryClient = useQueryClient()
-  const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
-  const [uploadError, setUploadError] = useState('')
   const [generateError, setGenerateError] = useState('')
   const [additionalContext, setAdditionalContext] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
 
   const { data: driveStatus } = useQuery({
     queryKey: ['google-drive-status'],
@@ -277,12 +274,22 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
     retry: false,
   })
 
+  const driveConnected = driveStatus?.connected ?? false
+
   const generateMutation = useMutation({
-    mutationFn: (ctx: string) => { setGenerateError(''); return researchApi.generateResume(jobId, ctx).then(r => r.data) },
+    mutationFn: (ctx: string) => {
+      setGenerateError('')
+      // axios resolves 2xx; 207 is 2xx so it resolves normally — we extract drive_error from data
+      return researchApi.generateResume(jobId, ctx).then(r => r.data)
+    },
     onSuccess: (data) => {
       queryClient.setQueryData(['generated-resume', jobId], data)
       setAdditionalContext('')
-      setGenerateError('')
+      if (data.drive_error) {
+        setGenerateError(`Resume generated but Drive upload failed: ${data.drive_error}`)
+      } else {
+        setGenerateError('')
+      }
     },
     onError: (err: { response?: { data?: { detail?: string } } }) => {
       const detail = err?.response?.data?.detail ?? 'Generation failed. Please try again.'
@@ -290,41 +297,25 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
     },
   })
 
-  // resume prefers mutation data (freshly generated) but falls back to cache.
-  // After an upload we reset the mutation so the cache (with drive_file_id) wins.
+  const retryMutation = useMutation({
+    mutationFn: () => researchApi.retryDriveUpload(jobId).then(r => r.data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['generated-resume', jobId], data)
+      setGenerateError('')
+    },
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      const detail = err?.response?.data?.detail ?? 'Retry failed. Please try again.'
+      setGenerateError(detail)
+    },
+  })
+
+  // resume prefers mutation data (freshly generated) but falls back to cache
   const resume = generateMutation.data ?? existing
 
   const effectiveDriveLink = resume?.drive_link ?? null
-  const driveConnected = driveStatus?.connected ?? false
+  const hasDriveError = Boolean(resume?.drive_error || generateError.includes('Drive upload failed'))
 
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-    setUploadError('')
-    setUploading(true)
-    try {
-      const res = await researchApi.uploadToDrive(jobId, file)
-      // Patch the cache with the new drive fields; if no resume existed yet, seed a minimal record
-      queryClient.setQueryData(['generated-resume', jobId], (old: typeof existing) =>
-        old
-          ? { ...old, drive_link: res.data.drive_link, drive_file_id: res.data.drive_file_id }
-          : { job_posting_id: jobId, resume: null, drive_link: res.data.drive_link, drive_file_id: res.data.drive_file_id, created_at: null, updated_at: null }
-      )
-      // Reset mutation so resume falls back to the patched cache (which has drive_file_id)
-      generateMutation.reset()
-      // Reset preview so iframe remounts with the new file
-      setShowPreview(false)
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string }; status?: number } })?.response?.data?.detail
-        ?? (err as Error)?.message
-        ?? 'Unknown error'
-      console.error('Upload failed:', err)
-      setUploadError(`Upload failed: ${msg}`)
-    } finally {
-      setUploading(false)
-    }
-  }
+  const isWorking = generateMutation.isPending || retryMutation.isPending || isGenerating
 
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
@@ -332,6 +323,14 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
         {isGenerating && (
           <p className="text-xs text-indigo-500 animate-pulse">Generating resume…</p>
         )}
+
+        {/* Drive not connected warning — shown when user tries to use the panel */}
+        {!driveConnected && !readOnly && (
+          <p className="text-xs text-amber-600">
+            Google Drive not connected — connect Drive before generating a resume.
+          </p>
+        )}
+
         {loadingExisting ? (
           <div className="h-24 bg-gray-50 rounded-lg animate-pulse" />
         ) : resume ? (
@@ -347,20 +346,17 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
             )}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">
-                {resume?.resume
-                  ? existing?.updated_at
-                    ? `Last generated ${new Date(existing.updated_at).toLocaleDateString()}`
-                    : 'Just generated'
-                  : resume?.drive_file_id
-                  ? 'Uploaded to Drive'
-                  : ''}
+                {existing?.updated_at
+                  ? `Last generated ${new Date(existing.updated_at).toLocaleDateString()}`
+                  : 'Just generated'}
               </span>
               <div className="flex items-center gap-3 flex-wrap">
                 {applicationId != null && (
                   <MarkAppliedButton applicationId={applicationId} />
                 )}
 
-                {resume?.drive_file_id && (
+                {/* Download from Drive */}
+                {resume.drive_file_id && (
                   <a
                     href={`https://drive.google.com/uc?export=download&id=${resume.drive_file_id}`}
                     target="_blank"
@@ -372,6 +368,7 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
                   </a>
                 )}
 
+                {/* Open in Drive */}
                 {effectiveDriveLink && (
                   <a
                     href={effectiveDriveLink}
@@ -384,15 +381,15 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
                   </a>
                 )}
 
-                {!readOnly && (
+                {/* Retry Drive upload when previous upload failed */}
+                {!readOnly && hasDriveError && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
-                    disabled={!driveConnected || uploading || isGenerating}
-                    className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
-                    title={driveConnected ? (effectiveDriveLink ? 'Re-upload to Google Drive' : 'Upload resume to Google Drive') : 'Connect Google Drive first'}
-                    aria-label="Upload resume to Google Drive"
+                    onClick={() => retryMutation.mutate()}
+                    disabled={isWorking}
+                    className="text-xs text-orange-500 hover:text-orange-700 disabled:opacity-50 transition-colors font-medium"
+                    aria-label="Retry Drive upload"
                   >
-                    {uploading ? 'Uploading…' : effectiveDriveLink ? '↑ Re-upload' : '↑ Upload to Drive'}
+                    {retryMutation.isPending ? 'Retrying…' : '↺ Retry Upload'}
                   </button>
                 )}
 
@@ -407,8 +404,9 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
                 {!readOnly && (
                   <button
                     onClick={() => generateMutation.mutate(additionalContext)}
-                    disabled={generateMutation.isPending || isGenerating}
-                    className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors"
+                    disabled={isWorking || !driveConnected}
+                    title={!driveConnected ? 'Connect Google Drive first' : undefined}
+                    className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {generateMutation.isPending ? 'Regenerating…' : '↺ Regenerate'}
                   </button>
@@ -416,25 +414,13 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
               </div>
             </div>
 
-            {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
             {generateError && <p className="text-xs text-red-500">{generateError}</p>}
 
-            {!readOnly && (
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".docx,.pdf"
-                className="hidden"
-                onChange={handleFileSelected}
-                aria-label="Select resume file to upload to Drive"
-              />
-            )}
-
             {showPreview && (
-              resume.drive_link ? (
+              effectiveDriveLink ? (
                 <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '700px' }}>
                   <iframe
-                    src={resume.drive_link.replace(/\/(edit|view)(\?.*)?$/, '/preview')}
+                    src={effectiveDriveLink.replace(/\/(edit|view)(\?.*)?$/, '/preview')}
                     width="100%"
                     height="100%"
                     allow="autoplay"
@@ -463,32 +449,15 @@ export default function TailoredResumePanel({ jobId, readOnly = false, isGenerat
                   <MarkAppliedButton applicationId={applicationId} />
                 )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); driveConnected && fileRef.current?.click() }}
-                  disabled={!driveConnected || uploading || isGenerating}
-                  className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
-                  title={driveConnected ? 'Upload resume to Google Drive' : 'Connect Google Drive first'}
-                  aria-label="Upload resume to Google Drive"
-                >
-                  {uploading ? 'Uploading…' : '↑ Upload to Drive'}
-                </button>
-                <button
                   onClick={() => generateMutation.mutate(additionalContext)}
-                  disabled={generateMutation.isPending || isGenerating}
-                  className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors font-medium"
+                  disabled={isWorking || !driveConnected}
+                  title={!driveConnected ? 'Connect Google Drive first' : undefined}
+                  className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
                 >
                   {generateMutation.isPending ? 'Generating…' : '✦ Generate'}
                 </button>
               </div>
             </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".docx,.pdf"
-              className="hidden"
-              onChange={handleFileSelected}
-              aria-label="Select resume file to upload to Drive"
-            />
-            {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
             {generateError && <p className="text-xs text-red-500">{generateError}</p>}
           </>
         ) : null}

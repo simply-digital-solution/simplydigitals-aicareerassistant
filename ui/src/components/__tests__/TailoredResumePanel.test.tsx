@@ -10,12 +10,15 @@ vi.mock('../../api/client', () => ({
   researchApi: {
     getGeneratedResume: vi.fn(),
     generateResume: vi.fn(),
-    uploadToDrive: vi.fn(),
+    retryDriveUpload: vi.fn(),
   },
   authApi: {
     googleStatus: vi.fn(),
     googleConnect: vi.fn(),
     googleDisconnect: vi.fn(),
+  },
+  applicationsApi: {
+    move: vi.fn(),
   },
 }))
 
@@ -31,7 +34,7 @@ vi.mock('docx', () => {
     Paragraph: FakeParagraph,
     TextRun: FakeTextRun,
     HeadingLevel: { TITLE: 'Title', HEADING_2: 'Heading2' },
-    AlignmentType: { CENTER: 'center' },
+    AlignmentType: { CENTER: 'center', LEFT: 'left' },
     BorderStyle: { SINGLE: 'single' },
     TableRow: class {},
     TableCell: class {},
@@ -49,6 +52,7 @@ function makeResume(name = 'Jane Doe'): GeneratedResumeResponse {
     resume: {
       name,
       headline: 'Senior Data Engineer for Fintech',
+      header_lines: [],
       sections: [
         {
           section_type: 'summary',
@@ -71,6 +75,7 @@ function makeResume(name = 'Jane Doe'): GeneratedResumeResponse {
         },
       ],
     },
+    drive_file_id: null,
     drive_link: null,
     created_at: '2026-06-15T00:00:00Z',
     updated_at: '2026-06-15T00:00:00Z',
@@ -78,7 +83,7 @@ function makeResume(name = 'Jane Doe'): GeneratedResumeResponse {
 }
 
 function makeResumeOutput(name = 'Jane Doe'): GeneratedResumeOutput {
-  return makeResume(name).resume
+  return makeResume(name).resume as GeneratedResumeOutput
 }
 
 function notFoundError() {
@@ -101,8 +106,8 @@ beforeEach(() => {
   // Stub browser APIs used by downloadAsDocx
   global.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
   global.URL.revokeObjectURL = vi.fn()
-  // Default: Drive not connected
-  mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: false } } as never)
+  // Default: Drive connected (required for Generate button to be enabled)
+  mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: true } } as never)
 })
 
 describe('TailoredResumePanel', () => {
@@ -124,21 +129,21 @@ describe('TailoredResumePanel', () => {
     )
   })
 
-  it('shows Upload to Drive button even when no resume exists yet', async () => {
-    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: true } } as never)
-    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
-    renderPanel()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /upload resume to google drive/i })).toBeInTheDocument(),
-    )
-  })
-
-  it('Upload to Drive button is disabled when Drive not connected and no resume exists', async () => {
+  it('Generate button is disabled when Drive not connected', async () => {
     mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: false } } as never)
     mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
     renderPanel()
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /upload resume to google drive/i })).toBeDisabled(),
+      expect(screen.getByRole('button', { name: /generate/i })).toBeDisabled(),
+    )
+  })
+
+  it('shows Drive not connected warning when Drive is disconnected', async () => {
+    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: false } } as never)
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    renderPanel()
+    await waitFor(() =>
+      expect(screen.getByText(/google drive not connected/i)).toBeInTheDocument(),
     )
   })
 
@@ -148,7 +153,6 @@ describe('TailoredResumePanel', () => {
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     fireEvent.click(screen.getByRole('button', { name: /toggle resume preview/i }))
     await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
-    expect(screen.getByText('Senior Data Engineer for Fintech')).toBeInTheDocument()
     expect(screen.getByText('Professional Summary')).toBeInTheDocument()
     expect(screen.getByText('Work Experience')).toBeInTheDocument()
   })
@@ -160,7 +164,7 @@ describe('TailoredResumePanel', () => {
     renderPanel(42)
     await waitFor(() => screen.getByRole('button', { name: /generate/i }))
     fireEvent.click(screen.getByRole('button', { name: /generate/i }))
-    await waitFor(() => expect(mockResearchApi.generateResume).toHaveBeenCalledWith(42))
+    await waitFor(() => expect(mockResearchApi.generateResume).toHaveBeenCalledWith(42, ''))
   })
 
   it('renders generated resume after Generate succeeds', async () => {
@@ -182,7 +186,15 @@ describe('TailoredResumePanel', () => {
     expect(screen.getByRole('button', { name: /regenerate/i })).toBeInTheDocument()
   })
 
-  it('does not show Download link when no drive file uploaded yet', async () => {
+  it('Regenerate button is disabled when Drive not connected', async () => {
+    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: false } } as never)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    renderPanel()
+    await waitFor(() => screen.getByRole('button', { name: /regenerate/i }))
+    expect(screen.getByRole('button', { name: /regenerate/i })).toBeDisabled()
+  })
+
+  it('does not show Download link when no drive file yet', async () => {
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     renderPanel()
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
@@ -198,7 +210,7 @@ describe('TailoredResumePanel', () => {
     expect(screen.getByText('Reduced latency by 40%')).toBeInTheDocument()
   })
 
-  it('hides Regenerate and Upload buttons in readOnly mode', async () => {
+  it('hides Regenerate button in readOnly mode', async () => {
     mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
@@ -208,7 +220,6 @@ describe('TailoredResumePanel', () => {
     )
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /upload resume to google drive/i })).not.toBeInTheDocument()
   })
 
   it('shows Preview button in readOnly mode', async () => {
@@ -231,11 +242,57 @@ describe('TailoredResumePanel', () => {
     expect(link).toHaveAttribute('href', 'https://drive.google.com/uc?export=download&id=abc123')
   })
 
-  it('does not show Download link when no drive_file_id', async () => {
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+  it('shows Open in Drive link when drive_link exists', async () => {
+    const resumeWithDrive = { ...makeResume(), drive_file_id: 'abc123', drive_link: 'https://drive.google.com/file/d/abc123/view' }
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithDrive } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
     renderPanel()
-    await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
-    expect(screen.queryByRole('link', { name: /download resume from google drive/i })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /open resume in google drive/i })).toBeInTheDocument(),
+    )
+  })
+
+  it('shows drive error message and Retry button when generation returns 207', async () => {
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    const resumeWith207 = { ...makeResume(), drive_error: 'Connection timed out' }
+    mockResearchApi.generateResume.mockResolvedValue({ data: resumeWith207 } as never)
+
+    renderPanel()
+    await waitFor(() => screen.getByRole('button', { name: /generate/i }))
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+
+    await waitFor(() =>
+      expect(screen.getByText(/drive upload failed/i)).toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: /retry drive upload/i })).toBeInTheDocument()
+  })
+
+  it('calls retryDriveUpload when Retry Upload is clicked', async () => {
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    const resumeWith207 = { ...makeResume(), drive_error: 'Connection timed out' }
+    mockResearchApi.generateResume.mockResolvedValue({ data: resumeWith207 } as never)
+    const resumeAfterRetry = { ...makeResume(), drive_file_id: 'xyz', drive_link: 'https://drive.google.com/xyz' }
+    mockResearchApi.retryDriveUpload.mockResolvedValue({ data: resumeAfterRetry } as never)
+
+    renderPanel(5)
+    await waitFor(() => screen.getByRole('button', { name: /generate/i }))
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+    await waitFor(() => screen.getByRole('button', { name: /retry drive upload/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: /retry drive upload/i }))
+    await waitFor(() => expect(mockResearchApi.retryDriveUpload).toHaveBeenCalledWith(5))
+  })
+
+  it('shows generation error when generate fails', async () => {
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    const apiErr = { response: { data: { detail: 'Gemini 503 Service Unavailable' } } }
+    mockResearchApi.generateResume.mockRejectedValue(apiErr)
+
+    renderPanel()
+    await waitFor(() => screen.getByRole('button', { name: /generate/i }))
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+    await waitFor(() =>
+      expect(screen.getByText(/gemini 503/i)).toBeInTheDocument(),
+    )
   })
 })
 
@@ -271,52 +328,5 @@ describe('downloadAsDocx', () => {
     await downloadAsDocx(makeResumeOutput('John Smith'), '')
 
     expect(anchorStub.download).toBe('John_Smith_resume.docx')
-  })
-})
-
-describe('TailoredResumePanel — Google Drive', () => {
-  it('shows Upload to Drive button when Drive is connected and no drive_link yet', async () => {
-    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: true } } as never)
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
-    renderPanel()
-    await waitFor(() => screen.getByRole('button', { name: /upload resume to google drive/i }))
-    expect(screen.getByRole('button', { name: /upload resume to google drive/i })).toBeInTheDocument()
-  })
-
-  it('Upload to Drive button is disabled when Drive is not connected', async () => {
-    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: false } } as never)
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
-    renderPanel()
-    await waitFor(() => screen.getByRole('button', { name: /upload resume to google drive/i }))
-    expect(screen.getByRole('button', { name: /upload resume to google drive/i })).toBeDisabled()
-  })
-
-  it('shows Open in Drive link after successful upload', async () => {
-    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: true } } as never)
-    const resumeWithLink = { ...makeResume(), drive_link: 'https://drive.google.com/file/abc', drive_file_id: 'abc123' }
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithLink } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
-    renderPanel()
-    await waitFor(() => screen.getByRole('link', { name: /open resume in google drive/i }))
-    expect(screen.getByRole('link', { name: /open resume in google drive/i })).toHaveAttribute('href', 'https://drive.google.com/file/abc')
-  })
-
-  it('calls uploadToDrive and shows Open in Drive link after file is selected', async () => {
-    mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: true } } as never)
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
-    mockResearchApi.uploadToDrive.mockResolvedValue({ data: { drive_link: 'https://drive.google.com/file/new', drive_file_id: 'new123' } } as never)
-
-    renderPanel(1)
-    await waitFor(() => screen.getByRole('button', { name: /upload resume to google drive/i }))
-
-    const fileInput = screen.getByLabelText(/select resume file to upload to drive/i)
-    const file = new File(['pdf content'], 'Resume_ACME.pdf', { type: 'application/pdf' })
-    fireEvent.change(fileInput, { target: { files: [file] } })
-
-    await waitFor(() => {
-      expect(mockResearchApi.uploadToDrive).toHaveBeenCalledWith(1, file)
-    })
-    await waitFor(() => {
-      expect(screen.getByRole('link', { name: /open resume in google drive/i })).toBeInTheDocument()
-    })
   })
 })
