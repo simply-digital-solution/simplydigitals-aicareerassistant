@@ -46,7 +46,7 @@ def _make_result(classifications):
 async def test_empty_queue_returns_zero():
     db = _make_db(job_rows=[])
 
-    with patch("app.pipeline.industry_backfill.get_claude_client") as mock_client:
+    with patch("app.pipeline.industry_backfill.get_llm_client") as mock_client:
         count = await backfill_industries(db)
 
     assert count == 0
@@ -67,7 +67,7 @@ async def test_single_job_classified():
     mock_llm = AsyncMock()
     mock_llm.run_agent = AsyncMock(return_value=(result, {}))
 
-    with patch("app.pipeline.industry_backfill.get_claude_client", return_value=mock_llm):
+    with patch("app.pipeline.industry_backfill.get_llm_client", return_value=mock_llm):
         count = await backfill_industries(db)
 
     assert count == 1
@@ -97,7 +97,7 @@ async def test_multiple_jobs_all_classified():
     mock_llm = AsyncMock()
     mock_llm.run_agent = AsyncMock(return_value=(result, {}))
 
-    with patch("app.pipeline.industry_backfill.get_claude_client", return_value=mock_llm):
+    with patch("app.pipeline.industry_backfill.get_llm_client", return_value=mock_llm):
         count = await backfill_industries(db)
 
     assert count == 3
@@ -120,7 +120,7 @@ async def test_missing_job_id_skipped():
     mock_llm = AsyncMock()
     mock_llm.run_agent = AsyncMock(return_value=(result, {}))
 
-    with patch("app.pipeline.industry_backfill.get_claude_client", return_value=mock_llm):
+    with patch("app.pipeline.industry_backfill.get_llm_client", return_value=mock_llm):
         count = await backfill_industries(db)
 
     assert count == 1
@@ -140,7 +140,7 @@ async def test_agent_error_skips_batch():
     mock_llm = AsyncMock()
     mock_llm.run_agent = AsyncMock(return_value=(AgentError(error="parse failed"), {}))
 
-    with patch("app.pipeline.industry_backfill.get_claude_client", return_value=mock_llm):
+    with patch("app.pipeline.industry_backfill.get_llm_client", return_value=mock_llm):
         count = await backfill_industries(db)
 
     assert count == 0
@@ -159,7 +159,7 @@ async def test_agent_exception_skips_batch():
     mock_llm = AsyncMock()
     mock_llm.run_agent = AsyncMock(side_effect=RuntimeError("timeout"))
 
-    with patch("app.pipeline.industry_backfill.get_claude_client", return_value=mock_llm):
+    with patch("app.pipeline.industry_backfill.get_llm_client", return_value=mock_llm):
         count = await backfill_industries(db)
 
     assert count == 0
@@ -178,7 +178,7 @@ async def test_empty_industries_stored_as_empty_list():
     mock_llm = AsyncMock()
     mock_llm.run_agent = AsyncMock(return_value=(result, {}))
 
-    with patch("app.pipeline.industry_backfill.get_claude_client", return_value=mock_llm):
+    with patch("app.pipeline.industry_backfill.get_llm_client", return_value=mock_llm):
         count = await backfill_industries(db)
 
     assert count == 1

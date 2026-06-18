@@ -326,8 +326,8 @@ async def _stream_research(
                 if target_titles and result.opportunities:
                     try:
                         from app.shared.skill_gap import update_title_skills_from_research
-                        from app.shared.api_client import get_claude_client
-                        client = get_claude_client()
+                        from app.shared.api_client import get_llm_client
+                        client = get_llm_client()
                         opps_as_dicts = [o.model_dump() for o in result.opportunities]
                         asyncio.create_task(
                             update_title_skills_from_research(db, user_id, target_titles, opps_as_dicts, client)

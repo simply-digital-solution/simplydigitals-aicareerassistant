@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.api_client import get_claude_client
+from app.shared.api_client import get_llm_client
 from app.shared.schemas import ApplicationOutput, AgentError
 
 PROMPT_FILE = Path(__file__).parents[4] / "prompts" / "application.md"
@@ -60,7 +60,7 @@ async def run_application_agent(
 
     Returns (ApplicationOutput | AgentError, run_metadata).
     """
-    client = get_claude_client()
+    client = get_llm_client()
     system_prompt = _load_system_prompt()
     user_message = _build_user_message(profile, resume_text, jd_text, jd_summary)
 

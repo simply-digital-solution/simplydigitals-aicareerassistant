@@ -318,12 +318,12 @@ async def extract_titles_from_resume(
 ):
     """Infer target job titles from saved resume text and persist as target_titles."""
     from app.shared.title_extractor import extract_target_titles
-    from app.shared.api_client import get_claude_client
+    from app.shared.api_client import get_llm_client
     profile = await _get_or_create(db, current_user.id)
     if not profile.resume_text or not profile.resume_text.strip():
         raise HTTPException(status_code=422, detail="No resume found. Upload your resume first.")
 
-    client = get_claude_client()
+    client = get_llm_client()
     titles = await extract_target_titles(profile.resume_text, api_client=client)
     existing = json.loads(profile.target_titles) if profile.target_titles else []
     existing_lower = {t.lower() for t in existing}
@@ -460,7 +460,7 @@ async def refresh_skill_gap(
 ):
     """Re-run LLM distillation for a single title using its stored source keywords."""
     from app.shared.skill_gap import get_all_title_skills, distill_required_skills, save_title_skills, compute_gap
-    from app.shared.api_client import get_claude_client
+    from app.shared.api_client import get_llm_client
 
     profile = await _get_or_create(db, current_user.id)
     profile_skills = json.loads(profile.skills) if profile.skills else []
@@ -470,7 +470,7 @@ async def refresh_skill_gap(
     if not row:
         raise HTTPException(status_code=404, detail=f"No data for title '{body.title}'. Run a research search first.")
 
-    client = get_claude_client()
+    client = get_llm_client()
     skills = await distill_required_skills(body.title, row["source_keywords"], client)
     if not skills:
         raise HTTPException(status_code=422, detail="LLM could not distill skills. Try again.")
@@ -505,12 +505,12 @@ async def seed_skill_gap(
 ):
     """Generate required skills for a title using LLM knowledge (no JD keywords needed)."""
     from app.shared.skill_gap import seed_required_skills, save_title_skills, compute_gap
-    from app.shared.api_client import get_claude_client
+    from app.shared.api_client import get_llm_client
 
     profile = await _get_or_create(db, current_user.id)
     profile_skills = json.loads(profile.skills) if profile.skills else []
 
-    client = get_claude_client()
+    client = get_llm_client()
     skills = await seed_required_skills(body.title, client)
     if not skills:
         raise HTTPException(status_code=422, detail="LLM could not generate skills. Try again.")
@@ -536,7 +536,7 @@ async def seed_all_skill_gaps(
     """Seed required skills for all target titles that have no data yet."""
     import asyncio
     from app.shared.skill_gap import get_all_title_skills, seed_required_skills, save_title_skills
-    from app.shared.api_client import get_claude_client
+    from app.shared.api_client import get_llm_client
 
     profile = await _get_or_create(db, current_user.id)
     target_titles = json.loads(profile.target_titles) if profile.target_titles else []
@@ -550,7 +550,7 @@ async def seed_all_skill_gaps(
     to_seed = [t for t in target_titles if t.strip().lower() not in existing_titles_lower]
     already_have = [t for t in target_titles if t.strip().lower() in existing_titles_lower]
 
-    client = get_claude_client()
+    client = get_llm_client()
 
     async def _seed_one(title: str) -> str | None:
         skills = await seed_required_skills(title, client)

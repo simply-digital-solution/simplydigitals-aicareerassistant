@@ -15,7 +15,7 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.api_client import get_claude_client
+from app.shared.api_client import get_llm_client
 from app.shared.schemas import IndustryClassifierOutput, AgentError
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ async def backfill_industries(db: AsyncSession) -> int:
         return 0
 
     logger.info("industry_backfill: %d jobs to classify", len(jobs))
-    client = get_claude_client()
+    client = get_llm_client()
     system_prompt = _load_prompt()
     total_classified = 0
 

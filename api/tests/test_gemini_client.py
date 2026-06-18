@@ -1,5 +1,5 @@
 """
-Unit tests for GeminiClient and get_claude_client() provider switching.
+Unit tests for GeminiClient and get_llm_client() provider switching.
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -283,11 +283,11 @@ async def test_gemini_call_calls_log_llm_call():
 
 
 # ---------------------------------------------------------------------------
-# get_claude_client() — provider switching
+# get_llm_client() — provider switching
 # ---------------------------------------------------------------------------
 
-def test_get_claude_client_returns_gemini_when_key_is_set():
-    """get_claude_client() must return GeminiClient when gemini_api_key is non-empty."""
+def test_get_llm_client_returns_gemini_when_key_is_set():
+    """get_llm_client() must return GeminiClient when gemini_api_key is non-empty."""
     from app.shared import api_client
     from app.shared.api_client import GeminiClient
 
@@ -300,14 +300,14 @@ def test_get_claude_client_returns_gemini_when_key_is_set():
     mock_settings.max_self_corrections = 3
 
     with patch("app.shared.api_client.get_settings", return_value=mock_settings):
-        client = api_client.get_claude_client()
+        client = api_client.get_llm_client()
 
     assert isinstance(client, GeminiClient)
     api_client._client = None  # clean up
 
 
-def test_get_claude_client_returns_ollama_when_key_is_empty():
-    """get_claude_client() must return OllamaClient when gemini_api_key is empty."""
+def test_get_llm_client_returns_ollama_when_key_is_empty():
+    """get_llm_client() must return OllamaClient when gemini_api_key is empty."""
     from app.shared import api_client
     from app.shared.api_client import OllamaClient
 
@@ -319,7 +319,7 @@ def test_get_claude_client_returns_ollama_when_key_is_empty():
     mock_settings.max_self_corrections = 3
 
     with patch("app.shared.api_client.get_settings", return_value=mock_settings):
-        client = api_client.get_claude_client()
+        client = api_client.get_llm_client()
 
     assert isinstance(client, OllamaClient)
     api_client._client = None  # clean up

@@ -498,7 +498,7 @@ async def _update_budget(db: AsyncSession, agent_name: str, usage: dict):
 _client: Optional[BaseLLMClient] = None
 
 
-def get_claude_client() -> BaseLLMClient:
+def get_llm_client() -> BaseLLMClient:
     """Returns GeminiClient if GEMINI_API_KEY is set, otherwise OllamaClient."""
     global _client
     if _client is None:
