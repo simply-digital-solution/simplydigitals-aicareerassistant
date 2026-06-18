@@ -7,8 +7,8 @@ import ResearchPanel from './components/ResearchPanel'
 import SelectedJobsPanel from './components/SelectedJobsPanel'
 import AppliedJobsPanel from './components/AppliedJobsPanel'
 import InterviewPanel from './components/InterviewPanel'
-import DraftsPanel from './components/DraftsPanel'
 import ProfilePanel from './components/ProfilePanel'
+import StatsPanel from './components/StatsPanel'
 import GoogleDriveButton from './components/GoogleDriveButton'
 import './index.css'
 
@@ -16,9 +16,9 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 })
 
-export type Tab = 'Pipeline' | 'Research' | 'Selected' | 'Applied' | 'Interview' | 'Drafts' | 'Profile'
+export type Tab = 'Pipeline' | 'Research' | 'Selected' | 'Applied' | 'Interview' | 'Stats' | 'Profile'
 
-const TABS: Tab[] = ['Pipeline', 'Research', 'Selected', 'Applied', 'Interview', 'Drafts', 'Profile']
+const TABS: Tab[] = ['Pipeline', 'Research', 'Selected', 'Applied', 'Interview', 'Stats', 'Profile']
 
 function TabContent({ tab, onTabChange }: { tab: Tab; onTabChange: (t: Tab) => void }) {
   switch (tab) {
@@ -27,8 +27,8 @@ function TabContent({ tab, onTabChange }: { tab: Tab; onTabChange: (t: Tab) => v
     case 'Selected':  return <SelectedJobsPanel />
     case 'Applied':   return <AppliedJobsPanel />
     case 'Interview': return <InterviewPanel />
-    case 'Drafts':    return <DraftsPanel />
     case 'Profile':   return <ProfilePanel />
+    case 'Stats':     return <StatsPanel />
   }
 }
 
@@ -77,12 +77,6 @@ function Layout({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => onTabChange('Drafts')}
-            className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-          >
-            ✨ Run Coach
-          </button>
           <GoogleDriveButton />
           <span className="text-xs text-gray-400 hidden sm:block">{email}</span>
           <button onClick={onSignOut} className="text-gray-400 hover:text-gray-600 text-sm">

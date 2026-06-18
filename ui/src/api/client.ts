@@ -284,6 +284,20 @@ export const researchApi = {
     api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/retry-drive-upload`),
 }
 
+// Stats API
+export interface DayStat { date: string; count: number }
+export interface MonthStat { month: string; count: number }
+export interface DashboardStats {
+  scored_by_day:       DayStat[]
+  fit_by_day:          DayStat[]
+  selected_by_day:     DayStat[]
+  applied_by_day:      DayStat[]
+  interviews_by_month: MonthStat[]
+}
+export const statsApi = {
+  dashboard: () => api.get<DashboardStats>('/stats/dashboard'),
+}
+
 // Budget API
 export const budgetApi = {
   summary: () =>
