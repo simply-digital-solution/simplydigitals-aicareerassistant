@@ -82,6 +82,11 @@ async def score_next_batch(db: AsyncSession) -> bool:
                 OR jp.scored_at < datetime('now', '-30 minutes')
                 OR jp.scored_at IS NULL
               )
+              AND NOT EXISTS (
+                SELECT 1 FROM applications a
+                WHERE a.job_posting_id = jp.id
+                  AND a.status IN ('applied', 'interviewing', 'offered', 'rejected', 'withdrawn')
+              )
             ORDER BY jp.posted_at ASC, jp.scraped_at ASC
             LIMIT :batch_size
         """),
@@ -220,6 +225,20 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
     if not job:
         return False
 
+    # Skip rescoring if the job has progressed to applied or beyond
+    app_check = await db.execute(
+        text("""
+            SELECT 1 FROM applications
+            WHERE job_posting_id = :id
+              AND status IN ('applied', 'interviewing', 'offered', 'rejected', 'withdrawn')
+            LIMIT 1
+        """),
+        {"id": job_id},
+    )
+    if app_check.fetchone():
+        logger.info("llm_scorer: skipping job_id=%d — application already in advanced status", job_id)
+        return False
+
     user_id = job["user_id"]
     logger.info("llm_scorer: scoring single job_id=%d for user_id=%d", job_id, user_id)
 
@@ -317,7 +336,28 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
 
     user_id = job_rows[0]["user_id"]
     found_ids = {r["id"] for r in job_rows}
-    logger.info("llm_scorer: bulk rescoring %d jobs for user_id=%d", len(job_rows), user_id)
+
+    # Exclude jobs whose application has progressed to applied or beyond
+    if found_ids:
+        adv_placeholders = ",".join(f":aid{i}" for i in range(len(found_ids)))
+        adv_params = {f"aid{i}": jid for i, jid in enumerate(found_ids)}
+        adv_rows = await db.execute(
+            text(f"""
+                SELECT DISTINCT job_posting_id FROM applications
+                WHERE job_posting_id IN ({adv_placeholders})
+                  AND status IN ('applied', 'interviewing', 'offered', 'rejected', 'withdrawn')
+            """),
+            adv_params,
+        )
+        advanced_ids = {r[0] for r in adv_rows.fetchall()}
+        if advanced_ids:
+            logger.info("llm_scorer: skipping %d job(s) in advanced status: %s", len(advanced_ids), advanced_ids)
+            found_ids -= advanced_ids
+
+    if not found_ids:
+        return {jid: False for jid in job_ids}
+
+    logger.info("llm_scorer: bulk rescoring %d jobs for user_id=%d", len(found_ids), user_id)
 
     # Mark as in-progress — old score fields untouched so jobs stay visible
     for jid in found_ids:
@@ -340,6 +380,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
             "inferred_industries": json.loads(r["inferred_industries"] or "[]"),
         }
         for r in job_rows
+        if r["id"] in found_ids
     ]
 
     results: dict[int, bool] = {jid: False for jid in job_ids}

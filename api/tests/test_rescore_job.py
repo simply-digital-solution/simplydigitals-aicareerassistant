@@ -34,20 +34,23 @@ def _db_with_job(found: bool = True):
         "id": 1, "user_id": 1, "title": "Eng", "company": "Co",
         "url": "", "description": "", "inferred_industries": "[]",
     } if found else None
-    # [2] score_single_job: rescoring=1 UPDATE
+    # [2] score_single_job: application status check (no advanced status)
+    app_check = MagicMock()
+    app_check.fetchone.return_value = None
+    # [3] score_single_job: rescoring=1 UPDATE
     rescoring_update = MagicMock()
-    # [3] score_single_job: feedback SELECT
+    # [4] score_single_job: feedback SELECT
     feedback_select = MagicMock()
     feedback_select.mappings.return_value.all.return_value = []
-    # [4] score write UPDATE (_write_score)
+    # [5] score write UPDATE (_write_score)
     score_update = MagicMock()
-    # [5] final SELECT for response
+    # [6] final SELECT for response
     final_select = MagicMock()
     final_select.mappings.return_value.first.return_value = {"id": 1} if found else None
 
     db.execute.side_effect = [
         select_result,
-        job_select, rescoring_update, feedback_select, score_update,
+        job_select, app_check, rescoring_update, feedback_select, score_update,
         final_select,
     ]
     return db
@@ -70,8 +73,8 @@ async def test_rescore_does_not_wipe_scores_before_call():
         await _call_rescore(job_id=1, db=db)
 
     db.commit.assert_called()
-    # Only 6 execute calls total — no pre-reset UPDATE before ownership check
-    assert db.execute.call_count == 6
+    # 7 execute calls total — no pre-reset UPDATE before ownership check
+    assert db.execute.call_count == 7
     # [1] is score_single_job's job SELECT, not a reset
     call1_sql = db.execute.call_args_list[1].args[0].text
     assert "SELECT" in call1_sql

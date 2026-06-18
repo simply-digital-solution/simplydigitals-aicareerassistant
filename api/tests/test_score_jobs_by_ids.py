@@ -21,21 +21,24 @@ def _make_job_row(job_id=1, user_id=42):
     }
 
 
-def _make_db(job_rows=None):
+def _make_db(job_rows=None, advanced_ids=None):
     db = AsyncMock()
     # [0] job SELECT
     select_result = MagicMock()
     select_result.mappings.return_value.all.return_value = job_rows or []
-    # [1..N] rescoring=1 UPDATEs (one per job found)
+    # [1] advanced-status check SELECT
+    adv_check = MagicMock()
+    adv_check.fetchall.return_value = [(jid,) for jid in (advanced_ids or [])]
+    # [2..N+1] rescoring=1 UPDATEs (one per scoreable job)
     rescoring_update = MagicMock()
-    # [N+1] feedback SELECT
+    # [N+2] feedback SELECT
     feedback_result = MagicMock()
     feedback_result.mappings.return_value.all.return_value = []
     # remaining: score writes or error updates
     update_result = MagicMock()
     n_jobs = len(job_rows or [])
     db.execute.side_effect = (
-        [select_result]
+        [select_result, adv_check]
         + [rescoring_update] * max(n_jobs, 1)
         + [feedback_result]
         + [update_result] * 20
@@ -191,3 +194,43 @@ async def test_scored_by_model_written():
     # Find the _write_score UPDATE call — it has a "model" param
     write_calls = [c for c in db.execute.call_args_list if c.args[1].get("model") is not None or "model" in c.args[1]]
     assert any(c.args[1].get("model") == "gemini-flash-latest" for c in write_calls)
+
+
+# ---------------------------------------------------------------------------
+# Advanced status guard — jobs in applied/interviewing/etc. are skipped
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_advanced_status_jobs_excluded_from_scoring():
+    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
+    # job 1 is in applied status — should be skipped
+    db = _make_db(job_rows=rows, advanced_ids=[1])
+
+    captured = {}
+    async def fake_scorer(profile, job_postings, **kwargs):
+        captured["job_postings"] = job_postings
+        return MagicMock(opportunities=[_make_opp(job_id=2)]), {}
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_scorer),
+    ):
+        result = await score_jobs_by_ids(db, [1, 2])
+
+    # job 1 skipped (False), job 2 scored (True)
+    assert result[1] is False
+    assert result[2] is True
+    # Only job 2 was sent to the agent
+    assert all(j["job_id"] != 1 for j in captured["job_postings"])
+
+
+@pytest.mark.asyncio
+async def test_all_advanced_status_returns_all_false():
+    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
+    db = _make_db(job_rows=rows, advanced_ids=[1, 2])
+
+    with patch("app.pipeline.llm_scorer.run_research_agent") as mock_agent:
+        result = await score_jobs_by_ids(db, [1, 2])
+
+    assert result == {1: False, 2: False}
+    mock_agent.assert_not_called()

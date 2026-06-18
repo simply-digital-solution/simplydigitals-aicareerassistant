@@ -22,19 +22,22 @@ def _make_job_row(job_id=1, user_id=42):
     }
 
 
-def _make_db(job_row=None):
+def _make_db(job_row=None, advanced_status=False):
     db = AsyncMock()
     # [0] job SELECT
     select_result = MagicMock()
     select_result.mappings.return_value.first.return_value = job_row
-    # [1] rescoring=1 UPDATE (new — set in-progress before LLM call)
+    # [1] application status check SELECT
+    app_check = MagicMock()
+    app_check.fetchone.return_value = (1,) if advanced_status else None
+    # [2] rescoring=1 UPDATE
     rescoring_update = MagicMock()
-    # [2] feedback SELECT
+    # [3] feedback SELECT
     feedback_result = MagicMock()
     feedback_result.mappings.return_value.all.return_value = []
-    # [3] score write or error UPDATE
+    # [4] score write or error UPDATE
     update_result = MagicMock()
-    db.execute.side_effect = [select_result, rescoring_update, feedback_result, update_result]
+    db.execute.side_effect = [select_result, app_check, rescoring_update, feedback_result, update_result]
     return db
 
 
@@ -92,11 +95,11 @@ async def test_successful_single_score():
 
     assert ok is True
     db.commit.assert_called()
-    # [1] is the rescoring=1 UPDATE
-    rescoring_sql = db.execute.call_args_list[1].args[0].text
+    # [2] is the rescoring=1 UPDATE
+    rescoring_sql = db.execute.call_args_list[2].args[0].text
     assert "rescoring=1" in rescoring_sql
-    # [3] is the score write (_write_score)
-    update_params = db.execute.call_args_list[3].args[1]
+    # [4] is the score write (_write_score)
+    update_params = db.execute.call_args_list[4].args[1]
     assert update_params["fit_score"] == 0.82
     assert update_params["id"] == 1
 
@@ -118,10 +121,10 @@ async def test_agent_error_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    update_params = db.execute.call_args_list[3].args[1]
+    update_params = db.execute.call_args_list[4].args[1]
     assert "parse failed" in update_params["err"]
     # Must NOT reset scored/fit_score — only rescoring=0 and score_error
-    update_sql = db.execute.call_args_list[3].args[0].text
+    update_sql = db.execute.call_args_list[4].args[0].text
     assert "rescoring=0" in update_sql
     assert "scored=0" not in update_sql
     assert "fit_score = NULL" not in update_sql
@@ -143,9 +146,9 @@ async def test_agent_exception_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    update_params = db.execute.call_args_list[3].args[1]
+    update_params = db.execute.call_args_list[4].args[1]
     assert "RuntimeError" in update_params["err"]
-    update_sql = db.execute.call_args_list[3].args[0].text
+    update_sql = db.execute.call_args_list[4].args[0].text
     assert "rescoring=0" in update_sql
     assert "scored=0" not in update_sql
 
@@ -166,7 +169,7 @@ async def test_missing_job_id_in_response_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    update_params = db.execute.call_args_list[3].args[1]
+    update_params = db.execute.call_args_list[4].args[1]
     assert "Missing" in update_params["err"]
 
 
@@ -213,3 +216,34 @@ async def test_single_score_passes_max_self_corrections_zero():
         await score_single_job(db, job_id=1)
 
     assert captured["max_self_corrections"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Advanced status guard — skip rescoring if application is applied or beyond
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_skips_scoring_when_application_in_advanced_status():
+    db = _make_db(_make_job_row(job_id=1), advanced_status=True)
+
+    with patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})):
+        ok = await score_single_job(db, job_id=1)
+
+    assert ok is False
+    db.commit.assert_not_called()
+    # No rescoring=1 UPDATE, no LLM call — only 2 execute calls (job SELECT + app check)
+    assert db.execute.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_scores_normally_when_application_is_selected():
+    db = _make_db(_make_job_row(job_id=1), advanced_status=False)
+    result = _make_result(job_id=1, fit_score=0.75)
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+    ):
+        ok = await score_single_job(db, job_id=1)
+
+    assert ok is True

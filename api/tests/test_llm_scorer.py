@@ -743,3 +743,16 @@ async def test_loop_query_excludes_jobs_currently_rescoring():
 
     select_sql = db.execute.call_args_list[0].args[0].text
     assert "rescoring = 0" in select_sql
+
+
+@pytest.mark.asyncio
+async def test_loop_query_excludes_applied_or_advanced_status_jobs():
+    """Loop SELECT must filter out jobs whose application is applied/interviewing/etc."""
+    db = _db_with_batch(job_rows=[])
+
+    await score_next_batch(db)
+
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "NOT EXISTS" in select_sql
+    assert "applied" in select_sql
+    assert "interviewing" in select_sql
