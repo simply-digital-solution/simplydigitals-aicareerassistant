@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './hooks/useAuth'
+import { authApi } from './api/client'
 import LoginPage from './pages/LoginPage'
 import PipelineBoard from './components/PipelineBoard'
 import ResearchPanel from './components/ResearchPanel'
@@ -32,6 +33,55 @@ function TabContent({ tab, onTabChange }: { tab: Tab; onTabChange: (t: Tab) => v
   }
 }
 
+function DriveBanner() {
+  const qc = useQueryClient()
+  const [dismissed, setDismissed] = useState(false)
+
+  const { data } = useQuery({
+    queryKey: ['google-drive-status'],
+    queryFn: () => authApi.googleStatus().then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const handleConnect = async () => {
+    const res = await authApi.googleConnect()
+    window.location.href = res.data.url
+  }
+
+  const handleDismiss = () => {
+    setDismissed(true)
+    qc.invalidateQueries({ queryKey: ['google-drive-status'] })
+  }
+
+  if (dismissed || data?.connected) return null
+
+  return (
+    <div className="bg-indigo-600 text-white px-6 py-2.5 flex items-center justify-between gap-4">
+      <div className="flex items-center gap-2.5 text-sm">
+        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6.94 2L2 11.24l4.96 8.76h10.08L22 11.24 17.06 2H6.94zm.93 2h8.26l4.1 7.24H3.77L6.87 4zm-.94 9.24h12.14l-3.1 5.76H9.03l-3.06-5.76z" />
+        </svg>
+        <span>Connect Google Drive to automatically save your tailored resumes.</span>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={handleConnect}
+          className="bg-white text-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+        >
+          Connect Drive
+        </button>
+        <button
+          onClick={handleDismiss}
+          className="text-indigo-200 hover:text-white text-lg leading-none transition-colors"
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Layout({
   email,
   onSignOut,
@@ -44,6 +94,7 @@ function Layout({
   onTabChange: (t: Tab) => void
 }) {
   const [driveToast, setDriveToast] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
 
   // Handle ?drive=connected redirect from OAuth callback
   useEffect(() => {
@@ -54,6 +105,11 @@ function Layout({
       setTimeout(() => setDriveToast(false), 3500)
     }
   }, [])
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    await onSignOut()
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -79,11 +135,21 @@ function Layout({
         <div className="flex items-center gap-3">
           <GoogleDriveButton />
           <span className="text-xs text-gray-400 hidden sm:block">{email}</span>
-          <button onClick={onSignOut} className="text-gray-400 hover:text-gray-600 text-sm">
-            Sign out
+          <button
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="flex items-center gap-1.5 text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-red-50 hover:border-red-300 hover:text-red-600 transition-colors disabled:opacity-50"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
         </div>
       </nav>
+
+      <DriveBanner />
+
       <main>
         <TabContent tab={activeTab} onTabChange={onTabChange} />
       </main>
