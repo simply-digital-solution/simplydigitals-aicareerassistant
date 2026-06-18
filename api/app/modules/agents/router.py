@@ -1185,7 +1185,7 @@ async def generate_resume(
     from app.modules.agents.resume_generate_agent import run_resume_generate_agent
     from app.shared.schemas import AgentError
     from app.shared.resume_docx import build_docx_bytes
-    from app.shared.google_drive import upload_or_update_file
+    from app.shared.google_drive import upload_or_update_file, convert_docx_to_pdf_bytes
 
     # Fetch job
     job_row = await db.execute(
@@ -1261,12 +1261,13 @@ async def generate_resume(
     )
     await db.commit()
 
-    # ── Build .docx and upload to Drive ─────────────────────────────────────
+    # ── Build .docx → convert to PDF → upload to Drive ──────────────────────
     company = job["company"] or "Company"
     title = job["title"] or "Role"
     folder_name = f"{company} - {title}"
     company_slug = company.replace(".", "").replace(" ", "_")
-    filename = f"Resume_{company_slug}.docx"
+    docx_filename = f"Resume_{company_slug}.docx"
+    pdf_filename  = f"Resume_{company_slug}.pdf"
 
     # Load existing drive_file_id for update-vs-create decision
     gr_result = await db.execute(
@@ -1282,13 +1283,31 @@ async def generate_resume(
 
     try:
         docx_bytes = build_docx_bytes(result)
+        # Convert .docx → PDF via Drive API (import as Google Doc, export PDF, delete temp)
+        pdf_bytes, conv_token_data = await convert_docx_to_pdf_bytes(
+            access_token=prof["google_access_token"],
+            refresh_token=prof["google_refresh_token"],
+            expiry_iso=prof["google_token_expiry"],
+            docx_bytes=docx_bytes,
+            filename=docx_filename,
+        )
+        # Persist refreshed tokens from conversion step if rotated
+        if conv_token_data:
+            prof = dict(prof)
+            prof["google_access_token"] = conv_token_data["access_token"]
+            prof["google_token_expiry"] = conv_token_data["expiry_iso"]
+            await db.execute(
+                text("UPDATE profiles SET google_access_token=:at, google_token_expiry=:exp WHERE user_id=:uid"),
+                {"at": conv_token_data["access_token"], "exp": conv_token_data["expiry_iso"], "uid": current_user.id},
+            )
+
         file_id, web_link, new_token_data = await upload_or_update_file(
             access_token=prof["google_access_token"],
             refresh_token=prof["google_refresh_token"],
             expiry_iso=prof["google_token_expiry"],
             folder_name=folder_name,
-            filename=filename,
-            file_bytes=docx_bytes,
+            filename=pdf_filename,
+            file_bytes=pdf_bytes,
             existing_file_id=existing_file_id,
         )
         drive_file_id = file_id
@@ -1356,7 +1375,7 @@ async def retry_drive_upload(
     from fastapi.responses import JSONResponse
     from app.shared.schemas import GeneratedResumeOutput
     from app.shared.resume_docx import build_docx_bytes
-    from app.shared.google_drive import upload_or_update_file
+    from app.shared.google_drive import upload_or_update_file, convert_docx_to_pdf_bytes
     import json as _json
 
     # Load OAuth tokens
@@ -1391,17 +1410,32 @@ async def retry_drive_upload(
     title_str = job["title"] or "Role"
     folder_name = f"{company} - {title_str}"
     company_slug = company.replace(".", "").replace(" ", "_")
-    filename = f"Resume_{company_slug}.docx"
+    docx_filename = f"Resume_{company_slug}.docx"
+    pdf_filename  = f"Resume_{company_slug}.pdf"
 
+    conv_token_data: dict | None = None
     try:
         docx_bytes = build_docx_bytes(resume)
+        # Convert .docx → PDF via Drive API before uploading
+        pdf_bytes, conv_token_data = await convert_docx_to_pdf_bytes(
+            access_token=prof["google_access_token"],
+            refresh_token=prof["google_refresh_token"],
+            expiry_iso=prof["google_token_expiry"],
+            docx_bytes=docx_bytes,
+            filename=docx_filename,
+        )
+        if conv_token_data:
+            prof = dict(prof)
+            prof["google_access_token"] = conv_token_data["access_token"]
+            prof["google_token_expiry"] = conv_token_data["expiry_iso"]
+
         file_id, web_link, new_token_data = await upload_or_update_file(
             access_token=prof["google_access_token"],
             refresh_token=prof["google_refresh_token"],
             expiry_iso=prof["google_token_expiry"],
             folder_name=folder_name,
-            filename=filename,
-            file_bytes=docx_bytes,
+            filename=pdf_filename,
+            file_bytes=pdf_bytes,
             existing_file_id=gr["drive_file_id"],
         )
     except Exception as exc:
@@ -1414,10 +1448,12 @@ async def retry_drive_upload(
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
 
-    if new_token_data:
+    # Persist any refreshed token from conversion or upload step
+    merged_token = new_token_data or conv_token_data
+    if merged_token:
         await db.execute(
             text("UPDATE profiles SET google_access_token=:at, google_token_expiry=:exp WHERE user_id=:uid"),
-            {"at": new_token_data["access_token"], "exp": new_token_data["expiry_iso"], "uid": current_user.id},
+            {"at": merged_token["access_token"], "exp": merged_token["expiry_iso"], "uid": current_user.id},
         )
 
     await db.execute(

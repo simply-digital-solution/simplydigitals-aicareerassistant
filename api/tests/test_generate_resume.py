@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.shared.schemas import GeneratedResumeOutput, GeneratedResumeSection, AgentError
 
-_AGENT_PATCH = "app.modules.agents.resume_generate_agent.run_resume_generate_agent"
-_DRIVE_PATCH = "app.shared.google_drive.upload_or_update_file"
-_DOCX_PATCH = "app.shared.resume_docx.build_docx_bytes"
+_AGENT_PATCH   = "app.modules.agents.resume_generate_agent.run_resume_generate_agent"
+_DRIVE_PATCH   = "app.shared.google_drive.upload_or_update_file"
+_CONVERT_PATCH = "app.shared.google_drive.convert_docx_to_pdf_bytes"
+_DOCX_PATCH    = "app.shared.resume_docx.build_docx_bytes"
 
 
 # ---------------------------------------------------------------------------
@@ -172,8 +173,9 @@ async def test_generate_resume_returns_resume():
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(resume_output, {}))):
         with patch(_DOCX_PATCH, return_value=b"fake-docx"):
-            with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid123", "https://drive.google.com/file/fid123/view", None))):
-                result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
+            with patch(_CONVERT_PATCH, new=AsyncMock(return_value=(b"fake-pdf", None))):
+                with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid123", "https://drive.google.com/file/fid123/view", None))):
+                    result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
     body = result.body  # JSONResponse
     data = json.loads(body)
@@ -192,8 +194,9 @@ async def test_generate_resume_upserts_to_db():
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
         with patch(_DOCX_PATCH, return_value=b"fake-docx"):
-            with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid", "https://link", None))):
-                await generate_resume(job_id=1, current_user=_make_user(), db=db)
+            with patch(_CONVERT_PATCH, new=AsyncMock(return_value=(b"fake-pdf", None))):
+                with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid", "https://link", None))):
+                    await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
     # 2 commits: one after insert, one after drive update
     assert db.commit.await_count == 2
@@ -250,7 +253,7 @@ async def test_generate_resume_207_when_drive_upload_fails():
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
         with patch(_DOCX_PATCH, return_value=b"fake-docx"):
-            with patch(_DRIVE_PATCH, new=AsyncMock(side_effect=Exception("Drive quota exceeded"))):
+            with patch(_CONVERT_PATCH, new=AsyncMock(side_effect=Exception("Drive quota exceeded"))):
                 result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
     assert result.status_code == 207
@@ -271,8 +274,9 @@ async def test_generate_resume_201_on_success():
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(_make_resume_output(), {}))):
         with patch(_DOCX_PATCH, return_value=b"fake-docx"):
-            with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid", "https://link", None))):
-                result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
+            with patch(_CONVERT_PATCH, new=AsyncMock(return_value=(b"fake-pdf", None))):
+                with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid", "https://link", None))):
+                    result = await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
     assert result.status_code == 201
     data = json.loads(result.body)
@@ -289,8 +293,11 @@ async def test_generate_resume_502_when_agent_returns_error():
     agent_error = AgentError(error="LLM timeout", raw_output=None)
 
     with patch(_AGENT_PATCH, new=AsyncMock(return_value=(agent_error, {}))):
-        with pytest.raises(HTTPException) as exc_info:
-            await generate_resume(job_id=1, current_user=_make_user(), db=db)
+        with patch(_DOCX_PATCH, return_value=b"fake-docx"):
+            with patch(_CONVERT_PATCH, new=AsyncMock(return_value=(b"fake-pdf", None))):
+                with patch(_DRIVE_PATCH, new=AsyncMock(return_value=("fid", "https://link", None))):
+                    with pytest.raises(HTTPException) as exc_info:
+                        await generate_resume(job_id=1, current_user=_make_user(), db=db)
 
     assert exc_info.value.status_code == 502
     assert "LLM timeout" in str(exc_info.value.detail)
