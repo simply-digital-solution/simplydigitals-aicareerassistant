@@ -28,6 +28,8 @@ cd ui && npm run dev      # Vite, port 5173
 cd ui && npm run build
 cd ui && npm run lint
 cd ui && npm install
+cd ui && npm test         # vitest run (single pass)
+cd ui && npm run test:watch  # vitest watch mode
 ```
 
 ### Environment
@@ -38,17 +40,20 @@ Copy `.env.example` to `api/.env`. Backend reads config from `api/.env` via `pyd
 
 ### LLM backend
 
-Uses **Ollama** (local LLM) at `http://localhost:11434`. `get_claude_client()` in `api/app/shared/api_client.py` returns an `OllamaClient` — name kept for backward compatibility. Models configured as `coordinator_model` / `specialist_model` (default: `llama3.1:8b`).
+Uses **Ollama** (local) or **Gemini** (cloud). The factory function `get_llm_client()` in `api/app/shared/api_client.py` returns a `GeminiClient` if `GEMINI_API_KEY` is set in `.env`, otherwise falls back to `OllamaClient`.
 
-Agent calls: send prompt → `parse_agent_output()` extracts structured JSON → retries up to `max_self_corrections` via `build_reflexion_prompt()` → records run in `agent_runs` + `budget_records`.
+- Ollama: `http://localhost:11434`, models configured via `coordinator_model` / `specialist_model` (default: `llama3.1:8b`)
+- Gemini: `gemini-2.5-flash-lite` by default, configured via `gemini_model` setting
+
+Agent calls: send prompt → `parse_agent_output()` extracts structured JSON → retries up to `max_self_corrections` via `build_reflexion_prompt()` (both in `api/app/shared/parser.py`) → records run in `agent_runs` + `budget_records` tables.
 
 ### Authentication
 
-Dev-mode only, no passwords. Frontend stores email in `localStorage`, sends it as `X-User-Email` header. `get_current_user()` auto-creates a user row on first seen email.
+Dev-mode only, no passwords. Frontend stores email in `localStorage`, sends it as `X-User-Email` header. `get_current_user()` in `api/app/modules/auth/router.py` auto-creates a `User` row (with empty `hashed_password`) on first seen email.
 
 ### Agent streaming (SSE)
 
-All `POST /api/v1/agents/*` endpoints return `StreamingResponse` (`text/event-stream`). Event types: `status`, `chunk`, `result` (final JSON), `error`, `meta`. Consumed by `ui/src/hooks/useAgentStream.ts`.
+`POST /api/v1/agents/{research,resume,application,interview,run}` endpoints return `StreamingResponse` (`text/event-stream`). Event types: `status`, `chunk`, `result` (final JSON), `error`, `meta`. Consumed by `ui/src/hooks/useAgentStream.ts`.
 
 ### Database
 
@@ -56,7 +61,11 @@ SQLite + WAL at `api/aicareercoach.db`. Alembic migrations in `api/migrations/ve
 
 ### Prompts
 
-Agent system prompts live in `prompts/` as markdown files, loaded at runtime.
+Agent system prompts live in `prompts/` (project root, not inside `api/`) as markdown files, loaded at runtime. Current prompts: `research.md`, `resume.md`, `resume_generate.md`, `application.md`, `interview.md`, `role_fit.md`, `industry_classifier.md`, `negotiation.md`, `outreach.md`.
+
+### Backend module structure
+
+`api/app/modules/` contains: `agents/`, `admin/`, `applications/`, `auth/`, `notifications/`, `profile/`, `scoring/`, `stats/`.
 
 ## Shell working directory
 
