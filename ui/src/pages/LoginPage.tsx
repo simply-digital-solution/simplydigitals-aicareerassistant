@@ -58,8 +58,7 @@ export default function LoginPage({ onSignIn }: Props) {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <img src="/app-icon.png" alt="AI Career Assistant" className="w-24 h-auto mb-2 mx-auto" />
-          <h1 className="text-2xl font-bold text-gray-900">AI Career Assistant</h1>
+          <img src="/app-icon.png" alt="AI Career Assistant" className="w-40 h-auto mb-2 mx-auto" />
           <p className="text-gray-500 text-sm mt-1">Your agentic job search companion</p>
         </div>
 
