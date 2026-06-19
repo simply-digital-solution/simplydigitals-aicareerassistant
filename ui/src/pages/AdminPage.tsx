@@ -16,13 +16,21 @@ function useAdminEmail(): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Shared Y-axis labels helper — 5 evenly-spaced ticks
+// Y-axis scale helpers
 // ---------------------------------------------------------------------------
+
+// Round up to the next power of 10, minimum 10.
+// Examples: 1→10, 6→10, 11→100, 55→100, 101→1000
+function niceMax(dataMax: number): number {
+  if (dataMax <= 0) return 10
+  const exp = Math.ceil(Math.log10(dataMax + 1))
+  return Math.max(10, Math.pow(10, exp))
+}
 
 function YAxisLabels({ max }: { max: number }) {
   const ticks = [max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), 0]
   return (
-    <div className="flex flex-col justify-between h-full pr-1 text-right" style={{ minWidth: 28 }}>
+    <div className="flex flex-col justify-between h-full pr-1 text-right" style={{ minWidth: 32 }}>
       {ticks.map((t, i) => (
         <span key={i} className="text-[10px] text-gray-400 tabular-nums leading-none">{t}</span>
       ))}
@@ -40,15 +48,16 @@ function BarChart({ data, valueKey, label }: {
   label: string
 }) {
   if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
-  const max = Math.max(...data.map(d => Number(d[valueKey]) || 0), 1)
+  const dataMax = Math.max(...data.map(d => Number(d[valueKey]) || 0), 0)
+  const max = niceMax(dataMax)
   const CHART_H = 120
 
   return (
     <div>
       <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
         <YAxisLabels max={max} />
-        <div className="flex-1 flex items-end gap-px relative" style={{ height: CHART_H }}>
-          {[0.25, 0.5, 0.75].map(f => (
+        <div className="flex-1 flex items-end relative" style={{ height: CHART_H }}>
+          {[0.25, 0.5, 0.75, 1].map(f => (
             <div
               key={f}
               className="absolute left-0 right-0 border-t border-gray-100"
@@ -64,15 +73,15 @@ function BarChart({ data, valueKey, label }: {
                   {val}
                 </span>
                 <div
-                  className="w-full bg-indigo-500 rounded-t-sm transition-all"
-                  style={{ height: `${pct}%`, minHeight: val > 0 ? 2 : 0 }}
+                  className="bg-indigo-500 rounded-t-sm transition-all"
+                  style={{ width: '60%', height: `${pct}%`, minHeight: val > 0 ? 2 : 0 }}
                 />
               </div>
             )
           })}
         </div>
       </div>
-      <div className="flex gap-px mt-1" style={{ paddingLeft: 32 }}>
+      <div className="flex mt-1" style={{ paddingLeft: 36 }}>
         {data.map((d, i) => {
           const date = String(d.date)
           const short = date.length >= 10 ? date.slice(5) : date
@@ -92,7 +101,8 @@ function BarChart({ data, valueKey, label }: {
 
 function DualBarChart({ data }: { data: DailyTokens[] }) {
   if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
-  const maxVal = Math.max(...data.flatMap(d => [d.input_tokens, d.output_tokens]), 1)
+  const dataMax = Math.max(...data.flatMap(d => [d.input_tokens, d.output_tokens]), 0)
+  const maxVal = niceMax(dataMax)
   const CHART_H = 120
 
   return (
@@ -103,8 +113,8 @@ function DualBarChart({ data }: { data: DailyTokens[] }) {
       </div>
       <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
         <YAxisLabels max={maxVal} />
-        <div className="flex-1 flex items-end gap-px relative" style={{ height: CHART_H }}>
-          {[0.25, 0.5, 0.75].map(f => (
+        <div className="flex-1 flex items-end relative" style={{ height: CHART_H }}>
+          {[0.25, 0.5, 0.75, 1].map(f => (
             <div
               key={f}
               className="absolute left-0 right-0 border-t border-gray-100"
@@ -112,23 +122,23 @@ function DualBarChart({ data }: { data: DailyTokens[] }) {
             />
           ))}
           {data.map((d, i) => (
-            <div key={i} className="flex-1 flex items-end gap-px group relative" style={{ height: CHART_H }}>
+            <div key={i} className="flex-1 flex items-end justify-center gap-px group relative" style={{ height: CHART_H }}>
               <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-white border border-gray-200 rounded px-1 shadow-sm z-10">
                 in:{d.input_tokens.toLocaleString()} out:{d.output_tokens.toLocaleString()}
               </span>
               <div
-                className="flex-1 bg-indigo-400 rounded-t-sm transition-all"
-                style={{ height: `${(d.input_tokens / maxVal) * 100}%`, minHeight: d.input_tokens > 0 ? 2 : 0 }}
+                className="bg-indigo-400 rounded-t-sm transition-all"
+                style={{ width: '28%', height: `${(d.input_tokens / maxVal) * 100}%`, minHeight: d.input_tokens > 0 ? 2 : 0 }}
               />
               <div
-                className="flex-1 bg-emerald-400 rounded-t-sm transition-all"
-                style={{ height: `${(d.output_tokens / maxVal) * 100}%`, minHeight: d.output_tokens > 0 ? 2 : 0 }}
+                className="bg-emerald-400 rounded-t-sm transition-all"
+                style={{ width: '28%', height: `${(d.output_tokens / maxVal) * 100}%`, minHeight: d.output_tokens > 0 ? 2 : 0 }}
               />
             </div>
           ))}
         </div>
       </div>
-      <div className="flex gap-px mt-1" style={{ paddingLeft: 32 }}>
+      <div className="flex mt-1" style={{ paddingLeft: 36 }}>
         {data.map((d, i) => {
           const short = d.date.length >= 10 ? d.date.slice(5) : d.date
           return <div key={i} className="flex-1 text-center text-[9px] text-gray-400 tabular-nums truncate">{short}</div>
@@ -144,7 +154,8 @@ function DualBarChart({ data }: { data: DailyTokens[] }) {
 
 function AgentRunChart({ data }: { data: AgentRunStats[] }) {
   if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
-  const maxVal = Math.max(...data.flatMap(d => [d.complete, d.failed]), 1)
+  const dataMax = Math.max(...data.flatMap(d => [d.complete, d.failed]), 0)
+  const maxVal = niceMax(dataMax)
   const CHART_H = 120
 
   return (
@@ -155,8 +166,8 @@ function AgentRunChart({ data }: { data: AgentRunStats[] }) {
       </div>
       <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
         <YAxisLabels max={maxVal} />
-        <div className="flex-1 flex items-end gap-px relative" style={{ height: CHART_H }}>
-          {[0.25, 0.5, 0.75].map(f => (
+        <div className="flex-1 flex items-end relative" style={{ height: CHART_H }}>
+          {[0.25, 0.5, 0.75, 1].map(f => (
             <div
               key={f}
               className="absolute left-0 right-0 border-t border-gray-100"
@@ -164,23 +175,23 @@ function AgentRunChart({ data }: { data: AgentRunStats[] }) {
             />
           ))}
           {data.map((d, i) => (
-            <div key={i} className="flex-1 flex items-end gap-px group relative" style={{ height: CHART_H }}>
+            <div key={i} className="flex-1 flex items-end justify-center gap-px group relative" style={{ height: CHART_H }}>
               <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-white border border-gray-200 rounded px-1 shadow-sm z-10">
                 ok:{d.complete} fail:{d.failed}
               </span>
               <div
-                className="flex-1 bg-green-400 rounded-t-sm transition-all"
-                style={{ height: `${(d.complete / maxVal) * 100}%`, minHeight: d.complete > 0 ? 2 : 0 }}
+                className="bg-green-400 rounded-t-sm transition-all"
+                style={{ width: '28%', height: `${(d.complete / maxVal) * 100}%`, minHeight: d.complete > 0 ? 2 : 0 }}
               />
               <div
-                className="flex-1 bg-red-400 rounded-t-sm transition-all"
-                style={{ height: `${(d.failed / maxVal) * 100}%`, minHeight: d.failed > 0 ? 2 : 0 }}
+                className="bg-red-400 rounded-t-sm transition-all"
+                style={{ width: '28%', height: `${(d.failed / maxVal) * 100}%`, minHeight: d.failed > 0 ? 2 : 0 }}
               />
             </div>
           ))}
         </div>
       </div>
-      <div className="flex gap-px mt-1" style={{ paddingLeft: 32 }}>
+      <div className="flex mt-1" style={{ paddingLeft: 36 }}>
         {data.map((d, i) => {
           const short = d.date.length >= 10 ? d.date.slice(5) : d.date
           return <div key={i} className="flex-1 text-center text-[9px] text-gray-400 tabular-nums truncate">{short}</div>
