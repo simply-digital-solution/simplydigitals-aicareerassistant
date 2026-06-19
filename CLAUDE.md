@@ -59,4 +59,5 @@ Dev-mode only — no real auth. Frontend sends email as `X-User-Email` header; t
 - **Never hallucinate.** Do not invent facts, file paths, function names, or behaviours that have not been verified by reading the actual code or data.
 - **Always show a written plan and wait for explicit approval before touching any files**, running DB patches, or making commits.
 - **Always include unit tests** for every change. Commit only after all tests pass.
+- **No duplication.** If the same logic is needed in more than one place, extract it into a shared helper first. Never copy-paste logic across files — a single function in a shared module is always preferred.
 - **Every task ends with a commit. No exceptions.** The mandatory sequence is: implement → run tests → commit → only then report completion. A task is NOT done until `git commit` has run and the commit SHA appears in the response. Never say "done", "complete", or ask "what's next?" before the commit is made.
