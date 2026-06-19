@@ -291,6 +291,12 @@ function AdminDashboard() {
   const totalJobs  = (jobsScraped as DailyCount[]).reduce((s, d) => s + d.count, 0)
   const peakActive = Math.max(...(usersActive as DailyCount[]).map(d => d.count), 0)
 
+  const tokenDays = (llmTokens as DailyTokens[]).length || 1
+  const jobDays   = (jobsScraped as DailyCount[]).length || 1
+  const avgIn     = fmt(Math.round(totalIn  / tokenDays))
+  const avgOut    = fmt(Math.round(totalOut / tokenDays))
+  const avgJobs   = Math.round(totalJobs / jobDays)
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -321,10 +327,10 @@ function AdminDashboard() {
         {/* KPI row */}
         <div className="flex gap-4">
           {[
-            { label: 'Peak daily active users', value: peakActive },
-            { label: 'Total input tokens',      value: fmt(totalIn) },
-            { label: 'Total output tokens',     value: fmt(totalOut) },
-            { label: 'Jobs scraped',            value: totalJobs },
+            { label: 'Peak daily active users',  value: peakActive },
+            { label: 'Avg input tokens / day',  value: avgIn },
+            { label: 'Avg output tokens / day', value: avgOut },
+            { label: 'Avg jobs scraped / day',  value: avgJobs },
           ].map(kpi => (
             <div key={kpi.label} className="flex-1 bg-white border border-gray-200 rounded-xl p-4">
               <p className="text-xs text-gray-400 mb-1">{kpi.label}</p>
