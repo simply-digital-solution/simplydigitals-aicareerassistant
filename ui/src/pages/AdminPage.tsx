@@ -13,10 +13,20 @@ function useAdminEmail(): string | null {
   try { return localStorage.getItem('user_email') } catch { return null }
 }
 
-// yyyy-mm-dd → dd-mm-yyyy
-function fmtDate(iso: string): string {
-  if (iso && iso.length >= 10) return `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`
+// yyyy-mm-dd → d/m  (matches StatsPanel shortDate style)
+function shortDate(iso: string): string {
+  if (iso && iso.length >= 10) {
+    const d = new Date(iso + 'T00:00:00')
+    return `${d.getDate()}/${d.getMonth() + 1}`
+  }
   return iso ?? ''
+}
+
+// Only abbreviate large numbers; let small integers render as-is
+function fmtTick(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
+  return Number.isInteger(n) ? String(n) : ''
 }
 
 function fmt(n: number): string {
@@ -26,7 +36,7 @@ function fmt(n: number): string {
 }
 
 const TICK_STYLE = { fontSize: 10, fill: '#9ca3af' }
-const CHART_MARGIN = { top: 4, right: 8, left: -16, bottom: 0 }
+const CHART_MARGIN = { top: 4, right: 4, left: -20, bottom: 0 }
 
 // ---------------------------------------------------------------------------
 // Single-series chart card
@@ -40,7 +50,7 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
   subtitle: string
   total: number | string
 }) {
-  const chartData = data.map(d => ({ ...d, _date: fmtDate(String(d.date)) }))
+  const chartData = data.map(d => ({ ...d, _date: shortDate(String(d.date)) }))
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
       <div className="flex items-start justify-between">
@@ -55,15 +65,13 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
-            tick={{ ...TICK_STYLE, textAnchor: 'end' }}
-            angle={-35}
-            height={44}
+            tick={{ fontSize: 10, fill: '#9ca3af' }}
             axisLine={false}
             tickLine={false}
             interval={0}
           />
           <YAxis
-            tickFormatter={fmt}
+            tickFormatter={fmtTick}
             allowDecimals={false}
             tick={TICK_STYLE}
             axisLine={false}
@@ -75,7 +83,7 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
             labelFormatter={(l) => l}
             contentStyle={{ fontSize: 12, borderRadius: 6 }}
           />
-          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={20} />
+          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={24} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -92,7 +100,7 @@ function DualChart({ data, title, subtitle, keys }: {
   subtitle: string
   keys: { key: string; color: string; label: string }[]
 }) {
-  const chartData = data.map(d => ({ ...d, _date: fmtDate(String(d.date)) }))
+  const chartData = data.map(d => ({ ...d, _date: shortDate(String(d.date)) }))
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
       <div>
@@ -104,15 +112,13 @@ function DualChart({ data, title, subtitle, keys }: {
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
-            tick={{ ...TICK_STYLE, textAnchor: 'end' }}
-            angle={-35}
-            height={44}
+            tick={{ fontSize: 10, fill: '#9ca3af' }}
             axisLine={false}
             tickLine={false}
             interval={0}
           />
           <YAxis
-            tickFormatter={fmt}
+            tickFormatter={fmtTick}
             allowDecimals={false}
             tick={TICK_STYLE}
             axisLine={false}
