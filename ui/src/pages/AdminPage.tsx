@@ -98,18 +98,25 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
 // Dual-series chart card (two bar series per date)
 // ---------------------------------------------------------------------------
 
-function DualChart({ data, title, subtitle, keys }: {
+function DualChart({ data, title, subtitle, keys, total, totalColor }: {
   data: Record<string, unknown>[]
   title: string
   subtitle: string
   keys: { key: string; color: string; label: string }[]
+  total?: number | string
+  totalColor?: string
 }) {
   const chartData = data.map(d => ({ ...d, _date: shortDate(String(d.date)) }))
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
-      <div>
-        <p className="text-sm font-semibold text-gray-800">{title}</p>
-        <p className="text-xs text-gray-500">{subtitle}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">{title}</p>
+          <p className="text-xs text-gray-500">{subtitle}</p>
+        </div>
+        {total !== undefined && (
+          <span className="text-2xl font-bold" style={{ color: totalColor ?? '#6366f1' }}>{total}</span>
+        )}
       </div>
       <ResponsiveContainer width="100%" height={140}>
         <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="40%">
@@ -347,8 +354,8 @@ function AdminDashboard() {
           />
         </div>
 
-        {/* Row 2: Jobs scraped | Agent runs | Jobs scored */}
-        <div className="grid grid-cols-3 gap-4">
+        {/* Row 2: Jobs scraped | Agent runs */}
+        <div className="grid grid-cols-2 gap-4">
           <SingleChart
             title="3 · Jobs scraped per day"
             subtitle="Across all users"
@@ -358,16 +365,22 @@ function AdminDashboard() {
             total={totalJobs}
           />
           <DualChart
-            title="7 · Agent runs"
+            title="4 · Agent runs"
             subtitle="Success vs failure per day"
             data={(agentRuns as AgentRunStats[]).map(d => ({ ...d, date: d.date }))}
             keys={[
-              { key: 'complete', color: '#22c55e', label: 'ok'   },
               { key: 'failed',   color: '#ef4444', label: 'fail' },
+              { key: 'complete', color: '#22c55e', label: 'ok'   },
             ]}
+            total={(agentRuns as AgentRunStats[]).reduce((s, d) => s + d.complete + d.failed, 0)}
+            totalColor="#22c55e"
           />
+        </div>
+
+        {/* Row 3: Jobs scored */}
+        <div className="grid grid-cols-2 gap-4">
           <SingleChart
-            title="8 · Jobs scored per day"
+            title="5 · Jobs scored per day"
             subtitle="From daily scoring usage"
             color="#7c3aed"
             data={scoring as Record<string, unknown>[]}
