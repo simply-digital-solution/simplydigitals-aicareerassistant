@@ -51,21 +51,6 @@ Agent calls: send prompt → `parse_agent_output()` extracts structured JSON →
 
 Dev-mode only, no passwords. Frontend stores email in `localStorage`, sends it as `X-User-Email` header. `get_current_user()` in `api/app/modules/auth/router.py` auto-creates a `User` row (with empty `hashed_password`) on first seen email.
 
-### Agent streaming (SSE)
-
-`POST /api/v1/agents/{research,resume,application,interview,run}` endpoints return `StreamingResponse` (`text/event-stream`). Event types: `status`, `chunk`, `result` (final JSON), `error`, `meta`. Consumed by `ui/src/hooks/useAgentStream.ts`.
-
-### Database
-
-SQLite + WAL at `api/aicareercoach.db`. Alembic migrations in `api/migrations/versions/`. `AuditLog` rows are hash-chained (`prev_hash` + `chain_hash`) for tamper detection.
-
-### Prompts
-
-Agent system prompts live in `prompts/` (project root, not inside `api/`) as markdown files, loaded at runtime. Current prompts: `research.md`, `resume.md`, `resume_generate.md`, `application.md`, `interview.md`, `role_fit.md`, `industry_classifier.md`, `negotiation.md`, `outreach.md`.
-
-### Backend module structure
-
-`api/app/modules/` contains: `agents/`, `admin/`, `applications/`, `auth/`, `notifications/`, `profile/`, `scoring/`, `stats/`.
 
 ## Shell working directory
 
