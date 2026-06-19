@@ -6,6 +6,9 @@ import ResumeSection from './profile/ResumeSection'
 import SkillsSection from './profile/SkillsSection'
 import TargetRolesSection from './profile/TargetRolesSection'
 import PreferencesSection from './profile/PreferencesSection'
+import ContactSection from './profile/ContactSection'
+import EducationSection from './profile/EducationSection'
+import CertificationsSection from './profile/CertificationsSection'
 
 export default function ProfilePanel() {
   const qc = useQueryClient()
@@ -54,8 +57,11 @@ export default function ProfilePanel() {
         </div>
       )}
       <ResumeSection data={data} onSaved={invalidate} />
+      <ContactSection data={data} onSaved={invalidate} />
       <SkillsSection data={data} onSaved={invalidate} />
       <TargetRolesSection data={data} onSaved={invalidate} />
+      <EducationSection data={data} onSaved={invalidate} />
+      <CertificationsSection data={data} onSaved={invalidate} />
       <PreferencesSection data={data} onSaved={invalidate} />
     </div>
   )

@@ -4,7 +4,7 @@ export default function Section({
   title,
   subtitle,
   badge,
-  defaultOpen = true,
+  defaultOpen = false,
   actions,
   children,
 }: {

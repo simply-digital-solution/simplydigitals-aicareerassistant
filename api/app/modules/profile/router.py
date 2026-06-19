@@ -53,6 +53,9 @@ class ProfileUpdate(BaseModel):
     salary_currency: str | None = None
     excluded_companies: str | None = None    # JSON array string
     years_experience: int | None = None
+    education: str | None = None             # JSON array of {degree, institution, year}
+    certifications: str | None = None        # JSON array of {name, issuer, issued_date, expiry_date}
+    phone_number: str | None = None
 
 
 class ProfileResponse(BaseModel):
@@ -72,6 +75,9 @@ class ProfileResponse(BaseModel):
     seniority_level: str | None
     target_industries: str | None
     target_titles: str | None
+    education: str | None
+    certifications: str | None
+    phone_number: str | None
 
     model_config = {"from_attributes": True}
 
@@ -207,6 +213,90 @@ async def parse_resume_file(
     await db.commit()
 
     return ParsedResumeResponse(text=text, html=html)
+
+
+@router.post("/extract-and-save", response_model=ProfileResponse)
+async def extract_and_save(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Run LLM extraction on the saved resume and additively merge all extracted
+    fields into the profile. Nothing is ever removed — only new values added.
+    Deduplication is applied to every array field.
+    """
+    from app.shared.resume_detail_extractor import extract_resume_details
+    from app.shared.api_client import get_llm_client
+
+    profile = await _get_or_create(db, current_user.id)
+    if not profile.resume_text or not profile.resume_text.strip():
+        raise HTTPException(status_code=422, detail="No resume found. Upload your resume first.")
+
+    client = get_llm_client()
+    extracted = await extract_resume_details(profile.resume_text, client)
+
+    # --- Additive merge helpers ---
+    def _merge_str_array(existing_json: str | None, new_items: list[str]) -> str:
+        existing = json.loads(existing_json) if existing_json else []
+        existing_lower = {s.strip().lower() for s in existing}
+        merged = existing + [s for s in new_items if s.strip().lower() not in existing_lower]
+        return _dedupe_json_array(json.dumps(merged)) or "[]"
+
+    def _merge_education(existing_json: str | None, new_items: list[dict]) -> str:
+        existing = json.loads(existing_json) if existing_json else []
+        existing_keys = {
+            (e.get("degree", "").strip().lower(), e.get("institution", "").strip().lower())
+            for e in existing
+        }
+        for entry in new_items:
+            key = (entry.get("degree", "").strip().lower(), entry.get("institution", "").strip().lower())
+            if key not in existing_keys and (key[0] or key[1]):
+                existing.append(entry)
+                existing_keys.add(key)
+        return json.dumps(existing)
+
+    def _merge_certifications(existing_json: str | None, new_items: list[dict]) -> str:
+        existing = json.loads(existing_json) if existing_json else []
+        existing_keys = {
+            (e.get("name", "").strip().lower(), e.get("issuer", "").strip().lower())
+            for e in existing
+        }
+        for entry in new_items:
+            key = (entry.get("name", "").strip().lower(), entry.get("issuer", "").strip().lower())
+            if key not in existing_keys and key[0]:
+                existing.append(entry)
+                existing_keys.add(key)
+        return json.dumps(existing)
+
+    # Merge each field additively
+    if extracted["target_industries"]:
+        profile.target_industries = _merge_str_array(profile.target_industries, extracted["target_industries"])
+
+    if extracted["target_roles"]:
+        profile.target_titles = _merge_str_array(profile.target_titles, extracted["target_roles"])
+
+    if extracted["skills"]:
+        profile.skills = _merge_str_array(profile.skills, extracted["skills"])
+
+    if extracted["education"]:
+        profile.education = _merge_education(profile.education, extracted["education"])
+
+    if extracted["certifications"]:
+        profile.certifications = _merge_certifications(profile.certifications, extracted["certifications"])
+
+    # Contact: only write if currently empty
+    phone = extracted["contact"].get("phone", "")
+    if phone and not profile.phone_number:
+        profile.phone_number = phone
+
+    email = extracted["contact"].get("email", "")
+    if email and not profile.linkedin_url:
+        # email is stored on the User row, not Profile — skip overwriting here
+        pass
+
+    await db.commit()
+    await db.refresh(profile)
+    return profile
 
 
 @router.get("", response_model=ProfileResponse)

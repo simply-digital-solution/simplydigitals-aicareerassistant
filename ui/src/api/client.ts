@@ -19,6 +19,9 @@ export interface ProfileData {
   seniority_level: string | null     // kept for compat
   target_industries: string | null   // JSON array of detected industry names
   target_titles: string | null       // JSON array of inferred target job titles
+  education: string | null           // JSON array of {degree, institution, year}
+  certifications: string | null      // JSON array of {name, issuer, issued_date, expiry_date}
+  phone_number: string | null
 }
 
 // Attach email from localStorage on every request
@@ -282,6 +285,11 @@ export const researchApi = {
     api.get<GeneratedResumeResponse>(`/research/jobs/${jobId}/resume`),
   retryDriveUpload: (jobId: number) =>
     api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/retry-drive-upload`),
+}
+
+// Profile API
+export const profileApi = {
+  extractAndSave: () => api.post<ProfileData>('/profile/extract-and-save'),
 }
 
 // Account status API

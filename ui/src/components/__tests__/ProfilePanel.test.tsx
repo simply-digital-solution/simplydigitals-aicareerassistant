@@ -4,7 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 vi.mock('../../api/client', () => ({
   default: { get: vi.fn(), patch: vi.fn() },
+  profileApi: { extractAndSave: vi.fn().mockResolvedValue({}) },
 }))
+
+// Stub localStorage for jsdom environment
+Object.defineProperty(window, 'localStorage', {
+  value: { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() },
+  writable: true,
+})
 
 const baseProfile = {
   resume_text: null,
@@ -23,6 +30,9 @@ const baseProfile = {
   seniority_level: null,
   target_industries: null,
   target_titles: null,
+  education: null,
+  certifications: null,
+  phone_number: null,
 }
 
 function wrap(ui: React.ReactElement) {
@@ -52,7 +62,8 @@ describe('ProfilePanel resume banner', () => {
     const { default: ProfilePanel } = await import('../ProfilePanel')
     wrap(<ProfilePanel />)
 
-    await screen.findByText(/Analyse Skills/i)
+    // Wait for sections to render — banner should never appear
+    await screen.findAllByText(/Education/i)
     expect(screen.queryByText(/Upload your resume to get started/i)).toBeNull()
   })
 

@@ -56,6 +56,9 @@ class Profile(Base):
     google_access_token = Column(Text)
     google_refresh_token = Column(Text)
     google_token_expiry = Column(Text)                      # ISO-8601 UTC string
+    education = Column(Text)                                # JSON array of {degree, institution, year}
+    certifications = Column(Text)                           # JSON array of {name, issuer, issued_date, expiry_date}
+    phone_number = Column(String(50))                       # e.g. +6590673055
     updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)
 
     user = relationship("User", back_populates="profile")

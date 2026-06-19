@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import type { ProfileData } from '../../api/client'
-import api from '../../api/client'
+import api, { profileApi } from '../../api/client'
 import Section from './Section'
 
 function parseJsonArray(val: string | null | undefined): string[] {
@@ -42,6 +42,8 @@ export default function ResumeSection({
   const [analyseError, setAnalyseError] = useState('')
   const [newSkills, setNewSkills] = useState<string[]>([])
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set())
+  const [extracting, setExtracting] = useState(false)
+  const [extractError, setExtractError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const wordCount = resumeText.trim() ? resumeText.trim().split(/\s+/).length : 0
@@ -81,6 +83,17 @@ export default function ResumeSection({
         // html is already saved to profile by the backend on upload
         setDirty(false)
         onSaved()
+        // Auto-extract all details from the uploaded resume
+        setExtractError('')
+        setExtracting(true)
+        try {
+          await profileApi.extractAndSave()
+          onSaved()
+        } catch {
+          setExtractError('Could not extract details from resume. You can add them manually below.')
+        } finally {
+          setExtracting(false)
+        }
       }
     }
     e.target.value = ''
@@ -161,6 +174,16 @@ export default function ResumeSection({
       <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" className="hidden" onChange={handleFile} />
 
       {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
+      {extracting && (
+        <div className="flex items-center gap-2 text-sm text-indigo-600">
+          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          Extracting details from your resume…
+        </div>
+      )}
+      {extractError && <p className="text-sm text-amber-600">{extractError}</p>}
 
       {/* Resume display — HTML preview or plain text textarea */}
       {resumeHtml && !showRaw ? (
