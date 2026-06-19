@@ -19,6 +19,7 @@ cd api && poetry install
 ```
 
 > Never use `uvicorn app.main:app --reload` directly — it watches `.venv/` and crashes if packages are installed while the server is running. Always use `make dev`.
+> **Before running `poetry install`**: always stop the server first (`pkill -f uvicorn`), then install, then restart with `make dev`. Installing while the server is running corrupts the venv.
 
 ### Frontend (`ui/`)
 
@@ -70,3 +71,4 @@ The project root is `/Users/vasu/Documents/Projects/simplydigitals-aicareerassis
 - **Never hallucinate.** Do not invent facts, file paths, function names, or behaviours that have not been verified by reading the actual code or data.
 - **Always show a written plan and wait for explicit approval before touching any files**, running DB patches, or making commits.
 - **Always include unit tests** for every change. Commit only after all tests pass.
+- **Every task ends with a commit. No exceptions.** The mandatory sequence is: implement → run tests → commit → only then report completion. A task is NOT done until `git commit` has run and the commit SHA appears in the response. Never say "done", "complete", or ask "what's next?" before the commit is made.
