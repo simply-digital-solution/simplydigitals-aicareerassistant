@@ -1,0 +1,160 @@
+name: UI CI
+
+on:
+  workflow_call:
+    inputs:
+      run_lint:
+        required: false
+        type: boolean
+        default: false
+      run_tests:
+        required: false
+        type: boolean
+        default: false
+      run_deploy:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AWS_ACCESS_KEY_ID:          { required: false }
+      AWS_SECRET_ACCESS_KEY:      { required: false }
+      AWS_REGION:                 { required: false }
+      S3_UI_BUCKET:               { required: false }
+      CLOUDFRONT_DISTRIBUTION_ID: { required: false }
+      PROD_API_URL:               { required: false }
+      VITE_HCAPTCHA_SITE_KEY:     { required: false }
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  NODE_VERSION: "20"
+
+defaults:
+  run:
+    working-directory: ui
+
+jobs:
+
+  # ── 1. LINT — feature branch push ────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    if: inputs.run_lint
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+  # ── 2. UNIT TESTS + COVERAGE — pull request ───────────────────────────────
+  unit-tests:
+    name: Unit Tests & Coverage
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Vitest with coverage
+        run: npm run test:coverage
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-test-results-${{ github.run_id }}
+          path: ui/coverage/
+          retention-days: 7
+
+  # ── 3. SECURITY — pull request ────────────────────────────────────────────
+  security:
+    name: npm audit
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (high + critical only)
+        run: npm audit --audit-level=high --production
+
+  # ── 4. BUILD + DEPLOY — merge to main ────────────────────────────────────
+  deploy:
+    name: Build & Deploy to S3
+    runs-on: ubuntu-latest
+    if: inputs.run_deploy
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Vite production build
+        env:
+          VITE_API_BASE_URL: ${{ secrets.PROD_API_URL }}
+          VITE_HCAPTCHA_SITE_KEY: ${{ secrets.VITE_HCAPTCHA_SITE_KEY }}
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Sync static assets to S3 (immutable cache)
+        run: |
+          aws s3 sync dist/assets/ s3://${{ secrets.S3_UI_BUCKET }}/assets/ \
+            --cache-control "public,max-age=31536000,immutable" \
+            --delete
+
+      - name: Sync HTML + root files to S3 (no cache)
+        run: |
+          aws s3 sync dist/ s3://${{ secrets.S3_UI_BUCKET }}/ \
+            --exclude "assets/*" \
+            --cache-control "no-cache,no-store,must-revalidate" \
+            --delete
+
+      - name: Invalidate CloudFront cache
+        if: secrets.CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"

@@ -1,0 +1,91 @@
+name: Post-Deploy Tests
+
+on:
+  workflow_call:
+    secrets:
+      PROD_API_URL: { required: true }
+      PROD_UI_URL:  { required: false }
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ── API smoke tests ───────────────────────────────────────────────────────
+  smoke:
+    name: API Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: /health
+        run: |
+          URL="${{ secrets.PROD_API_URL }}/health"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "GET $URL → $STATUS"
+          [ "$STATUS" = "200" ] || { echo "❌ /health returned $STATUS"; exit 1; }
+          echo "✅ /health OK"
+
+      - name: /api/v1/status (auth-optional endpoint)
+        run: |
+          URL="${{ secrets.PROD_API_URL }}/api/v1/status"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "GET $URL → $STATUS"
+          # 200 = up, 401/403 = up but protected — both are fine, 5xx = broken
+          [ "$STATUS" -lt 500 ] || { echo "❌ /api/v1/status returned $STATUS"; exit 1; }
+          echo "✅ /api/v1/status OK ($STATUS)"
+
+      - name: Response-time check
+        run: |
+          URL="${{ secrets.PROD_API_URL }}/health"
+          ELAPSED=$(curl -s -o /dev/null -w "%{time_total}" "$URL")
+          echo "Response time: ${ELAPSED}s"
+          # Warn (not fail) if > 3s — cold start on t2.micro can be slow
+          python3 -c "
+          t = float('$ELAPSED')
+          if t > 3:
+              print(f'⚠️  Slow response: {t:.2f}s (>3s)')
+          else:
+              print(f'✅ Response time OK: {t:.2f}s')
+          "
+
+  # ── Frontend reachability ─────────────────────────────────────────────────
+  ui-reachability:
+    name: UI Reachability
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: secrets.PROD_UI_URL != ''
+    steps:
+      - name: Check CloudFront / S3 serves the SPA
+        run: |
+          URL="${{ secrets.PROD_UI_URL }}"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "GET $URL → $STATUS"
+          [ "$STATUS" = "200" ] || { echo "❌ UI returned $STATUS"; exit 1; }
+          echo "✅ UI is reachable"
+
+      - name: Check SPA 404 → index.html fallback
+        run: |
+          URL="${{ secrets.PROD_UI_URL }}/some-deep-route"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "GET $URL → $STATUS"
+          [ "$STATUS" = "200" ] || { echo "❌ SPA fallback returned $STATUS (expected 200)"; exit 1; }
+          echo "✅ SPA fallback OK"
+
+  # ── Result summary ────────────────────────────────────────────────────────
+  post-deploy-summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [smoke, ui-reachability]
+    if: always()
+    steps:
+      - name: Report outcome
+        run: |
+          SMOKE="${{ needs.smoke.result }}"
+          UI="${{ needs.ui-reachability.result }}"
+          echo "Smoke tests  : $SMOKE"
+          echo "UI check     : $UI"
+          if [ "$SMOKE" = "failure" ]; then
+            echo "❌ Post-deploy smoke tests FAILED"
+            exit 1
+          fi
+          echo "✅ Post-deploy checks passed"

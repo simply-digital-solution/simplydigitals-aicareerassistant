@@ -1,0 +1,320 @@
+name: API CI
+
+on:
+  workflow_call:
+    inputs:
+      run_lint:
+        required: false
+        type: boolean
+        default: false
+      run_tests:
+        required: false
+        type: boolean
+        default: false
+      run_deploy:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AWS_ACCESS_KEY_ID:     { required: false }
+      AWS_SECRET_ACCESS_KEY: { required: false }
+      AWS_ACCOUNT_ID:        { required: false }
+      AWS_REGION:            { required: false }
+      ECR_REPOSITORY:        { required: false }
+      EC2_HOST:              { required: false }
+      EC2_SSH_KEY:           { required: false }
+      EC2_USER:              { required: false }
+      DATABASE_URL:          { required: false }
+      JWT_SECRET_KEY:        { required: false }
+      GEMINI_API_KEY:        { required: false }
+      HCAPTCHA_SECRET_KEY:   { required: false }
+      GOOGLE_CLIENT_ID:      { required: false }
+      GOOGLE_CLIENT_SECRET:  { required: false }
+      PROD_API_URL:          { required: false }
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  # Safe CI-only values — never used in production
+  DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+  JWT_SECRET_KEY: "ci-secret-key-at-least-32-chars-long!!"
+  APP_ENV: "testing"
+  ENABLE_SCHEDULER: "false"
+
+defaults:
+  run:
+    working-directory: api
+
+jobs:
+
+  # ── 1. LINT — feature branch push ────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    if: inputs.run_lint
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: api/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install ruff
+
+      - name: Ruff
+        run: ruff check app tests
+
+  # ── 2. UNIT TESTS + COVERAGE — pull request ───────────────────────────────
+  unit-tests:
+    name: Unit Tests & Coverage
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: api/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install poetry && poetry install --with dev
+
+      - name: Run pytest with coverage
+        run: |
+          poetry run pytest tests/ \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --junitxml=pytest-report.xml \
+            -v
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-test-results-${{ github.run_id }}
+          path: |
+            api/pytest-report.xml
+            api/coverage.xml
+          retention-days: 7
+
+  # ── 3. SECURITY — pull request ────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: api/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install poetry bandit pip-audit && poetry install
+
+      - name: Bandit SAST
+        run: |
+          poetry run bandit -r app -ll -f json -o bandit-report.json || true
+          poetry run bandit -r app -ll
+
+      - name: pip-audit CVE scan
+        run: |
+          poetry export --without dev --without-hashes -f requirements.txt | \
+            pip-audit -r /dev/stdin --desc
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: api
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          ignore-unfixed: true
+          format: table
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-bandit-report-${{ github.run_id }}
+          path: api/bandit-report.json
+          retention-days: 7
+
+  # ── 4. VERSION — merge to main ────────────────────────────────────────────
+  version:
+    name: Resolve Version
+    runs-on: ubuntu-latest
+    if: inputs.run_deploy
+    outputs:
+      version:    ${{ steps.resolve.outputs.version }}
+      is_release: ${{ steps.resolve.outputs.is_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve version
+        id: resolve
+        run: |
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          GIT_TAG=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          if [ -n "$GIT_TAG" ]; then
+            VERSION="${GIT_TAG#v}"
+            IS_RELEASE="true"
+          else
+            LAST_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+            if [ -n "$LAST_TAG" ]; then
+              DISTANCE=$(git rev-list ${LAST_TAG}..HEAD --count)
+              BASE="${LAST_TAG#v}"
+              VERSION="${BASE}-dev.${DISTANCE}-${SHORT_SHA}"
+            else
+              VERSION="0.0.0-dev-${SHORT_SHA}"
+            fi
+            IS_RELEASE="false"
+          fi
+          echo "version=$VERSION"       >> $GITHUB_OUTPUT
+          echo "is_release=$IS_RELEASE" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION (release=$IS_RELEASE)"
+
+  # ── 5. BUILD + DEPLOY — merge to main ────────────────────────────────────
+  deploy:
+    name: Build & Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [version]
+    if: inputs.run_deploy
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect migration changes
+        id: migration_check
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            migrations:
+              - 'api/migrations/versions/**'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: api
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ needs.version.outputs.version }}
+            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
+          build-args: |
+            APP_VERSION=${{ needs.version.outputs.version }}
+
+      - name: Write .env file to EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cat > /app/.env << 'ENVEOF'
+            APP_ENV=production
+            LOG_LEVEL=INFO
+            ENABLE_SCHEDULER=false
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            HCAPTCHA_SECRET_KEY=${{ secrets.HCAPTCHA_SECRET_KEY }}
+            GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+            GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+            GOOGLE_REDIRECT_URI=https://${{ secrets.EC2_HOST }}/api/v1/auth/google/callback
+            ENVEOF
+
+      - name: Deploy containers on EC2
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: ECR_IMAGE
+          script: |
+            ECR_IMAGE=${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
+
+            # Authenticate Docker with ECR
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+              docker login --username AWS --password-stdin \
+              ${{ steps.ecr.outputs.registry }}
+
+            # Pull new image
+            docker pull $ECR_IMAGE
+
+            # Update compose to use the new image and restart
+            cd /app
+            ECR_IMAGE=$ECR_IMAGE docker compose -f docker-compose.prod.yml up -d \
+              --no-build \
+              --remove-orphans
+
+      - name: Run database migrations
+        if: steps.migration_check.outputs.migrations == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /app
+            docker compose -f docker-compose.prod.yml run --rm migrate
+            echo "Migrations applied successfully"
+
+      - name: Health check
+        run: |
+          PROD_URL="${{ secrets.PROD_API_URL }}"
+          echo "Health check: ${PROD_URL}/health"
+          for i in $(seq 1 6); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/health")
+            echo "Attempt $i — HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ API is live"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "❌ Health check failed after 6 attempts"
+          exit 1
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "=================================="
+          echo " Version : ${{ needs.version.outputs.version }}"
+          echo " Image   : ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}"
+          echo " Host    : ${{ secrets.EC2_HOST }}"
+          echo " Region  : ${{ secrets.AWS_REGION }}"
+          echo "=================================="
