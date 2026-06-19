@@ -40,16 +40,11 @@ Copy `.env.example` to `api/.env`. Backend reads config from `api/.env` via `pyd
 
 ### LLM backend
 
-Uses **Ollama** (local) or **Gemini** (cloud). The factory function `get_llm_client()` in `api/app/shared/api_client.py` returns a `GeminiClient` if `GEMINI_API_KEY` is set in `.env`, otherwise falls back to `OllamaClient`.
-
-- Ollama: `http://localhost:11434`, models configured via `coordinator_model` / `specialist_model` (default: `llama3.1:8b`)
-- Gemini: `gemini-2.5-flash-lite` by default, configured via `gemini_model` setting
-
-Agent calls: send prompt → `parse_agent_output()` extracts structured JSON → retries up to `max_self_corrections` via `build_reflexion_prompt()` (both in `api/app/shared/parser.py`) → records run in `agent_runs` + `budget_records` tables.
+`get_llm_client()` returns `GeminiClient` if `GEMINI_API_KEY` is set in `.env`, otherwise `OllamaClient`. This means the active LLM switches silently based on the env var — always check `.env` before assuming which backend is in use.
 
 ### Authentication
 
-Dev-mode only, no passwords. Frontend stores email in `localStorage`, sends it as `X-User-Email` header. `get_current_user()` in `api/app/modules/auth/router.py` auto-creates a `User` row (with empty `hashed_password`) on first seen email.
+Dev-mode only — no real auth. Frontend sends email as `X-User-Email` header; the backend auto-creates a user row on first sight. `hashed_password` exists on the `User` model but is always stored empty — it is a placeholder, not a bug.
 
 
 ## Shell working directory
