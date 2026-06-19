@@ -187,3 +187,89 @@ def test_phone_written_when_empty():
     extracted_phone = "+6591234567"
     result = extracted_phone if not existing_phone else existing_phone
     assert result == "+6591234567"
+
+
+# ---------------------------------------------------------------------------
+# deduplicate_certifications — LLM-based semantic dedup
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_dedup_certs_collapses_abbreviation_and_full_name():
+    """LLM recognises 'PMP' and 'Project Management Professional (PMP)' as same cert."""
+    from app.shared.resume_detail_extractor import deduplicate_certifications
+
+    deduped = [{"name": "Project Management Professional (PMP)", "issuer": "PMI", "issued_date": "", "expiry_date": ""}]
+    client = MagicMock()
+    client._call = AsyncMock(return_value=(json.dumps(deduped), {}))
+
+    entries = [
+        {"name": "PMP", "issuer": "PMI", "issued_date": "", "expiry_date": ""},
+        {"name": "Project Management Professional (PMP)", "issuer": "PMI", "issued_date": "", "expiry_date": ""},
+    ]
+    result = await deduplicate_certifications(entries, client)
+    assert len(result) == 1
+    assert result[0]["name"] == "Project Management Professional (PMP)"
+
+
+@pytest.mark.asyncio
+async def test_dedup_certs_keeps_distinct_certs():
+    """Two genuinely different certs are both retained."""
+    from app.shared.resume_detail_extractor import deduplicate_certifications
+
+    two_certs = [
+        {"name": "Project Management Professional (PMP)", "issuer": "PMI", "issued_date": "", "expiry_date": ""},
+        {"name": "AWS Solutions Architect", "issuer": "Amazon", "issued_date": "2023-01", "expiry_date": "2026-01"},
+    ]
+    client = MagicMock()
+    client._call = AsyncMock(return_value=(json.dumps(two_certs), {}))
+
+    result = await deduplicate_certifications(two_certs, client)
+    assert len(result) == 2
+
+
+@pytest.mark.asyncio
+async def test_dedup_certs_falls_back_on_llm_error():
+    """Returns original list unchanged when LLM call fails."""
+    from app.shared.resume_detail_extractor import deduplicate_certifications
+
+    client = MagicMock()
+    client._call = AsyncMock(side_effect=RuntimeError("LLM down"))
+
+    entries = [
+        {"name": "PMP", "issuer": "PMI", "issued_date": "", "expiry_date": ""},
+        {"name": "Project Management Professional (PMP)", "issuer": "PMI", "issued_date": "", "expiry_date": ""},
+    ]
+    result = await deduplicate_certifications(entries, client)
+    assert result == entries
+
+
+@pytest.mark.asyncio
+async def test_dedup_certs_skips_call_for_single_entry():
+    """No LLM call made when there is only one cert."""
+    from app.shared.resume_detail_extractor import deduplicate_certifications
+
+    client = MagicMock()
+    client._call = AsyncMock()
+
+    entries = [{"name": "PMP", "issuer": "PMI", "issued_date": "", "expiry_date": ""}]
+    result = await deduplicate_certifications(entries, client)
+    assert result == entries
+    client._call.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_dedup_certs_tolerates_markdown_fenced_response():
+    """LLM response wrapped in ```json fences is still parsed correctly."""
+    from app.shared.resume_detail_extractor import deduplicate_certifications
+
+    deduped = [{"name": "PMI-ACP", "issuer": "PMI", "issued_date": "", "expiry_date": ""}]
+    client = MagicMock()
+    client._call = AsyncMock(return_value=(f"```json\n{json.dumps(deduped)}\n```", {}))
+
+    entries = [
+        {"name": "PMI-ACP", "issuer": "PMI", "issued_date": "", "expiry_date": ""},
+        {"name": "PMI Agile Certified Practitioner (PMI-ACP)", "issuer": "PMI", "issued_date": "", "expiry_date": ""},
+    ]
+    result = await deduplicate_certifications(entries, client)
+    assert len(result) == 1
+    assert result[0]["name"] == "PMI-ACP"

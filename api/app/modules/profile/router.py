@@ -225,7 +225,7 @@ async def extract_and_save(
     fields into the profile. Nothing is ever removed — only new values added.
     Deduplication is applied to every array field.
     """
-    from app.shared.resume_detail_extractor import extract_resume_details
+    from app.shared.resume_detail_extractor import extract_resume_details, deduplicate_certifications
     from app.shared.api_client import get_llm_client
 
     profile = await _get_or_create(db, current_user.id)
@@ -281,8 +281,11 @@ async def extract_and_save(
     if extracted["education"]:
         profile.education = _merge_education(profile.education, extracted["education"])
 
-    if extracted["certifications"]:
-        profile.certifications = _merge_certifications(profile.certifications, extracted["certifications"])
+    merged_certs_json = _merge_certifications(profile.certifications, extracted["certifications"])
+    merged_certs = json.loads(merged_certs_json)
+    if len(merged_certs) > 1:
+        merged_certs = await deduplicate_certifications(merged_certs, client)
+    profile.certifications = json.dumps(merged_certs)
 
     # Contact: only write if currently empty
     phone = extracted["contact"].get("phone", "")

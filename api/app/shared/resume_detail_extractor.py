@@ -128,3 +128,55 @@ async def extract_resume_details(resume_text: str, api_client) -> dict:
         return _parse_response(raw)
     except Exception:
         return _empty_result()
+
+
+_DEDUP_SYSTEM_PROMPT = """You are a data deduplication assistant. You will receive a JSON array of certification objects.
+Some entries refer to the same certification but use different name formats (e.g. "PMP" and "Project Management Professional (PMP)").
+Return ONLY a valid JSON array with duplicates removed. Rules:
+- When two entries refer to the same certification (same cert, same issuer), keep ONE entry
+- For the kept entry: use the most complete/descriptive name (prefer the full name over abbreviation)
+- Fill in any missing fields (issued_date, expiry_date) from the duplicate if available
+- If entries are genuinely different certifications, keep both
+- Return ONLY the JSON array, no explanation, no markdown"""
+
+_DEDUP_USER_PROMPT = """Deduplicate this certification list. Return ONLY the JSON array:
+
+{certs_json}"""
+
+
+async def deduplicate_certifications(entries: list[dict], api_client) -> list[dict]:
+    """
+    Use the LLM to deduplicate a certification list by semantic equivalence.
+    Falls back to the original list on any failure — never raises.
+    """
+    if len(entries) <= 1:
+        return entries
+
+    certs_json = json.dumps(entries, indent=2)
+    messages = [
+        {"role": "system", "content": _DEDUP_SYSTEM_PROMPT},
+        {"role": "user", "content": _DEDUP_USER_PROMPT.format(certs_json=certs_json)},
+    ]
+    try:
+        raw, _ = await api_client._call(messages)
+        text = re.sub(r"```(?:json)?", "", raw).strip()
+        # Find the JSON array
+        match = re.search(r'\[.*\]', text, re.DOTALL)
+        if not match:
+            return entries
+        parsed = json.loads(match.group())
+        if not isinstance(parsed, list):
+            return entries
+        # Validate each entry has required keys
+        result = []
+        for item in parsed:
+            if isinstance(item, dict) and item.get("name"):
+                result.append({
+                    "name": str(item.get("name", "")).strip(),
+                    "issuer": str(item.get("issuer", "")).strip(),
+                    "issued_date": str(item.get("issued_date", "")).strip(),
+                    "expiry_date": str(item.get("expiry_date", "")).strip(),
+                })
+        return result if result else entries
+    except Exception:
+        return entries
