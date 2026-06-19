@@ -63,7 +63,7 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
         <span className="text-2xl font-bold" style={{ color }}>{total}</span>
       </div>
       <ResponsiveContainer width="100%" height={140}>
-        <BarChart data={chartData} margin={CHART_MARGIN}>
+        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="20%">
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
@@ -85,7 +85,7 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
             labelFormatter={(l) => l}
             contentStyle={{ fontSize: 12, borderRadius: 6 }}
           />
-          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={24} />
+          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={12} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -110,7 +110,7 @@ function DualChart({ data, title, subtitle, keys }: {
         <p className="text-xs text-gray-500">{subtitle}</p>
       </div>
       <ResponsiveContainer width="100%" height={160}>
-        <BarChart data={chartData} margin={CHART_MARGIN}>
+        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="20%">
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
@@ -133,8 +133,16 @@ function DualChart({ data, title, subtitle, keys }: {
             contentStyle={{ fontSize: 12, borderRadius: 6 }}
           />
           <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-          {keys.map(k => (
-            <Bar key={k.key} dataKey={k.key} name={k.label} fill={k.color} radius={[3, 3, 0, 0]} maxBarSize={16} />
+          {keys.map((k, i) => (
+            <Bar
+              key={k.key}
+              dataKey={k.key}
+              name={k.label}
+              fill={k.color}
+              stackId="stack"
+              maxBarSize={12}
+              radius={i === keys.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+            />
           ))}
         </BarChart>
       </ResponsiveContainer>
