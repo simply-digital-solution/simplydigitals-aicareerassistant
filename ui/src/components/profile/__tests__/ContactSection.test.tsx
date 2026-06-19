@@ -40,18 +40,17 @@ describe('ContactSection', () => {
     expect((screen.getByPlaceholderText('90673055') as HTMLInputElement).value).toBe('90673055')
   })
 
-  it('save button hidden when no changes', () => {
-    const data = { ...base, phone_number: '+6590673055' }
-    render(<ContactSection data={data} onSaved={vi.fn()} />)
+  it('save button is disabled when no changes', () => {
+    render(<ContactSection data={base} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Contact'))
-    expect(screen.queryByText('Save Contact')).toBeNull()
+    expect((screen.getByText('Save Contact').closest('button') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('save button appears after changing phone number', () => {
+  it('save button is enabled after changing phone number', () => {
     render(<ContactSection data={base} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Contact'))
     fireEvent.change(screen.getByPlaceholderText('90673055'), { target: { value: '91234567' } })
-    expect(screen.getByText('Save Contact')).toBeTruthy()
+    expect((screen.getByText('Save Contact').closest('button') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('calls PATCH with combined phone on save', async () => {

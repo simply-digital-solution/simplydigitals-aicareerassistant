@@ -82,16 +82,16 @@ export default function ContactSection({
           <p className="text-xs text-gray-400 mt-1">Enter country code (e.g. +65) and number separately.</p>
         </div>
 
-        {dirty && (
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={!dirty || saving}
             className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
           >
             {saving ? 'Saving…' : 'Save Contact'}
           </button>
-        )}
+        </div>
       </div>
     </Section>
   )

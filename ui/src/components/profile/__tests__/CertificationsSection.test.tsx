@@ -36,19 +36,19 @@ describe('CertificationsSection', () => {
     expect((screen.getByDisplayValue('2026-01') as HTMLInputElement).value).toBe('2026-01')
   })
 
-  it('save button hidden when no changes', () => {
+  it('save button is disabled when no changes', () => {
     const cert = { name: 'AWS SAA', issuer: 'Amazon', issued_date: '2023-01', expiry_date: '2026-01' }
     const data = { ...base, certifications: JSON.stringify([cert]) }
     render(<CertificationsSection data={data} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Certifications'))
-    expect(screen.queryByText('Save Certifications')).toBeNull()
+    expect((screen.getByText('Save Certifications').closest('button') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('save button appears after adding a cert', () => {
+  it('save button is enabled after adding a cert', () => {
     render(<CertificationsSection data={base} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Certifications'))
     fireEvent.click(screen.getByText('+ Add Certification'))
-    expect(screen.getByText('Save Certifications')).toBeTruthy()
+    expect((screen.getByText('Save Certifications').closest('button') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('remove × deletes a cert entry', () => {

@@ -34,18 +34,18 @@ describe('EducationSection', () => {
     expect((screen.getByDisplayValue('NUS') as HTMLInputElement).value).toBe('NUS')
   })
 
-  it('save button hidden when no changes', () => {
+  it('save button is disabled when no changes', () => {
     const data = { ...base, education: JSON.stringify([{ degree: 'BSc', institution: 'NUS', year: '2018' }]) }
     render(<EducationSection data={data} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Education'))
-    expect(screen.queryByText('Save Education')).toBeNull()
+    expect((screen.getByText('Save Education').closest('button') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('save button appears after adding an entry', () => {
+  it('save button is enabled after adding an entry', () => {
     render(<EducationSection data={base} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Education'))
     fireEvent.click(screen.getByText('+ Add Education'))
-    expect(screen.getByText('Save Education')).toBeTruthy()
+    expect((screen.getByText('Save Education').closest('button') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('remove × deletes an entry', () => {

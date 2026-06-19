@@ -218,7 +218,7 @@ export default function ResumeSection({
         </>
       )}
 
-      <div className="flex gap-2 pt-1">
+      <div className="flex justify-between items-center pt-1">
         <button
           type="button"
           onClick={runExtraction}
@@ -227,16 +227,14 @@ export default function ResumeSection({
         >
           {extracting ? 'Analysing…' : 'Analyse Resume'}
         </button>
-        {dirty && (
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-          >
-            {saving ? 'Saving…' : 'Save Resume'}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+        >
+          {saving ? 'Saving…' : 'Save Resume'}
+        </button>
       </div>
     </Section>
   )

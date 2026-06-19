@@ -124,16 +124,16 @@ export default function CertificationsSection({
           + Add Certification
         </button>
 
-        {dirty && (
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={!dirty || saving}
             className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
           >
             {saving ? 'Saving…' : 'Save Certifications'}
           </button>
-        )}
+        </div>
       </div>
     </Section>
   )
