@@ -118,7 +118,7 @@ async def extract_resume_details(resume_text: str, api_client) -> dict:
     Call LLM to extract all 6 categories from the resume.
     Returns _empty_result() structure on any failure — never raises.
     """
-    snippet = resume_text[:6000]
+    snippet = resume_text[:12000]
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": _USER_PROMPT.format(resume_text=snippet)},
