@@ -1,31 +1,22 @@
 import { useState } from 'react'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+} from 'recharts'
 import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import adminApi from '../api/adminApi'
 import type { AdminUser, DailyCount, DailyTokens, UserTokenDay, AgentRunStats } from '../api/adminApi'
 
 const ADMIN_EMAIL = 'pandiri.vasu@gmail.com'
-
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 60_000 } } })
-
-// ---------------------------------------------------------------------------
-// Access gate
-// ---------------------------------------------------------------------------
 
 function useAdminEmail(): string | null {
   try { return localStorage.getItem('user_email') } catch { return null }
 }
 
-// ---------------------------------------------------------------------------
-// Y-axis scale helpers
-// ---------------------------------------------------------------------------
-
-// Round up to 2 significant figures, minimum 10.
-// Examples: 1→10, 6→10, 514941→600000, 88497→90000, 27534→30000
-function niceMax(dataMax: number): number {
-  if (dataMax <= 0) return 10
-  const exp = Math.floor(Math.log10(dataMax))
-  const scale = Math.pow(10, exp - 1)
-  return Math.max(10, Math.ceil(dataMax / scale) * scale)
+// yyyy-mm-dd → dd-mm-yyyy
+function fmtDate(iso: string): string {
+  if (iso && iso.length >= 10) return `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`
+  return iso ?? ''
 }
 
 function fmt(n: number): string {
@@ -34,214 +25,117 @@ function fmt(n: number): string {
   return String(n)
 }
 
-function YAxisLabels({ max }: { max: number }) {
-  const ticks = [max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), 0]
-  return (
-    <div className="flex flex-col justify-between h-full pr-2 text-right" style={{ minWidth: 36 }}>
-      {ticks.map((t, i) => (
-        <span key={i} className="text-[10px] text-gray-400 tabular-nums leading-none">{fmt(t)}</span>
-      ))}
-    </div>
-  )
-}
+const TICK_STYLE = { fontSize: 10, fill: '#9ca3af' }
+const CHART_MARGIN = { top: 4, right: 8, left: -16, bottom: 0 }
 
 // ---------------------------------------------------------------------------
-// Vertical column chart — single series
+// Single-series chart card
 // ---------------------------------------------------------------------------
 
-function BarChart({ data, valueKey, label }: {
+function SingleChart({ data, color, dataKey, title, subtitle, total }: {
   data: Record<string, unknown>[]
-  valueKey: string
-  label: string
+  color: string
+  dataKey: string
+  title: string
+  subtitle: string
+  total: number | string
 }) {
-  const [hovered, setHovered] = useState<{ date: string; val: number } | null>(null)
-  if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
-  const dataMax = Math.max(...data.map(d => Number(d[valueKey]) || 0), 0)
-  const max = niceMax(dataMax)
-  const CHART_H = 140
-
+  const chartData = data.map(d => ({ ...d, _date: fmtDate(String(d.date)) }))
   return (
-    <div>
-      {/* hover info line */}
-      <div className="h-5 mb-1 text-xs text-gray-500 tabular-nums">
-        {hovered
-          ? <span><span className="text-gray-400">{hovered.date}</span> — <span className="font-medium text-gray-700">{hovered.val.toLocaleString()}</span></span>
-          : <span className="text-gray-300">{label}</span>
-        }
-      </div>
-      <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
-        <YAxisLabels max={max} />
-        <div className="flex-1 flex items-end relative" style={{ height: CHART_H }}>
-          {[0.25, 0.5, 0.75, 1].map(f => (
-            <div key={f} className="absolute left-0 right-0 border-t border-gray-100" style={{ bottom: `${f * 100}%` }} />
-          ))}
-          {data.map((d, i) => {
-            const val = Number(d[valueKey]) || 0
-            const date = String(d.date).length >= 10 ? String(d.date).slice(5) : String(d.date)
-            const pct = (val / max) * 100
-            return (
-              <div
-                key={i}
-                className="flex-1 flex flex-col items-center justify-end cursor-default"
-                style={{ height: CHART_H }}
-                onMouseEnter={() => setHovered({ date, val })}
-                onMouseLeave={() => setHovered(null)}
-              >
-                <div
-                  className="rounded-t-sm transition-colors"
-                  style={{
-                    width: '50%',
-                    height: `${pct}%`,
-                    minHeight: val > 0 ? 2 : 0,
-                    backgroundColor: hovered?.date === date ? '#4338ca' : '#6366f1',
-                  }}
-                />
-              </div>
-            )
-          })}
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">{title}</p>
+          <p className="text-xs text-gray-500">{subtitle}</p>
         </div>
+        <span className="text-2xl font-bold" style={{ color }}>{total}</span>
       </div>
-      {/* X-axis */}
-      <div className="flex mt-1" style={{ paddingLeft: 40 }}>
-        {data.map((d, i) => {
-          const date = String(d.date)
-          const short = date.length >= 10 ? date.slice(5) : date
-          return <div key={i} className="flex-1 text-center text-[9px] text-gray-400 tabular-nums truncate">{short}</div>
-        })}
-      </div>
+      <ResponsiveContainer width="100%" height={140}>
+        <BarChart data={chartData} margin={CHART_MARGIN}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+          <XAxis
+            dataKey="_date"
+            tick={{ ...TICK_STYLE, textAnchor: 'end' }}
+            angle={-35}
+            height={44}
+            axisLine={false}
+            tickLine={false}
+            interval={0}
+          />
+          <YAxis
+            tickFormatter={fmt}
+            allowDecimals={false}
+            tick={TICK_STYLE}
+            axisLine={false}
+            tickLine={false}
+            width={36}
+          />
+          <Tooltip
+            formatter={(v: unknown) => [Number(v).toLocaleString(), dataKey]}
+            labelFormatter={(l) => l}
+            contentStyle={{ fontSize: 12, borderRadius: 6 }}
+          />
+          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={20} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Vertical column chart — dual series (input / output tokens)
+// Dual-series chart card (two bar series per date)
 // ---------------------------------------------------------------------------
 
-function DualBarChart({ data }: { data: DailyTokens[] }) {
-  const [hovered, setHovered] = useState<{ date: string; inp: number; out: number } | null>(null)
-  if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
-  const dataMax = Math.max(...data.flatMap(d => [d.input_tokens, d.output_tokens]), 0)
-  const maxVal = niceMax(dataMax)
-  const CHART_H = 140
-
+function DualChart({ data, title, subtitle, keys }: {
+  data: Record<string, unknown>[]
+  title: string
+  subtitle: string
+  keys: { key: string; color: string; label: string }[]
+}) {
+  const chartData = data.map(d => ({ ...d, _date: fmtDate(String(d.date)) }))
   return (
-    <div>
-      {/* legend + hover info on same line */}
-      <div className="h-5 mb-1 flex items-center gap-3 text-xs text-gray-500">
-        <span className="flex items-center gap-1 shrink-0"><span className="w-2.5 h-2.5 rounded-sm bg-sky-500 inline-block" />in</span>
-        <span className="flex items-center gap-1 shrink-0"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />out</span>
-        {hovered
-          ? <span className="tabular-nums text-gray-500"><span className="text-gray-400">{hovered.date}</span> — in:<span className="font-medium text-sky-600">{hovered.inp.toLocaleString()}</span> out:<span className="font-medium text-emerald-600">{hovered.out.toLocaleString()}</span></span>
-          : null
-        }
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
+      <div>
+        <p className="text-sm font-semibold text-gray-800">{title}</p>
+        <p className="text-xs text-gray-500">{subtitle}</p>
       </div>
-      <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
-        <YAxisLabels max={maxVal} />
-        <div className="flex-1 flex items-end relative" style={{ height: CHART_H }}>
-          {[0.25, 0.5, 0.75, 1].map(f => (
-            <div key={f} className="absolute left-0 right-0 border-t border-gray-100" style={{ bottom: `${f * 100}%` }} />
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart data={chartData} margin={CHART_MARGIN}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+          <XAxis
+            dataKey="_date"
+            tick={{ ...TICK_STYLE, textAnchor: 'end' }}
+            angle={-35}
+            height={44}
+            axisLine={false}
+            tickLine={false}
+            interval={0}
+          />
+          <YAxis
+            tickFormatter={fmt}
+            allowDecimals={false}
+            tick={TICK_STYLE}
+            axisLine={false}
+            tickLine={false}
+            width={36}
+          />
+          <Tooltip
+            formatter={(v: unknown, name: unknown) => [Number(v).toLocaleString(), name]}
+            labelFormatter={(l) => l}
+            contentStyle={{ fontSize: 12, borderRadius: 6 }}
+          />
+          <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+          {keys.map(k => (
+            <Bar key={k.key} dataKey={k.key} name={k.label} fill={k.color} radius={[3, 3, 0, 0]} maxBarSize={16} />
           ))}
-          {data.map((d, i) => {
-            const short = d.date.length >= 10 ? d.date.slice(5) : d.date
-            const isHov = hovered?.date === short
-            const inPct = (d.input_tokens / maxVal) * 100
-            const outPct = (d.output_tokens / maxVal) * 100
-            return (
-              <div
-                key={i}
-                className="flex-1 flex items-end justify-center gap-px cursor-default"
-                style={{ height: CHART_H }}
-                onMouseEnter={() => setHovered({ date: short, inp: d.input_tokens, out: d.output_tokens })}
-                onMouseLeave={() => setHovered(null)}
-              >
-                <div
-                  className="rounded-t-sm transition-colors"
-                  style={{ width: '28%', height: `${inPct}%`, minHeight: d.input_tokens > 0 ? 2 : 0, backgroundColor: isHov ? '#0284c7' : '#0ea5e9' }}
-                />
-                <div
-                  className="rounded-t-sm transition-colors"
-                  style={{ width: '28%', height: `${outPct}%`, minHeight: d.output_tokens > 0 ? 2 : 0, backgroundColor: isHov ? '#059669' : '#10b981' }}
-                />
-              </div>
-            )
-          })}
-        </div>
-      </div>
-      <div className="flex mt-1" style={{ paddingLeft: 40 }}>
-        {data.map((d, i) => {
-          const short = d.date.length >= 10 ? d.date.slice(5) : d.date
-          return <div key={i} className="flex-1 text-center text-[9px] text-gray-400 tabular-nums truncate">{short}</div>
-        })}
-      </div>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Vertical column chart — dual series (ok / failed agent runs)
-// ---------------------------------------------------------------------------
-
-function AgentRunChart({ data }: { data: AgentRunStats[] }) {
-  const [hovered, setHovered] = useState<{ date: string; ok: number; fail: number } | null>(null)
-  if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
-  const dataMax = Math.max(...data.flatMap(d => [d.complete, d.failed]), 0)
-  const maxVal = niceMax(dataMax)
-  const CHART_H = 140
-
-  return (
-    <div>
-      <div className="h-5 mb-1 flex items-center gap-3 text-xs text-gray-500">
-        <span className="flex items-center gap-1 shrink-0"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" />ok</span>
-        <span className="flex items-center gap-1 shrink-0"><span className="w-2.5 h-2.5 rounded-sm bg-red-500 inline-block" />fail</span>
-        {hovered
-          ? <span className="tabular-nums text-gray-500"><span className="text-gray-400">{hovered.date}</span> — ok:<span className="font-medium text-green-600">{hovered.ok}</span> fail:<span className="font-medium text-red-600">{hovered.fail}</span></span>
-          : null
-        }
-      </div>
-      <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
-        <YAxisLabels max={maxVal} />
-        <div className="flex-1 flex items-end relative" style={{ height: CHART_H }}>
-          {[0.25, 0.5, 0.75, 1].map(f => (
-            <div key={f} className="absolute left-0 right-0 border-t border-gray-100" style={{ bottom: `${f * 100}%` }} />
-          ))}
-          {data.map((d, i) => {
-            const short = d.date.length >= 10 ? d.date.slice(5) : d.date
-            const isHov = hovered?.date === short
-            const okPct = (d.complete / maxVal) * 100
-            const failPct = (d.failed / maxVal) * 100
-            return (
-              <div
-                key={i}
-                className="flex-1 flex items-end justify-center gap-px cursor-default"
-                style={{ height: CHART_H }}
-                onMouseEnter={() => setHovered({ date: short, ok: d.complete, fail: d.failed })}
-                onMouseLeave={() => setHovered(null)}
-              >
-                <div
-                  className="rounded-t-sm transition-colors"
-                  style={{ width: '28%', height: `${okPct}%`, minHeight: d.complete > 0 ? 2 : 0, backgroundColor: isHov ? '#16a34a' : '#22c55e' }}
-                />
-                <div
-                  className="rounded-t-sm transition-colors"
-                  style={{ width: '28%', height: `${failPct}%`, minHeight: d.failed > 0 ? 2 : 0, backgroundColor: isHov ? '#dc2626' : '#ef4444' }}
-                />
-              </div>
-            )
-          })}
-        </div>
-      </div>
-      <div className="flex mt-1" style={{ paddingLeft: 40 }}>
-        {data.map((d, i) => {
-          const short = d.date.length >= 10 ? d.date.slice(5) : d.date
-          return <div key={i} className="flex-1 text-center text-[9px] text-gray-400 tabular-nums truncate">{short}</div>
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Stat card
+// Stat card (non-chart)
 // ---------------------------------------------------------------------------
 
 function StatCard({ title, children }: { title: string; children: React.ReactNode }) {
@@ -263,7 +157,6 @@ function UserTable() {
     queryKey: ['admin-users'],
     queryFn: () => adminApi.listUsers().then(r => r.data),
   })
-
   const activate = useMutation({
     mutationFn: (id: number) => adminApi.activateUser(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
@@ -274,7 +167,6 @@ function UserTable() {
   })
 
   if (isLoading) return <p className="text-sm text-gray-400">Loading users…</p>
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs border-collapse">
@@ -304,23 +196,10 @@ function UserTable() {
                 }
               </td>
               <td className="py-2">
-                {u.scoring_suspended ? (
-                  <button
-                    onClick={() => activate.mutate(u.id)}
-                    disabled={activate.isPending}
-                    className="text-xs border border-green-300 text-green-700 px-2.5 py-1 rounded-lg hover:bg-green-50 disabled:opacity-40 transition-colors"
-                  >
-                    Activate
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => suspend.mutate(u.id)}
-                    disabled={suspend.isPending}
-                    className="text-xs border border-red-300 text-red-600 px-2.5 py-1 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors"
-                  >
-                    Suspend
-                  </button>
-                )}
+                {u.scoring_suspended
+                  ? <button onClick={() => activate.mutate(u.id)} disabled={activate.isPending} className="text-xs border border-green-300 text-green-700 px-2.5 py-1 rounded-lg hover:bg-green-50 disabled:opacity-40 transition-colors">Activate</button>
+                  : <button onClick={() => suspend.mutate(u.id)} disabled={suspend.isPending} className="text-xs border border-red-300 text-red-600 px-2.5 py-1 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors">Suspend</button>
+                }
               </td>
             </tr>
           ))}
@@ -340,10 +219,8 @@ function UserTokenTable({ days }: { days: number }) {
     queryKey: ['admin-llm-per-user', days],
     queryFn: () => adminApi.llmPerUser(days).then(r => r.data),
   })
-
   if (isLoading) return <p className="text-sm text-gray-400">Loading…</p>
   if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs border-collapse">
@@ -379,30 +256,15 @@ function UserTokenTable({ days }: { days: number }) {
 function AdminDashboard() {
   const [days, setDays] = useState(30)
 
-  const { data: usersActive = [] } = useQuery({
-    queryKey: ['admin-users-active', days],
-    queryFn: () => adminApi.usersActive(days).then(r => r.data),
-  })
-  const { data: llmTokens = [] } = useQuery({
-    queryKey: ['admin-llm-tokens', days],
-    queryFn: () => adminApi.llmTokens(days).then(r => r.data),
-  })
-  const { data: jobsScraped = [] } = useQuery({
-    queryKey: ['admin-jobs-scraped', days],
-    queryFn: () => adminApi.jobsScraped(days).then(r => r.data),
-  })
-  const { data: agentRuns = [] } = useQuery({
-    queryKey: ['admin-agent-runs', days],
-    queryFn: () => adminApi.agentRuns(days).then(r => r.data),
-  })
-  const { data: scoring = [] } = useQuery({
-    queryKey: ['admin-scoring', days],
-    queryFn: () => adminApi.scoring(days).then(r => r.data),
-  })
+  const { data: usersActive = [] } = useQuery({ queryKey: ['admin-users-active', days], queryFn: () => adminApi.usersActive(days).then(r => r.data) })
+  const { data: llmTokens   = [] } = useQuery({ queryKey: ['admin-llm-tokens',   days], queryFn: () => adminApi.llmTokens(days).then(r => r.data) })
+  const { data: jobsScraped = [] } = useQuery({ queryKey: ['admin-jobs-scraped', days], queryFn: () => adminApi.jobsScraped(days).then(r => r.data) })
+  const { data: agentRuns   = [] } = useQuery({ queryKey: ['admin-agent-runs',   days], queryFn: () => adminApi.agentRuns(days).then(r => r.data) })
+  const { data: scoring     = [] } = useQuery({ queryKey: ['admin-scoring',       days], queryFn: () => adminApi.scoring(days).then(r => r.data) })
 
-  const totalIn = (llmTokens as DailyTokens[]).reduce((s, d) => s + d.input_tokens, 0)
-  const totalOut = (llmTokens as DailyTokens[]).reduce((s, d) => s + d.output_tokens, 0)
-  const totalJobs = (jobsScraped as DailyCount[]).reduce((s, d) => s + d.count, 0)
+  const totalIn    = (llmTokens   as DailyTokens[]).reduce((s, d) => s + d.input_tokens,  0)
+  const totalOut   = (llmTokens   as DailyTokens[]).reduce((s, d) => s + d.output_tokens, 0)
+  const totalJobs  = (jobsScraped as DailyCount[]).reduce((s, d) => s + d.count, 0)
   const peakActive = Math.max(...(usersActive as DailyCount[]).map(d => d.count), 0)
 
   return (
@@ -422,11 +284,7 @@ function AdminDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <label className="text-xs text-gray-500">Period:</label>
-          <select
-            value={days}
-            onChange={e => setDays(Number(e.target.value))}
-            className="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          >
+          <select value={days} onChange={e => setDays(Number(e.target.value))} className="text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400">
             <option value={7}>Last 7 days</option>
             <option value={30}>Last 30 days</option>
             <option value={90}>Last 90 days</option>
@@ -436,13 +294,13 @@ function AdminDashboard() {
 
       <div className="max-w-7xl mx-auto px-8 py-6 space-y-6">
 
-        {/* KPI summary row */}
+        {/* KPI row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: 'Peak daily active users', value: peakActive },
-            { label: 'Total input tokens', value: totalIn.toLocaleString() },
-            { label: 'Total output tokens', value: totalOut.toLocaleString() },
-            { label: 'Jobs scraped', value: totalJobs },
+            { label: 'Total input tokens',      value: fmt(totalIn) },
+            { label: 'Total output tokens',     value: fmt(totalOut) },
+            { label: 'Jobs scraped',            value: totalJobs },
           ].map(kpi => (
             <div key={kpi.label} className="bg-white border border-gray-200 rounded-xl p-4">
               <p className="text-xs text-gray-400 mb-1">{kpi.label}</p>
@@ -451,45 +309,57 @@ function AdminDashboard() {
           ))}
         </div>
 
-        {/* Charts — top row */}
+        {/* Row 1: Active users | LLM tokens */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <StatCard title="1 · Active users per day">
-            <BarChart
-              data={usersActive as Record<string, unknown>[]}
-              valueKey="count"
-              label="Distinct users with at least one LLM call"
-            />
-          </StatCard>
-
-          <StatCard title="2 · LLM tokens per day (input / output)">
-            <DualBarChart data={llmTokens as DailyTokens[]} />
-          </StatCard>
+          <SingleChart
+            title="1 · Active users per day"
+            subtitle="Distinct users with at least one LLM call"
+            color="#6366f1"
+            data={usersActive as DailyCount[]}
+            dataKey="count"
+            total={peakActive + ' peak'}
+          />
+          <DualChart
+            title="2 · LLM tokens per day"
+            subtitle="Input vs output tokens"
+            data={llmTokens as DailyTokens[]}
+            keys={[
+              { key: 'input_tokens',  color: '#0ea5e9', label: 'input'  },
+              { key: 'output_tokens', color: '#10b981', label: 'output' },
+            ]}
+          />
         </div>
 
-        {/* Charts — second row */}
+        {/* Row 2: Jobs scraped | Agent runs | Jobs scored */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard title="3 · New jobs scraped per day">
-            <BarChart
-              data={jobsScraped as Record<string, unknown>[]}
-              valueKey="count"
-              label="Across all users"
-            />
-          </StatCard>
-
-          <StatCard title="7 · Agent run success / failure">
-            <AgentRunChart data={agentRuns as AgentRunStats[]} />
-          </StatCard>
-
-          <StatCard title="8 · Jobs scored per day">
-            <BarChart
-              data={scoring as Record<string, unknown>[]}
-              valueKey="jobs_scored"
-              label="From daily_scoring_usage"
-            />
-          </StatCard>
+          <SingleChart
+            title="3 · Jobs scraped per day"
+            subtitle="Across all users"
+            color="#f59e0b"
+            data={jobsScraped as DailyCount[]}
+            dataKey="count"
+            total={totalJobs}
+          />
+          <DualChart
+            title="7 · Agent runs"
+            subtitle="Success vs failure per day"
+            data={(agentRuns as AgentRunStats[]).map(d => ({ ...d, date: d.date }))}
+            keys={[
+              { key: 'complete', color: '#22c55e', label: 'ok'   },
+              { key: 'failed',   color: '#ef4444', label: 'fail' },
+            ]}
+          />
+          <SingleChart
+            title="8 · Jobs scored per day"
+            subtitle="From daily scoring usage"
+            color="#7c3aed"
+            data={scoring as Record<string, unknown>[]}
+            dataKey="jobs_scored"
+            total={(scoring as Record<string, unknown>[]).reduce((s, d) => s + (Number(d.jobs_scored) || 0), 0)}
+          />
         </div>
 
-        {/* Per-user tables */}
+        {/* Per-user table */}
         <StatCard title="4 & 5 · LLM requests + tokens per user per day">
           <UserTokenTable days={days} />
         </StatCard>
@@ -511,7 +381,6 @@ function AdminDashboard() {
 
 export default function AdminPage() {
   const email = useAdminEmail()
-
   if (email !== ADMIN_EMAIL) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -526,17 +395,11 @@ export default function AdminPage() {
             This page is restricted to administrators.<br />
             Sign in as <span className="font-medium text-gray-700">{ADMIN_EMAIL}</span> to continue.
           </p>
-          <a
-            href="/"
-            className="inline-block text-sm bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Go to app
-          </a>
+          <a href="/" className="inline-block text-sm bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 transition-colors">Go to app</a>
         </div>
       </div>
     )
   }
-
   return (
     <QueryClientProvider client={qc}>
       <AdminDashboard />
