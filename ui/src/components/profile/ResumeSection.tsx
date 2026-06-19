@@ -3,11 +3,6 @@ import type { ProfileData } from '../../api/client'
 import api, { profileApi } from '../../api/client'
 import Section from './Section'
 
-function parseJsonArray(val: string | null | undefined): string[] {
-  if (!val) return []
-  try { return JSON.parse(val) } catch { return [] }
-}
-
 // Scoped styles injected once — mirrors the PDF template colours/spacing
 const RESUME_PREVIEW_CSS = `
   .resume-preview { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #222; line-height: 1.5; }
@@ -25,6 +20,38 @@ const RESUME_PREVIEW_CSS = `
   .resume-preview br { display: block; margin: 4px 0; content: ""; }
 `
 
+const PRINT_CSS = `
+  body { margin: 0; padding: 0; }
+  @page { margin: 20mm; }
+`
+
+function downloadAsPdf(html: string, text: string) {
+  const content = html
+    ? `<style>${RESUME_PREVIEW_CSS}${PRINT_CSS}</style><div class="resume-preview">${html}</div>`
+    : `<style>${PRINT_CSS}pre { white-space: pre-wrap; font-family: Calibri, Arial, sans-serif; font-size: 11pt; }</style><pre>${text}</pre>`
+
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentWindow?.document
+  if (!doc) return
+  doc.open()
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${content}</body></html>`)
+  doc.close()
+
+  iframe.contentWindow?.focus()
+  setTimeout(() => {
+    iframe.contentWindow?.print()
+    setTimeout(() => document.body.removeChild(iframe), 1000)
+  }, 300)
+}
+
 export default function ResumeSection({
   data,
   onSaved,
@@ -38,12 +65,9 @@ export default function ResumeSection({
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploadError, setUploadError] = useState('')
-  const [analysing, setAnalysing] = useState(false)
-  const [analyseError, setAnalyseError] = useState('')
-  const [newSkills, setNewSkills] = useState<string[]>([])
-  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set())
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState('')
+  const [extractDone, setExtractDone] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const wordCount = resumeText.trim() ? resumeText.trim().split(/\s+/).length : 0
@@ -58,6 +82,7 @@ export default function ResumeSection({
     const file = e.target.files?.[0]
     if (!file) return
     setUploadError('')
+    setExtractDone(false)
     const name = file.name.toLowerCase()
 
     if (name.endsWith('.txt') || name.endsWith('.md')) {
@@ -80,23 +105,27 @@ export default function ResumeSection({
         const { text, html } = await res.json()
         handleTextChange(text)
         setResumeHtml(html ?? '')
-        // html is already saved to profile by the backend on upload
         setDirty(false)
         onSaved()
-        // Auto-extract all details from the uploaded resume
-        setExtractError('')
-        setExtracting(true)
-        try {
-          await profileApi.extractAndSave()
-          onSaved()
-        } catch {
-          setExtractError('Could not extract details from resume. You can add them manually below.')
-        } finally {
-          setExtracting(false)
-        }
+        await runExtraction()
       }
     }
     e.target.value = ''
+  }
+
+  const runExtraction = async () => {
+    setExtractError('')
+    setExtractDone(false)
+    setExtracting(true)
+    try {
+      await profileApi.extractAndSave()
+      setExtractDone(true)
+      onSaved()
+    } catch {
+      setExtractError('Could not extract details from resume. You can add them manually in the sections below.')
+    } finally {
+      setExtracting(false)
+    }
   }
 
   const handleSave = async () => {
@@ -108,40 +137,6 @@ export default function ResumeSection({
     } finally {
       setSaving(false)
     }
-  }
-
-  const handleAnalyse = async () => {
-    if (!hasResume) return
-    setAnalysing(true)
-    setAnalyseError('')
-    setNewSkills([])
-    try {
-      const res = await api.post<{ extracted: { skill: string }[]; new_skills: string[]; existing_skills: string[] }>(
-        '/profile/extract-skills',
-        { resume_text: resumeText },
-      )
-      const incoming = res.data.new_skills ?? []
-      if (incoming.length > 0) {
-        setNewSkills(incoming)
-        setSelectedSkills(new Set(incoming))
-      } else {
-        setAnalyseError('No new skills found beyond what you already have.')
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Analysis failed.'
-      setAnalyseError(msg)
-    } finally {
-      setAnalysing(false)
-    }
-  }
-
-  const confirmSkills = async () => {
-    const existing = parseJsonArray(data.skills)
-    const merged = Array.from(new Set([...existing, ...Array.from(selectedSkills)]))
-    await api.patch('/profile', { skills: JSON.stringify(merged) })
-    setNewSkills([])
-    setSelectedSkills(new Set())
-    onSaved()
   }
 
   return (
@@ -161,6 +156,18 @@ export default function ResumeSection({
               {showRaw ? 'Preview' : 'Plain text'}
             </button>
           )}
+          {hasResume && (
+            <button
+              type="button"
+              onClick={() => downloadAsPdf(resumeHtml, resumeText)}
+              className="text-xs border border-gray-300 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download
+            </button>
+          )}
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -174,14 +181,18 @@ export default function ResumeSection({
       <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" className="hidden" onChange={handleFile} />
 
       {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
+
       {extracting && (
         <div className="flex items-center gap-2 text-sm text-indigo-600">
           <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          Extracting details from your resume…
+          Analysing resume — filling Skills, Roles, Education, Certifications, Contact…
         </div>
+      )}
+      {extractDone && !extracting && (
+        <p className="text-sm text-green-600">All sections updated from your resume.</p>
       )}
       {extractError && <p className="text-sm text-amber-600">{extractError}</p>}
 
@@ -207,50 +218,14 @@ export default function ResumeSection({
         </>
       )}
 
-      {analyseError && <p className="text-sm text-red-600">{analyseError}</p>}
-
-      {newSkills.length > 0 && (
-        <div className="border border-indigo-200 rounded-lg p-4 bg-indigo-50 space-y-3">
-          <p className="text-sm font-medium text-indigo-800">{newSkills.length} new skills found — select to add:</p>
-          <div className="flex flex-wrap gap-1.5">
-            {newSkills.map(skill => (
-              <button
-                key={skill}
-                type="button"
-                onClick={() => setSelectedSkills(prev => {
-                  const next = new Set(prev)
-                  next.has(skill) ? next.delete(skill) : next.add(skill)
-                  return next
-                })}
-                className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                  selectedSkills.has(skill)
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-gray-600 border-gray-300'
-                }`}
-              >
-                {skill}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={confirmSkills}
-            disabled={selectedSkills.size === 0}
-            className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition-colors"
-          >
-            Add {selectedSkills.size} skill{selectedSkills.size !== 1 ? 's' : ''}
-          </button>
-        </div>
-      )}
-
       <div className="flex gap-2 pt-1">
         <button
           type="button"
-          onClick={handleAnalyse}
-          disabled={!hasResume || analysing}
+          onClick={runExtraction}
+          disabled={!hasResume || extracting}
           className="text-sm border border-indigo-300 text-indigo-700 px-4 py-1.5 rounded-lg hover:bg-indigo-50 disabled:opacity-40 transition-colors"
         >
-          {analysing ? 'Analysing…' : 'Analyse Skills'}
+          {extracting ? 'Analysing…' : 'Analyse Resume'}
         </button>
         {dirty && (
           <button
