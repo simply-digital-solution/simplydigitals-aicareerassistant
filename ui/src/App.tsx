@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './hooks/useAuth'
 import { authApi } from './api/client'
+import type { ProfileData } from './api/client'
+import api from './api/client'
 import LoginPage from './pages/LoginPage'
 import PipelineBoard from './components/PipelineBoard'
 import ResearchPanel from './components/ResearchPanel'
@@ -168,6 +170,25 @@ function Layout({
   )
 }
 
+function StartupRedirect({ onTabChange }: { onTabChange: (t: Tab) => void }) {
+  const redirected = useRef(false)
+  const { data } = useQuery<ProfileData>({
+    queryKey: ['profile'],
+    queryFn: () => api.get<ProfileData>('/profile').then(r => r.data),
+    staleTime: 30_000,
+  })
+
+  useEffect(() => {
+    if (redirected.current || !data) return
+    if (!data.resume_text) {
+      redirected.current = true
+      onTabChange('Profile')
+    }
+  }, [data, onTabChange])
+
+  return null
+}
+
 function App() {
   const { email, isAuthenticated, signIn, signOut } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('Pipeline')
@@ -178,6 +199,7 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <StartupRedirect onTabChange={setActiveTab} />
       <Layout
         email={email!}
         onSignOut={signOut}
