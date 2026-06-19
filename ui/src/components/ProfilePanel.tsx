@@ -57,11 +57,11 @@ export default function ProfilePanel() {
         </div>
       )}
       <ResumeSection data={data} onSaved={invalidate} />
-      <ContactSection data={data} onSaved={invalidate} />
       <SkillsSection data={data} onSaved={invalidate} />
       <TargetRolesSection data={data} onSaved={invalidate} />
       <EducationSection data={data} onSaved={invalidate} />
       <CertificationsSection data={data} onSaved={invalidate} />
+      <ContactSection data={data} onSaved={invalidate} />
       <PreferencesSection data={data} onSaved={invalidate} />
     </div>
   )
