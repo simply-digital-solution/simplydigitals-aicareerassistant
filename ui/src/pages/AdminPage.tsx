@@ -74,7 +74,7 @@ function BarChart({ data, valueKey, label }: {
                 </span>
                 <div
                   className="bg-indigo-500 rounded-t-sm transition-all"
-                  style={{ width: '60%', height: `${pct}%`, minHeight: val > 0 ? 2 : 0 }}
+                  style={{ width: '40%', height: `${pct}%`, minHeight: val > 0 ? 2 : 0 }}
                 />
               </div>
             )
@@ -108,8 +108,8 @@ function DualBarChart({ data }: { data: DailyTokens[] }) {
   return (
     <div>
       <div className="flex gap-4 mb-2 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-indigo-400 rounded-sm inline-block" />input</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-emerald-400 rounded-sm inline-block" />output</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-sky-500 rounded-sm inline-block" />input</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-emerald-500 rounded-sm inline-block" />output</span>
       </div>
       <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
         <YAxisLabels max={maxVal} />
@@ -123,16 +123,16 @@ function DualBarChart({ data }: { data: DailyTokens[] }) {
           ))}
           {data.map((d, i) => (
             <div key={i} className="flex-1 flex items-end justify-center gap-px group relative" style={{ height: CHART_H }}>
-              <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-white border border-gray-200 rounded px-1 shadow-sm z-10">
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-white border border-gray-200 rounded px-1 shadow-sm z-10 pointer-events-none">
                 in:{d.input_tokens.toLocaleString()} out:{d.output_tokens.toLocaleString()}
               </span>
               <div
-                className="bg-indigo-400 rounded-t-sm transition-all"
-                style={{ width: '28%', height: `${(d.input_tokens / maxVal) * 100}%`, minHeight: d.input_tokens > 0 ? 2 : 0 }}
+                className="bg-sky-500 rounded-t-sm transition-all"
+                style={{ width: '25%', height: `${(d.input_tokens / maxVal) * 100}%`, minHeight: d.input_tokens > 0 ? 2 : 0 }}
               />
               <div
-                className="bg-emerald-400 rounded-t-sm transition-all"
-                style={{ width: '28%', height: `${(d.output_tokens / maxVal) * 100}%`, minHeight: d.output_tokens > 0 ? 2 : 0 }}
+                className="bg-emerald-500 rounded-t-sm transition-all"
+                style={{ width: '25%', height: `${(d.output_tokens / maxVal) * 100}%`, minHeight: d.output_tokens > 0 ? 2 : 0 }}
               />
             </div>
           ))}
@@ -161,8 +161,8 @@ function AgentRunChart({ data }: { data: AgentRunStats[] }) {
   return (
     <div>
       <div className="flex gap-4 mb-2 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-green-400 rounded-sm inline-block" />ok</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-red-400 rounded-sm inline-block" />fail</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-green-500 rounded-sm inline-block" />ok</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-red-500 rounded-sm inline-block" />fail</span>
       </div>
       <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
         <YAxisLabels max={maxVal} />
@@ -180,12 +180,12 @@ function AgentRunChart({ data }: { data: AgentRunStats[] }) {
                 ok:{d.complete} fail:{d.failed}
               </span>
               <div
-                className="bg-green-400 rounded-t-sm transition-all"
-                style={{ width: '28%', height: `${(d.complete / maxVal) * 100}%`, minHeight: d.complete > 0 ? 2 : 0 }}
+                className="bg-green-500 rounded-t-sm transition-all"
+                style={{ width: '25%', height: `${(d.complete / maxVal) * 100}%`, minHeight: d.complete > 0 ? 2 : 0 }}
               />
               <div
-                className="bg-red-400 rounded-t-sm transition-all"
-                style={{ width: '28%', height: `${(d.failed / maxVal) * 100}%`, minHeight: d.failed > 0 ? 2 : 0 }}
+                className="bg-red-500 rounded-t-sm transition-all"
+                style={{ width: '25%', height: `${(d.failed / maxVal) * 100}%`, minHeight: d.failed > 0 ? 2 : 0 }}
               />
             </div>
           ))}
