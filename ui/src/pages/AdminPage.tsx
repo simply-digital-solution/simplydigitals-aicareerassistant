@@ -22,13 +22,10 @@ function shortDate(iso: string): string {
   return iso ?? ''
 }
 
-// Y-axis tick formatter — Recharts passes floats even with allowDecimals=false
 function fmtTick(n: number): string {
-  const v = Math.round(n)
-  if (v !== n) return ''           // skip non-integer intermediate ticks
-  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (v >= 1_000) return (v / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
-  return String(v)
+  if (n >= 1_000_000) return Math.round(n / 100_000) / 10 + 'M'
+  if (n >= 1_000) return Math.round(n / 100) / 10 + 'K'
+  return String(Math.round(n))
 }
 
 function fmt(n: number): string {
@@ -63,7 +60,7 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
         <span className="text-2xl font-bold" style={{ color }}>{total}</span>
       </div>
       <ResponsiveContainer width="100%" height={140}>
-        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="20%">
+        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="10%">
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
@@ -85,7 +82,7 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
             labelFormatter={(l) => l}
             contentStyle={{ fontSize: 12, borderRadius: 6 }}
           />
-          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={12} />
+          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={24} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -110,7 +107,7 @@ function DualChart({ data, title, subtitle, keys }: {
         <p className="text-xs text-gray-500">{subtitle}</p>
       </div>
       <ResponsiveContainer width="100%" height={160}>
-        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="20%">
+        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="10%">
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
@@ -140,7 +137,7 @@ function DualChart({ data, title, subtitle, keys }: {
               name={k.label}
               fill={k.color}
               stackId="stack"
-              maxBarSize={12}
+              maxBarSize={24}
               radius={i === keys.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
             />
           ))}
