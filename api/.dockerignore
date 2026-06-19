@@ -1,0 +1,14 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.db
+*.db-shm
+*.db-wal
+tests/
+logs/
+.env
+.env.*
+!.env.example
+poetry.toml
+pyrightconfig.json

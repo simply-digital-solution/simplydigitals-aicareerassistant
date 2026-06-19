@@ -21,11 +21,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import os
     await init_db()
-    from app.pipeline.scheduler import start, stop
-    start(get_db_context)
-    yield
-    stop()
+    if os.getenv("ENABLE_SCHEDULER", "true").lower() == "true":
+        from app.pipeline.scheduler import start, stop
+        start(get_db_context)
+        yield
+        stop()
+    else:
+        yield
 
 
 app = FastAPI(

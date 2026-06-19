@@ -1,0 +1,60 @@
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # API — Gunicorn + Uvicorn workers, bound to Unix socket
+  # ─────────────────────────────────────────────────────────────────────────
+  api:
+    image: ${ECR_IMAGE}
+    restart: always
+    env_file: .env
+    environment:
+      ENABLE_SCHEDULER: "false"   # scheduler runs in its own container
+    volumes:
+      - socket:/run/app           # shared Unix socket with nginx
+      - prompts:/prompts:ro       # prompt markdown files (read-only)
+    depends_on:
+      - migrate
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Migrate — runs alembic upgrade head once, then exits
+  # ─────────────────────────────────────────────────────────────────────────
+  migrate:
+    image: ${ECR_IMAGE}
+    env_file: .env
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    restart: "no"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Scheduler — cron jobs + scorer loop, no HTTP
+  # ─────────────────────────────────────────────────────────────────────────
+  scheduler:
+    image: ${ECR_IMAGE}
+    restart: always
+    env_file: .env
+    environment:
+      ENABLE_SCHEDULER: "false"   # scheduler_worker.py manages this directly
+    command: ["python", "-m", "app.scheduler_worker"]
+    volumes:
+      - prompts:/prompts:ro
+    depends_on:
+      - migrate
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Nginx — SSL termination + proxy to Unix socket
+  # ─────────────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - socket:/run/app                                        # shared with api
+      - /etc/letsencrypt:/etc/letsencrypt:ro                   # SSL certs from host
+    depends_on:
+      - api
+
+volumes:
+  socket:    # Unix socket file shared between api and nginx
+  prompts:   # Prompt markdown files — populated by CI deploy step
