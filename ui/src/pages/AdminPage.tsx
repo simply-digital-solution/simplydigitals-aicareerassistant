@@ -16,7 +16,22 @@ function useAdminEmail(): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Tiny bar-chart component
+// Shared Y-axis labels helper — 5 evenly-spaced ticks
+// ---------------------------------------------------------------------------
+
+function YAxisLabels({ max }: { max: number }) {
+  const ticks = [max, Math.round(max * 0.75), Math.round(max * 0.5), Math.round(max * 0.25), 0]
+  return (
+    <div className="flex flex-col justify-between h-full pr-1 text-right" style={{ minWidth: 28 }}>
+      {ticks.map((t, i) => (
+        <span key={i} className="text-[10px] text-gray-400 tabular-nums leading-none">{t}</span>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Vertical column chart — single series
 // ---------------------------------------------------------------------------
 
 function BarChart({ data, valueKey, label }: {
@@ -26,78 +41,151 @@ function BarChart({ data, valueKey, label }: {
 }) {
   if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
   const max = Math.max(...data.map(d => Number(d[valueKey]) || 0), 1)
+  const CHART_H = 120
+
   return (
-    <div className="space-y-1">
-      {data.map((d, i) => {
-        const val = Number(d[valueKey]) || 0
-        const pct = Math.round((val / max) * 100)
-        return (
-          <div key={i} className="flex items-center gap-2 text-xs">
-            <span className="w-24 text-gray-500 shrink-0 tabular-nums">{String(d.date)}</span>
-            <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
-              <div className="h-4 bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-            </div>
-            <span className="w-12 text-right text-gray-700 font-medium tabular-nums">{val}</span>
-          </div>
-        )
-      })}
-      <p className="text-xs text-gray-400 pt-1">{label}</p>
+    <div>
+      <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
+        <YAxisLabels max={max} />
+        <div className="flex-1 flex items-end gap-px relative" style={{ height: CHART_H }}>
+          {[0.25, 0.5, 0.75].map(f => (
+            <div
+              key={f}
+              className="absolute left-0 right-0 border-t border-gray-100"
+              style={{ bottom: `${f * 100}%` }}
+            />
+          ))}
+          {data.map((d, i) => {
+            const val = Number(d[valueKey]) || 0
+            const pct = (val / max) * 100
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end group relative" style={{ height: CHART_H }}>
+                <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-white border border-gray-200 rounded px-1 shadow-sm z-10">
+                  {val}
+                </span>
+                <div
+                  className="w-full bg-indigo-500 rounded-t-sm transition-all"
+                  style={{ height: `${pct}%`, minHeight: val > 0 ? 2 : 0 }}
+                />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <div className="flex gap-px mt-1" style={{ paddingLeft: 32 }}>
+        {data.map((d, i) => {
+          const date = String(d.date)
+          const short = date.length >= 10 ? date.slice(5) : date
+          return (
+            <div key={i} className="flex-1 text-center text-[9px] text-gray-400 tabular-nums truncate">{short}</div>
+          )
+        })}
+      </div>
+      <p className="text-xs text-gray-400 mt-2">{label}</p>
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Vertical column chart — dual series (input / output tokens)
+// ---------------------------------------------------------------------------
 
 function DualBarChart({ data }: { data: DailyTokens[] }) {
   if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
   const maxVal = Math.max(...data.flatMap(d => [d.input_tokens, d.output_tokens]), 1)
+  const CHART_H = 120
+
   return (
-    <div className="space-y-1.5">
-      {data.map((d, i) => (
-        <div key={i} className="text-xs">
-          <span className="text-gray-500 block mb-0.5">{d.date}</span>
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className="w-10 text-indigo-500 shrink-0">in</span>
-            <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-              <div className="h-3 bg-indigo-400 rounded-full" style={{ width: `${Math.round((d.input_tokens / maxVal) * 100)}%` }} />
+    <div>
+      <div className="flex gap-4 mb-2 text-xs text-gray-500">
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-indigo-400 rounded-sm inline-block" />input</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-emerald-400 rounded-sm inline-block" />output</span>
+      </div>
+      <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
+        <YAxisLabels max={maxVal} />
+        <div className="flex-1 flex items-end gap-px relative" style={{ height: CHART_H }}>
+          {[0.25, 0.5, 0.75].map(f => (
+            <div
+              key={f}
+              className="absolute left-0 right-0 border-t border-gray-100"
+              style={{ bottom: `${f * 100}%` }}
+            />
+          ))}
+          {data.map((d, i) => (
+            <div key={i} className="flex-1 flex items-end gap-px group relative" style={{ height: CHART_H }}>
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-white border border-gray-200 rounded px-1 shadow-sm z-10">
+                in:{d.input_tokens.toLocaleString()} out:{d.output_tokens.toLocaleString()}
+              </span>
+              <div
+                className="flex-1 bg-indigo-400 rounded-t-sm transition-all"
+                style={{ height: `${(d.input_tokens / maxVal) * 100}%`, minHeight: d.input_tokens > 0 ? 2 : 0 }}
+              />
+              <div
+                className="flex-1 bg-emerald-400 rounded-t-sm transition-all"
+                style={{ height: `${(d.output_tokens / maxVal) * 100}%`, minHeight: d.output_tokens > 0 ? 2 : 0 }}
+              />
             </div>
-            <span className="w-16 text-right tabular-nums text-gray-700">{d.input_tokens.toLocaleString()}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-10 text-emerald-500 shrink-0">out</span>
-            <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-              <div className="h-3 bg-emerald-400 rounded-full" style={{ width: `${Math.round((d.output_tokens / maxVal) * 100)}%` }} />
-            </div>
-            <span className="w-16 text-right tabular-nums text-gray-700">{d.output_tokens.toLocaleString()}</span>
-          </div>
+          ))}
         </div>
-      ))}
+      </div>
+      <div className="flex gap-px mt-1" style={{ paddingLeft: 32 }}>
+        {data.map((d, i) => {
+          const short = d.date.length >= 10 ? d.date.slice(5) : d.date
+          return <div key={i} className="flex-1 text-center text-[9px] text-gray-400 tabular-nums truncate">{short}</div>
+        })}
+      </div>
     </div>
   )
 }
 
+// ---------------------------------------------------------------------------
+// Vertical column chart — dual series (ok / failed agent runs)
+// ---------------------------------------------------------------------------
+
 function AgentRunChart({ data }: { data: AgentRunStats[] }) {
   if (!data.length) return <p className="text-xs text-gray-400 py-4 text-center">No data for this period.</p>
   const maxVal = Math.max(...data.flatMap(d => [d.complete, d.failed]), 1)
+  const CHART_H = 120
+
   return (
-    <div className="space-y-1.5">
-      {data.map((d, i) => (
-        <div key={i} className="text-xs">
-          <span className="text-gray-500 block mb-0.5">{d.date}</span>
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className="w-12 text-green-600 shrink-0">ok</span>
-            <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-              <div className="h-3 bg-green-400 rounded-full" style={{ width: `${Math.round((d.complete / maxVal) * 100)}%` }} />
+    <div>
+      <div className="flex gap-4 mb-2 text-xs text-gray-500">
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-green-400 rounded-sm inline-block" />ok</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-red-400 rounded-sm inline-block" />fail</span>
+      </div>
+      <div className="flex gap-1 items-end" style={{ height: CHART_H }}>
+        <YAxisLabels max={maxVal} />
+        <div className="flex-1 flex items-end gap-px relative" style={{ height: CHART_H }}>
+          {[0.25, 0.5, 0.75].map(f => (
+            <div
+              key={f}
+              className="absolute left-0 right-0 border-t border-gray-100"
+              style={{ bottom: `${f * 100}%` }}
+            />
+          ))}
+          {data.map((d, i) => (
+            <div key={i} className="flex-1 flex items-end gap-px group relative" style={{ height: CHART_H }}>
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-[10px] tabular-nums text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-white border border-gray-200 rounded px-1 shadow-sm z-10">
+                ok:{d.complete} fail:{d.failed}
+              </span>
+              <div
+                className="flex-1 bg-green-400 rounded-t-sm transition-all"
+                style={{ height: `${(d.complete / maxVal) * 100}%`, minHeight: d.complete > 0 ? 2 : 0 }}
+              />
+              <div
+                className="flex-1 bg-red-400 rounded-t-sm transition-all"
+                style={{ height: `${(d.failed / maxVal) * 100}%`, minHeight: d.failed > 0 ? 2 : 0 }}
+              />
             </div>
-            <span className="w-8 text-right tabular-nums">{d.complete}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-12 text-red-500 shrink-0">fail</span>
-            <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-              <div className="h-3 bg-red-400 rounded-full" style={{ width: `${Math.round((d.failed / maxVal) * 100)}%` }} />
-            </div>
-            <span className="w-8 text-right tabular-nums">{d.failed}</span>
-          </div>
+          ))}
         </div>
-      ))}
+      </div>
+      <div className="flex gap-px mt-1" style={{ paddingLeft: 32 }}>
+        {data.map((d, i) => {
+          const short = d.date.length >= 10 ? d.date.slice(5) : d.date
+          return <div key={i} className="flex-1 text-center text-[9px] text-gray-400 tabular-nums truncate">{short}</div>
+        })}
+      </div>
     </div>
   )
 }
@@ -265,7 +353,6 @@ function AdminDashboard() {
   const totalIn = (llmTokens as DailyTokens[]).reduce((s, d) => s + d.input_tokens, 0)
   const totalOut = (llmTokens as DailyTokens[]).reduce((s, d) => s + d.output_tokens, 0)
   const totalJobs = (jobsScraped as DailyCount[]).reduce((s, d) => s + d.count, 0)
-  const totalActive = new Set((usersActive as DailyCount[]).map(() => 0)).size  // placeholder — real: distinct users
   const peakActive = Math.max(...(usersActive as DailyCount[]).map(d => d.count), 0)
 
   return (
