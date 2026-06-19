@@ -23,8 +23,14 @@ function shortDate(iso: string): string {
 }
 
 function fmtTick(n: number): string {
-  if (n >= 1_000_000) return Math.round(n / 100_000) / 10 + 'M'
-  if (n >= 1_000) return Math.round(n / 100) / 10 + 'K'
+  if (n >= 1_000_000) {
+    const v = n / 1_000_000
+    return (v >= 10 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, '')) + 'M'
+  }
+  if (n >= 1_000) {
+    const v = n / 1_000
+    return (v >= 10 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, '')) + 'K'
+  }
   return String(Math.round(n))
 }
 
@@ -35,7 +41,7 @@ function fmt(n: number): string {
 }
 
 const TICK_STYLE = { fontSize: 10, fill: '#9ca3af' }
-const CHART_MARGIN = { top: 4, right: 4, left: -20, bottom: 0 }
+const CHART_MARGIN = { top: 4, right: 4, left: 0, bottom: 0 }
 
 // ---------------------------------------------------------------------------
 // Single-series chart card
@@ -51,16 +57,16 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
 }) {
   const chartData = data.map(d => ({ ...d, _date: shortDate(String(d.date)) }))
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex flex-col gap-1">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-semibold text-gray-800">{title}</p>
-          <p className="text-xs text-gray-500">{subtitle}</p>
+          <p className="text-xs font-semibold text-gray-800">{title}</p>
+          <p className="text-xs text-gray-400">{subtitle}</p>
         </div>
-        <span className="text-2xl font-bold" style={{ color }}>{total}</span>
+        <span className="text-xl font-bold" style={{ color }}>{total}</span>
       </div>
-      <ResponsiveContainer width="100%" height={140}>
-        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="10%">
+      <ResponsiveContainer width="100%" height={120}>
+        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="40%" barGap={2}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
@@ -75,14 +81,14 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
             tick={TICK_STYLE}
             axisLine={false}
             tickLine={false}
-            width={36}
+            width={48}
           />
           <Tooltip
             formatter={(v: unknown) => [Number(v).toLocaleString(), dataKey]}
             labelFormatter={(l) => l}
             contentStyle={{ fontSize: 12, borderRadius: 6 }}
           />
-          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={24} />
+          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={16} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -101,13 +107,13 @@ function DualChart({ data, title, subtitle, keys }: {
 }) {
   const chartData = data.map(d => ({ ...d, _date: shortDate(String(d.date)) }))
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex flex-col gap-1">
       <div>
-        <p className="text-sm font-semibold text-gray-800">{title}</p>
-        <p className="text-xs text-gray-500">{subtitle}</p>
+        <p className="text-xs font-semibold text-gray-800">{title}</p>
+        <p className="text-xs text-gray-400">{subtitle}</p>
       </div>
-      <ResponsiveContainer width="100%" height={160}>
-        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="10%">
+      <ResponsiveContainer width="100%" height={130}>
+        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="40%" barGap={2}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
@@ -122,7 +128,7 @@ function DualChart({ data, title, subtitle, keys }: {
             tick={TICK_STYLE}
             axisLine={false}
             tickLine={false}
-            width={36}
+            width={48}
           />
           <Tooltip
             formatter={(v: unknown, name: unknown) => [Number(v).toLocaleString(), name]}
@@ -137,7 +143,7 @@ function DualChart({ data, title, subtitle, keys }: {
               name={k.label}
               fill={k.color}
               stackId="stack"
-              maxBarSize={24}
+              maxBarSize={16}
               radius={i === keys.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
             />
           ))}
