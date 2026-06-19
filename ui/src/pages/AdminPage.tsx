@@ -41,7 +41,7 @@ function fmt(n: number): string {
 }
 
 const TICK_STYLE = { fontSize: 10, fill: '#9ca3af' }
-const CHART_MARGIN = { top: 4, right: 4, left: 0, bottom: 0 }
+const CHART_MARGIN = { top: 4, right: 4, left: -20, bottom: 0 }
 
 // ---------------------------------------------------------------------------
 // Single-series chart card
@@ -57,16 +57,16 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
 }) {
   const chartData = data.map(d => ({ ...d, _date: shortDate(String(d.date)) }))
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex flex-col gap-1">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-semibold text-gray-800">{title}</p>
-          <p className="text-xs text-gray-400">{subtitle}</p>
+          <p className="text-sm font-semibold text-gray-800">{title}</p>
+          <p className="text-xs text-gray-500">{subtitle}</p>
         </div>
-        <span className="text-xl font-bold" style={{ color }}>{total}</span>
+        <span className="text-2xl font-bold" style={{ color }}>{total}</span>
       </div>
-      <ResponsiveContainer width="100%" height={120}>
-        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="40%" barGap={2}>
+      <ResponsiveContainer width="100%" height={140}>
+        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="40%">
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
@@ -81,14 +81,13 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
             tick={TICK_STYLE}
             axisLine={false}
             tickLine={false}
-            width={48}
           />
           <Tooltip
             formatter={(v: unknown) => [Number(v).toLocaleString(), dataKey]}
             labelFormatter={(l) => l}
             contentStyle={{ fontSize: 12, borderRadius: 6 }}
           />
-          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={16} />
+          <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} maxBarSize={24} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -107,13 +106,13 @@ function DualChart({ data, title, subtitle, keys }: {
 }) {
   const chartData = data.map(d => ({ ...d, _date: shortDate(String(d.date)) }))
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex flex-col gap-1">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-2">
       <div>
-        <p className="text-xs font-semibold text-gray-800">{title}</p>
-        <p className="text-xs text-gray-400">{subtitle}</p>
+        <p className="text-sm font-semibold text-gray-800">{title}</p>
+        <p className="text-xs text-gray-500">{subtitle}</p>
       </div>
-      <ResponsiveContainer width="100%" height={130}>
-        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="40%" barGap={2}>
+      <ResponsiveContainer width="100%" height={140}>
+        <BarChart data={chartData} margin={CHART_MARGIN} barCategoryGap="40%">
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
           <XAxis
             dataKey="_date"
@@ -128,7 +127,6 @@ function DualChart({ data, title, subtitle, keys }: {
             tick={TICK_STYLE}
             axisLine={false}
             tickLine={false}
-            width={48}
           />
           <Tooltip
             formatter={(v: unknown, name: unknown) => [Number(v).toLocaleString(), name]}
@@ -289,7 +287,7 @@ function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -311,7 +309,7 @@ function AdminDashboard() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto p-6 space-y-6">
 
         {/* KPI row */}
         <div className="grid grid-cols-4 gap-4">
