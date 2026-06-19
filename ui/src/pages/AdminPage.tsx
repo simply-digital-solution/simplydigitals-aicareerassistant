@@ -357,6 +357,8 @@ function AdminDashboard() {
               { key: 'input_tokens',  color: '#0ea5e9', label: 'input'  },
               { key: 'output_tokens', color: '#10b981', label: 'output' },
             ]}
+            total={fmt(totalIn + totalOut)}
+            totalColor="#0ea5e9"
           />
         </div>
 
