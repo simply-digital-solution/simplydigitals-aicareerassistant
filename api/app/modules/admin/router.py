@@ -307,3 +307,15 @@ async def run_suspend_inactive(
 ):
     suspended = await suspend_inactive_users(db)
     return {"suspended_count": len(suspended), "suspended_user_ids": suspended}
+
+
+@router.post("/admin/cleanup/research-jobs")
+async def run_research_job_cleanup(
+    days: int = 30,
+    _: str = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually trigger deletion of stale research-only job postings."""
+    from app.pipeline.job_cleanup import purge_stale_research_jobs
+    deleted = await purge_stale_research_jobs(db, days=days)
+    return {"deleted": deleted, "older_than_days": days}

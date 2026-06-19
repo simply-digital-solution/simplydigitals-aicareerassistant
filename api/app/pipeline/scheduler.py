@@ -40,6 +40,15 @@ async def _run_daily_suspension() -> None:
     logger.info("scheduler: suspension check done — %d user(s) suspended", len(suspended))
 
 
+async def _run_daily_job_cleanup() -> None:
+    from app.shared.database import get_db_context
+    from app.pipeline.job_cleanup import purge_stale_research_jobs
+    logger.info("scheduler: daily research-job cleanup triggered")
+    async with get_db_context() as db:
+        deleted = await purge_stale_research_jobs(db)
+    logger.info("scheduler: cleanup done — %d stale job(s) deleted", deleted)
+
+
 def start(get_db_context_fn) -> None:
     """Start the scheduler and scorer loop. Call once from app lifespan."""
     global _scheduler, _scorer_task
@@ -59,8 +68,15 @@ def start(get_db_context_fn) -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _run_daily_job_cleanup,
+        trigger=CronTrigger(hour=4, minute=0, timezone="Asia/Singapore"),
+        id="daily_job_cleanup",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
-    logger.info("scheduler: started — scrape 05:00 SGT, suspension check 06:00 SGT")
+    logger.info("scheduler: started — scrape 05:00 SGT, suspension 06:00 SGT, job cleanup 04:00 SGT")
 
     from app.pipeline.llm_scorer import run_scorer_loop
     _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))
