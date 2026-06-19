@@ -22,11 +22,13 @@ function shortDate(iso: string): string {
   return iso ?? ''
 }
 
-// Only abbreviate large numbers; let small integers render as-is
+// Y-axis tick formatter — Recharts passes floats even with allowDecimals=false
 function fmtTick(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
-  return Number.isInteger(n) ? String(n) : ''
+  const v = Math.round(n)
+  if (v !== n) return ''           // skip non-integer intermediate ticks
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (v >= 1_000) return (v / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
+  return String(v)
 }
 
 function fmt(n: number): string {
@@ -301,7 +303,7 @@ function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-8 py-6 space-y-6">
 
         {/* KPI row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           {[
             { label: 'Peak daily active users', value: peakActive },
             { label: 'Total input tokens',      value: fmt(totalIn) },
@@ -316,7 +318,7 @@ function AdminDashboard() {
         </div>
 
         {/* Row 1: Active users | LLM tokens */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <SingleChart
             title="1 · Active users per day"
             subtitle="Distinct users with at least one LLM call"
@@ -337,7 +339,7 @@ function AdminDashboard() {
         </div>
 
         {/* Row 2: Jobs scraped | Agent runs | Jobs scored */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <SingleChart
             title="3 · Jobs scraped per day"
             subtitle="Across all users"
