@@ -26,7 +26,7 @@ Schema:
   "skills": ["string"],
   "education": [{"degree": "string", "institution": "string", "year": "string"}],
   "certifications": [{"name": "string", "issuer": "string", "issued_date": "string", "expiry_date": "string"}],
-  "contact": {"phone": "string", "email": "string"}
+  "contact": {"phone_country_code": "string", "phone_local": "string", "email": "string"}
 }
 
 Rules:
@@ -35,7 +35,8 @@ Rules:
 - skills: all technical and professional skills mentioned, no duplicates
 - education: degree name, institution name, graduation year (or empty string if unknown)
 - certifications: use empty string for missing issued_date or expiry_date
-- contact.phone: include country code if present, e.g. +6590673055; empty string if not found
+- contact.phone_country_code: the international dialling prefix including + sign, e.g. "+65", "+1", "+44"; empty string if not found
+- contact.phone_local: the local number without country code, e.g. "90673055"; empty string if not found
 - contact.email: empty string if not found
 - Return empty arrays/strings for any field not found — never omit a key"""
 
@@ -100,7 +101,13 @@ def _parse_response(raw: str) -> dict:
 
     contact = data.get("contact")
     if isinstance(contact, dict):
-        result["contact"]["phone"] = str(contact.get("phone", "")).strip()
+        code = str(contact.get("phone_country_code", "")).strip()
+        local = str(contact.get("phone_local", "")).strip()
+        # Combine as "+65 90673055" (space-separated for reliable display splitting)
+        if code and local:
+            result["contact"]["phone"] = f"{code} {local}"
+        elif local:
+            result["contact"]["phone"] = local
         result["contact"]["email"] = str(contact.get("email", "")).strip()
 
     return result

@@ -20,7 +20,7 @@ def test_parses_all_fields():
         "skills": ["Python", "SQL"],
         "education": [{"degree": "BSc CS", "institution": "NUS", "year": "2018"}],
         "certifications": [{"name": "AWS SAA", "issuer": "Amazon", "issued_date": "2023-01", "expiry_date": "2026-01"}],
-        "contact": {"phone": "+6590673055", "email": "test@example.com"},
+        "contact": {"phone_country_code": "+65", "phone_local": "90673055", "email": "test@example.com"},
     })
     result = _parse(raw)
     assert result["target_industries"] == ["Finance", "Technology"]
@@ -28,8 +28,20 @@ def test_parses_all_fields():
     assert result["skills"] == ["Python", "SQL"]
     assert result["education"] == [{"degree": "BSc CS", "institution": "NUS", "year": "2018"}]
     assert result["certifications"] == [{"name": "AWS SAA", "issuer": "Amazon", "issued_date": "2023-01", "expiry_date": "2026-01"}]
-    assert result["contact"]["phone"] == "+6590673055"
+    assert result["contact"]["phone"] == "+65 90673055"
     assert result["contact"]["email"] == "test@example.com"
+
+
+def test_phone_combined_without_country_code():
+    raw = json.dumps({"contact": {"phone_country_code": "", "phone_local": "90673055", "email": ""}})
+    result = _parse(raw)
+    assert result["contact"]["phone"] == "90673055"
+
+
+def test_phone_empty_when_both_missing():
+    raw = json.dumps({"contact": {"phone_country_code": "", "phone_local": "", "email": ""}})
+    result = _parse(raw)
+    assert result["contact"]["phone"] == ""
 
 
 def test_missing_fields_default_to_empty():
@@ -75,7 +87,7 @@ async def test_extract_resume_details_calls_llm_and_parses():
         "skills": ["Spark", "Kafka"],
         "education": [{"degree": "MSc", "institution": "SMU", "year": "2020"}],
         "certifications": [],
-        "contact": {"phone": "+6591234567", "email": "user@bank.com"},
+        "contact": {"phone_country_code": "+65", "phone_local": "91234567", "email": "user@bank.com"},
     })
     client = MagicMock()
     client._call = AsyncMock(return_value=(llm_response, {}))
@@ -83,7 +95,7 @@ async def test_extract_resume_details_calls_llm_and_parses():
     result = await extract_resume_details("Sample resume text", client)
     assert result["target_industries"] == ["Banking"]
     assert result["skills"] == ["Spark", "Kafka"]
-    assert result["contact"]["phone"] == "+6591234567"
+    assert result["contact"]["phone"] == "+65 91234567"
 
 
 @pytest.mark.asyncio
