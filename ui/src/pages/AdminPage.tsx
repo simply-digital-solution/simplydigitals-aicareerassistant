@@ -319,14 +319,14 @@ function AdminDashboard() {
       <div className="max-w-5xl mx-auto p-6 space-y-6">
 
         {/* KPI row */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="flex gap-4">
           {[
             { label: 'Peak daily active users', value: peakActive },
             { label: 'Total input tokens',      value: fmt(totalIn) },
             { label: 'Total output tokens',     value: fmt(totalOut) },
             { label: 'Jobs scraped',            value: totalJobs },
           ].map(kpi => (
-            <div key={kpi.label} className="bg-white border border-gray-200 rounded-xl p-4">
+            <div key={kpi.label} className="flex-1 bg-white border border-gray-200 rounded-xl p-4">
               <p className="text-xs text-gray-400 mb-1">{kpi.label}</p>
               <p className="text-2xl font-bold text-gray-900">{kpi.value}</p>
             </div>
