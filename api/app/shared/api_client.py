@@ -262,7 +262,7 @@ class BaseLLMClient(ABC):
         system_prompt: str,
     ) -> int:
         prompt_hash = hashlib.sha256(system_prompt.encode()).hexdigest()
-        await db.execute(
+        insert_result = await db.execute(
             text("""
                 INSERT INTO agent_runs
                     (user_id, application_id, agent_name, reasoning_pattern, status,
@@ -293,8 +293,8 @@ class BaseLLMClient(ABC):
                 "completed": datetime.now(timezone.utc).isoformat(),
             },
         )
-        row = await db.execute(text("SELECT last_insert_rowid()"))
-        return row.scalar()
+        from app.shared.sql_compat import last_insert_id
+        return last_insert_id(insert_result)
 
 
 # ------------------------------------------------------------------

@@ -6,6 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.router import get_current_user
 from app.shared.database import get_db
+from app.shared.sql_compat import months_ago, month_trunc, get_dialect
+from app.shared.config import get_settings
+
+_dialect = get_dialect(get_settings().database_url)
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 
@@ -101,13 +105,13 @@ async def get_dashboard_stats(
     )
 
     # 5. Jobs called for interview per month (last 3 months)
-    r5 = await db.execute(text("""
-        SELECT strftime('%Y-%m', status_updated_at) AS month, count(*) AS count
+    r5 = await db.execute(text(f"""
+        SELECT {month_trunc('status_updated_at', _dialect)} AS month, count(*) AS count
         FROM applications
         WHERE user_id = :uid AND status = 'interviewing'
-          AND status_updated_at >= date('now', '-3 months')
+          AND status_updated_at >= :since_months
         GROUP BY month ORDER BY month
-    """), {"uid": uid})
+    """), {"uid": uid, "since_months": months_ago(3)})
     interviews_by_month = _fill_months(
         [{"month": str(row.month), "count": row.count} for row in r5.fetchall()],
         3,

@@ -4,7 +4,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.database import get_db
+from app.shared.sql_compat import days_ago, nulls_last, get_dialect
+from app.shared.config import get_settings
 from app.pipeline.suspension import suspend_inactive_users, reactivate_user
+
+_dialect = get_dialect(get_settings().database_url)
 
 ADMIN_EMAIL = "pandiri.vasu@gmail.com"
 
@@ -101,10 +105,10 @@ async def stats_users_active(
     rows = await db.execute(text("""
         SELECT DATE(started_at) AS day, COUNT(DISTINCT user_id) AS cnt
         FROM agent_runs
-        WHERE started_at >= DATE('now', :offset)
+        WHERE started_at >= :since
         GROUP BY day
         ORDER BY day
-    """), {"offset": f"-{days} days"})
+    """), {"since": days_ago(days)})
     return [DailyCount(date=str(r[0]), count=r[1]) for r in rows.fetchall()]
 
 
@@ -123,10 +127,10 @@ async def stats_llm_tokens(
                SUM(total_input_tokens)  AS inp,
                SUM(total_output_tokens) AS out
         FROM budget_records
-        WHERE date >= DATE('now', :offset)
+        WHERE date >= :since
         GROUP BY date
         ORDER BY date
-    """), {"offset": f"-{days} days"})
+    """), {"since": days_ago(days)})
     return [DailyTokens(date=str(r[0]), input_tokens=r[1] or 0, output_tokens=r[2] or 0)
             for r in rows.fetchall()]
 
@@ -144,10 +148,10 @@ async def stats_jobs_scraped(
     rows = await db.execute(text("""
         SELECT DATE(scraped_at) AS day, COUNT(*) AS cnt
         FROM job_postings
-        WHERE scraped_at >= DATE('now', :offset)
+        WHERE scraped_at >= :since
         GROUP BY day
         ORDER BY day
-    """), {"offset": f"-{days} days"})
+    """), {"since": days_ago(days)})
     return [DailyCount(date=str(r[0]), count=r[1]) for r in rows.fetchall()]
 
 
@@ -169,10 +173,10 @@ async def stats_llm_per_user(
                SUM(ar.output_tokens)      AS out
         FROM agent_runs ar
         JOIN users u ON u.id = ar.user_id
-        WHERE ar.started_at >= DATE('now', :offset)
+        WHERE ar.started_at >= :since
         GROUP BY day, u.email
         ORDER BY day DESC, requests DESC
-    """), {"offset": f"-{days} days"})
+    """), {"since": days_ago(days)})
     return [
         UserTokenDay(
             date=str(r[0]), email=r[1],
@@ -197,10 +201,10 @@ async def stats_agent_runs(
                SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) AS ok,
                SUM(CASE WHEN status = 'failed'   THEN 1 ELSE 0 END) AS fail
         FROM agent_runs
-        WHERE started_at >= DATE('now', :offset)
+        WHERE started_at >= :since
         GROUP BY day
         ORDER BY day
-    """), {"offset": f"-{days} days"})
+    """), {"since": days_ago(days)})
     return [AgentRunStats(date=str(r[0]), complete=r[1] or 0, failed=r[2] or 0)
             for r in rows.fetchall()]
 
@@ -218,10 +222,10 @@ async def stats_scoring(
     rows = await db.execute(text("""
         SELECT date, SUM(jobs_scored) AS total
         FROM daily_scoring_usage
-        WHERE date >= DATE('now', :offset)
+        WHERE date >= :since
         GROUP BY date
         ORDER BY date
-    """), {"offset": f"-{days} days"})
+    """), {"since": days_ago(days)})
     return [ScoringStats(date=str(r[0]), jobs_scored=r[1] or 0)
             for r in rows.fetchall()]
 
@@ -235,7 +239,7 @@ async def list_users(
     _: str = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[UserRow]:
-    rows = await db.execute(text("""
+    rows = await db.execute(text(f"""
         SELECT
             u.id,
             u.email,
@@ -248,7 +252,7 @@ async def list_users(
         LEFT JOIN agent_runs ar ON ar.user_id = u.id
         LEFT JOIN job_postings jp ON jp.user_id = u.id
         GROUP BY u.id
-        ORDER BY last_active DESC NULLS LAST
+        ORDER BY {nulls_last("last_active DESC", _dialect)}
     """))
     result = []
     for r in rows.fetchall():
