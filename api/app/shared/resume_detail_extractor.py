@@ -21,6 +21,8 @@ Return ONLY valid JSON matching the schema below. No markdown, no explanation, n
 
 Schema:
 {
+  "years_experience": number or null,
+  "seniority_level": "string",
   "target_industries": ["string"],
   "target_roles": ["string"],
   "skills": ["string"],
@@ -30,6 +32,8 @@ Schema:
 }
 
 Rules:
+- years_experience: total years of professional experience as an integer, or null if cannot be determined
+- seniority_level: one of "junior", "mid", "senior", "lead", "principal", "director", "vp", "executive" — infer from titles, responsibilities, and years
 - target_industries: 1-5 industries this person has worked in or is suited for
 - target_roles: 3-7 job titles this person could reasonably apply for
 - skills: all technical and professional skills mentioned, no duplicates
@@ -38,7 +42,7 @@ Rules:
 - contact.phone_country_code: the international dialling prefix including + sign, e.g. "+65", "+1", "+44"; empty string if not found
 - contact.phone_local: the local number without country code, e.g. "90673055"; empty string if not found
 - contact.email: empty string if not found
-- Return empty arrays/strings for any field not found — never omit a key"""
+- Return empty arrays/strings/null for any field not found — never omit a key"""
 
 _USER_PROMPT = """Extract all details from this resume:
 
@@ -49,6 +53,8 @@ Return ONLY the JSON object:"""
 
 def _empty_result() -> dict:
     return {
+        "years_experience": None,
+        "seniority_level": "",
         "target_industries": [],
         "target_roles": [],
         "skills": [],
@@ -72,6 +78,15 @@ def _parse_response(raw: str) -> dict:
         return _empty_result()
 
     result = _empty_result()
+
+    yoe = data.get("years_experience")
+    if isinstance(yoe, (int, float)) and yoe >= 0:
+        result["years_experience"] = int(yoe)
+
+    seniority = str(data.get("seniority_level", "")).strip().lower()
+    valid_levels = {"junior", "mid", "senior", "lead", "principal", "director", "vp", "executive"}
+    if seniority in valid_levels:
+        result["seniority_level"] = seniority
 
     for key in ("target_industries", "target_roles", "skills"):
         val = data.get(key)

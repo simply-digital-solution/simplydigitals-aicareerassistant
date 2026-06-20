@@ -15,6 +15,8 @@ def _parse(raw: str) -> dict:
 
 def test_parses_all_fields():
     raw = json.dumps({
+        "years_experience": 8,
+        "seniority_level": "senior",
         "target_industries": ["Finance", "Technology"],
         "target_roles": ["Software Engineer", "Tech Lead"],
         "skills": ["Python", "SQL"],
@@ -23,6 +25,8 @@ def test_parses_all_fields():
         "contact": {"phone_country_code": "+65", "phone_local": "90673055", "email": "test@example.com"},
     })
     result = _parse(raw)
+    assert result["years_experience"] == 8
+    assert result["seniority_level"] == "senior"
     assert result["target_industries"] == ["Finance", "Technology"]
     assert result["target_roles"] == ["Software Engineer", "Tech Lead"]
     assert result["skills"] == ["Python", "SQL"]
@@ -30,6 +34,31 @@ def test_parses_all_fields():
     assert result["certifications"] == [{"name": "AWS SAA", "issuer": "Amazon", "issued_date": "2023-01", "expiry_date": "2026-01"}]
     assert result["contact"]["phone"] == "+65 90673055"
     assert result["contact"]["email"] == "test@example.com"
+
+
+def test_parses_years_experience_as_int():
+    raw = json.dumps({"years_experience": 5.9, "seniority_level": "mid"})
+    result = _parse(raw)
+    assert result["years_experience"] == 5
+    assert isinstance(result["years_experience"], int)
+
+
+def test_years_experience_null_when_missing():
+    raw = json.dumps({"target_industries": ["Finance"]})
+    result = _parse(raw)
+    assert result["years_experience"] is None
+
+
+def test_seniority_level_empty_when_invalid():
+    raw = json.dumps({"seniority_level": "rockstar"})
+    result = _parse(raw)
+    assert result["seniority_level"] == ""
+
+
+def test_seniority_level_normalised_to_lowercase():
+    raw = json.dumps({"seniority_level": "Senior"})
+    result = _parse(raw)
+    assert result["seniority_level"] == "senior"
 
 
 def test_phone_combined_without_country_code():
@@ -47,6 +76,8 @@ def test_phone_empty_when_both_missing():
 def test_missing_fields_default_to_empty():
     raw = json.dumps({"target_industries": ["Finance"]})
     result = _parse(raw)
+    assert result["years_experience"] is None
+    assert result["seniority_level"] == ""
     assert result["target_roles"] == []
     assert result["skills"] == []
     assert result["education"] == []
@@ -82,6 +113,8 @@ async def test_extract_resume_details_calls_llm_and_parses():
     from app.shared.resume_detail_extractor import extract_resume_details
 
     llm_response = json.dumps({
+        "years_experience": 6,
+        "seniority_level": "senior",
         "target_industries": ["Banking"],
         "target_roles": ["Data Engineer"],
         "skills": ["Spark", "Kafka"],
@@ -93,6 +126,8 @@ async def test_extract_resume_details_calls_llm_and_parses():
     client._call = AsyncMock(return_value=(llm_response, {}))
 
     result = await extract_resume_details("Sample resume text", client)
+    assert result["years_experience"] == 6
+    assert result["seniority_level"] == "senior"
     assert result["target_industries"] == ["Banking"]
     assert result["skills"] == ["Spark", "Kafka"]
     assert result["contact"]["phone"] == "+65 91234567"

@@ -11,10 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.database import get_db
 from app.modules.auth.router import get_current_user
 from app.shared.models import Profile
-from app.shared.resume_analyser import analyse_resume
-from app.shared.skill_extractor import extract_skills
-from app.shared.seniority_extractor import extract_seniority
-from app.shared.industry_extractor import extract_industries
+from app.shared.resume_detail_extractor import extract_resume_details, deduplicate_certifications
+from app.shared.api_client import get_llm_client
 
 router = APIRouter(prefix="/api/v1/profile", tags=["profile"])
 
@@ -225,9 +223,6 @@ async def extract_and_save(
     fields into the profile. Nothing is ever removed — only new values added.
     Deduplication is applied to every array field.
     """
-    from app.shared.resume_detail_extractor import extract_resume_details, deduplicate_certifications
-    from app.shared.api_client import get_llm_client
-
     profile = await _get_or_create(db, current_user.id)
     if not profile.resume_text or not profile.resume_text.strip():
         raise HTTPException(status_code=422, detail="No resume found. Upload your resume first.")
@@ -269,6 +264,12 @@ async def extract_and_save(
         return json.dumps(existing)
 
     # Merge each field additively
+    if extracted["years_experience"] is not None:
+        profile.years_experience = extracted["years_experience"]
+
+    if extracted["seniority_level"]:
+        profile.seniority_level = extracted["seniority_level"]
+
     if extracted["target_industries"]:
         profile.target_industries = _merge_str_array(profile.target_industries, extracted["target_industries"])
 
@@ -291,11 +292,6 @@ async def extract_and_save(
     phone = extracted["contact"].get("phone", "")
     if phone and not profile.phone_number:
         profile.phone_number = phone
-
-    email = extracted["contact"].get("email", "")
-    if email and not profile.linkedin_url:
-        # email is stored on the User row, not Profile — skip overwriting here
-        pass
 
     await db.commit()
     await db.refresh(profile)
@@ -329,73 +325,22 @@ async def update_profile(
         setattr(profile, field, value)
 
     if 'resume_text' in updates and updates['resume_text']:
-        analysis = analyse_resume(updates['resume_text'])
-        if analysis["years_experience"] is not None:
-            profile.years_experience = analysis["years_experience"]
-        profile.seniority_level = analysis["seniority_level"]
-        profile.target_industries = _dedupe_json_array(json.dumps(analysis["industries"]))
-        # target_titles intentionally not set here — use POST /extract-titles (LLM-based)
-        existing_skills = json.loads(profile.skills) if profile.skills else []
-        if not existing_skills and analysis["skills"]:
-            profile.skills = _dedupe_json_array(json.dumps(analysis["skills"]))
+        client = get_llm_client()
+        extracted = await extract_resume_details(updates['resume_text'], client)
+        if extracted["years_experience"] is not None:
+            profile.years_experience = extracted["years_experience"]
+        if extracted["seniority_level"]:
+            profile.seniority_level = extracted["seniority_level"]
+        if extracted["target_industries"]:
+            profile.target_industries = _dedupe_json_array(json.dumps(extracted["target_industries"]))
+        if extracted["skills"]:
+            existing_skills = json.loads(profile.skills) if profile.skills else []
+            if not existing_skills:
+                profile.skills = _dedupe_json_array(json.dumps(extracted["skills"]))
 
     await db.commit()
     await db.refresh(profile)
     return profile
-
-
-class SeniorityResponse(BaseModel):
-    seniority_level: str
-    method: str
-    titles_found: list[str]
-    confidence: float
-
-
-@router.post("/extract-seniority", response_model=SeniorityResponse)
-async def extract_seniority_from_resume(
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Re-run seniority extraction on the saved resume and persist the result.
-    Returns the detected tier plus which titles were found and the method used.
-    """
-    profile = await _get_or_create(db, current_user.id)
-    if not profile.resume_text or not profile.resume_text.strip():
-        raise HTTPException(status_code=422, detail="No resume found. Upload your resume first.")
-
-    result = extract_seniority(profile.resume_text, profile.years_experience)
-    profile.seniority_level = result["seniority_level"]
-    await db.commit()
-
-    return SeniorityResponse(**result)
-
-
-class IndustryResult(BaseModel):
-    industry: str
-    confidence: float
-    method: str
-
-
-class ExtractIndustriesResponse(BaseModel):
-    industries: list[IndustryResult]
-
-
-@router.post("/extract-industries", response_model=ExtractIndustriesResponse)
-async def extract_industries_from_resume(
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Detect industries from saved resume text and persist as target_industries."""
-    profile = await _get_or_create(db, current_user.id)
-    if not profile.resume_text or not profile.resume_text.strip():
-        raise HTTPException(status_code=422, detail="No resume found. Upload your resume first.")
-
-    results = extract_industries(profile.resume_text)
-    profile.target_industries = json.dumps([r["industry"] for r in results])
-    await db.commit()
-
-    return ExtractIndustriesResponse(industries=[IndustryResult(**r) for r in results])
 
 
 class ExtractTitlesResponse(BaseModel):
@@ -411,7 +356,6 @@ async def extract_titles_from_resume(
 ):
     """Infer target job titles from saved resume text and persist as target_titles."""
     from app.shared.title_extractor import extract_target_titles
-    from app.shared.api_client import get_llm_client
     profile = await _get_or_create(db, current_user.id)
     if not profile.resume_text or not profile.resume_text.strip():
         raise HTTPException(status_code=422, detail="No resume found. Upload your resume first.")
@@ -429,44 +373,6 @@ async def extract_titles_from_resume(
         titles=titles,
         new_titles=new_titles,
         existing_titles=existing,
-    )
-
-
-class ExtractedSkill(BaseModel):
-    skill: str
-    category: str
-
-
-class ExtractSkillsResponse(BaseModel):
-    extracted: list[ExtractedSkill]
-    new_skills: list[str]
-    existing_skills: list[str]
-
-
-@router.post("/extract-skills", response_model=ExtractSkillsResponse)
-async def extract_skills_from_resume(
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Scan saved resume_text against the skills taxonomy and return extracted skills,
-    split into new (not yet saved) vs already in profile.
-    Does not modify the profile — the frontend confirms before saving.
-    """
-    profile = await _get_or_create(db, current_user.id)
-    if not profile.resume_text or not profile.resume_text.strip():
-        raise HTTPException(status_code=422, detail="No resume found. Upload your resume first.")
-
-    extracted = extract_skills(profile.resume_text)
-    existing = json.loads(profile.skills) if profile.skills else []
-    existing_lower = {s.lower() for s in existing}
-
-    new_skills = [e["skill"] for e in extracted if e["skill"].lower() not in existing_lower]
-
-    return ExtractSkillsResponse(
-        extracted=[ExtractedSkill(**e) for e in extracted],
-        new_skills=new_skills,
-        existing_skills=existing,
     )
 
 
