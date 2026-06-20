@@ -1,0 +1,219 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+      - "feat/**"
+      - "fix/**"
+      - "refactor/**"
+      - "hotfix/**"
+      - "deploy/**"
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  pull-requests: write
+  contents: read
+  id-token: write
+
+# Cancel in-progress runs on the same branch (except main)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+
+  # ── Detect which components changed ──────────────────────────────────────
+  detect:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      ui:  ${{ steps.filter.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api:
+              - 'api/**'
+              - '!api/**.md'
+              - 'prompts/**'
+            ui:
+              - 'ui/**'
+              - '!ui/**.md'
+
+  # ── Validate required secrets (runs on pull request only) ────────────────
+  validate-secrets:
+    name: Validate Required Secrets
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check API secrets
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCOUNT_ID:        ${{ secrets.AWS_ACCOUNT_ID }}
+          ECR_REPOSITORY:        ${{ secrets.ECR_REPOSITORY }}
+          EC2_HOST:              ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY:           ${{ secrets.EC2_SSH_KEY }}
+          EC2_USER:              ${{ secrets.EC2_USER }}
+          DATABASE_URL:          ${{ secrets.DATABASE_URL }}
+          JWT_SECRET_KEY:        ${{ secrets.JWT_SECRET_KEY }}
+          GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          missing=()
+          [ -z "$AWS_ACCESS_KEY_ID" ]     && missing+=("AWS_ACCESS_KEY_ID")
+          [ -z "$AWS_SECRET_ACCESS_KEY" ] && missing+=("AWS_SECRET_ACCESS_KEY")
+          [ -z "$AWS_ACCOUNT_ID" ]        && missing+=("AWS_ACCOUNT_ID")
+          [ -z "$ECR_REPOSITORY" ]        && missing+=("ECR_REPOSITORY")
+          [ -z "$EC2_HOST" ]              && missing+=("EC2_HOST")
+          [ -z "$EC2_SSH_KEY" ]           && missing+=("EC2_SSH_KEY")
+          [ -z "$EC2_USER" ]              && missing+=("EC2_USER")
+          [ -z "$DATABASE_URL" ]          && missing+=("DATABASE_URL")
+          [ -z "$JWT_SECRET_KEY" ]        && missing+=("JWT_SECRET_KEY")
+          [ -z "$GEMINI_API_KEY" ]        && missing+=("GEMINI_API_KEY")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "❌ Missing required API secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "✅ All required API secrets are present"
+
+      - name: Check UI secrets
+        env:
+          S3_UI_BUCKET:               ${{ secrets.S3_UI_BUCKET }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          PROD_API_URL:               ${{ secrets.PROD_API_URL }}
+          VITE_HCAPTCHA_SITE_KEY:     ${{ secrets.VITE_HCAPTCHA_SITE_KEY }}
+        run: |
+          missing=()
+          [ -z "$S3_UI_BUCKET" ]           && missing+=("S3_UI_BUCKET")
+          [ -z "$PROD_API_URL" ]           && missing+=("PROD_API_URL")
+          [ -z "$VITE_HCAPTCHA_SITE_KEY" ] && missing+=("VITE_HCAPTCHA_SITE_KEY")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "❌ Missing required UI secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "✅ All required UI secrets are present"
+          echo "ℹ️  CLOUDFRONT_DISTRIBUTION_ID is optional (invalidation skipped if absent)"
+
+  # ── API Pipeline ─────────────────────────────────────────────────────────
+  api:
+    name: API Pipeline
+    needs: detect
+    if: needs.detect.outputs.api == 'true' || startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/api-ci.yml
+    with:
+      run_lint:   ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}
+      run_tests:  ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') }}
+      run_deploy: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') }}
+    secrets:
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ACCOUNT_ID:        ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_REGION:            ${{ secrets.AWS_REGION }}
+      ECR_REPOSITORY:        ${{ secrets.ECR_REPOSITORY }}
+      EC2_HOST:              ${{ secrets.EC2_HOST }}
+      EC2_SSH_KEY:           ${{ secrets.EC2_SSH_KEY }}
+      EC2_USER:              ${{ secrets.EC2_USER }}
+      DATABASE_URL:          ${{ secrets.DATABASE_URL }}
+      JWT_SECRET_KEY:        ${{ secrets.JWT_SECRET_KEY }}
+      GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
+      HCAPTCHA_SECRET_KEY:   ${{ secrets.HCAPTCHA_SECRET_KEY }}
+      GOOGLE_CLIENT_ID:      ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET:  ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      PROD_API_URL:          ${{ secrets.PROD_API_URL }}
+
+  # ── UI Pipeline ──────────────────────────────────────────────────────────
+  ui:
+    name: UI Pipeline
+    needs: detect
+    if: needs.detect.outputs.ui == 'true' || startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/ui-ci.yml
+    with:
+      run_lint:   ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}
+      run_tests:  ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') }}
+      run_deploy: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') }}
+    secrets:
+      AWS_ACCESS_KEY_ID:          ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY:      ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION:                 ${{ secrets.AWS_REGION }}
+      S3_UI_BUCKET:               ${{ secrets.S3_UI_BUCKET }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+      PROD_API_URL:               ${{ secrets.PROD_API_URL }}
+      VITE_HCAPTCHA_SITE_KEY:     ${{ secrets.VITE_HCAPTCHA_SITE_KEY }}
+
+  # ── Post-Deploy Integration Tests ────────────────────────────────────────
+  post-deploy-tests:
+    name: Post-Deploy Integration Tests
+    needs: [api, ui]
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.api.result != 'failure' &&
+      needs.ui.result != 'failure' &&
+      (needs.api.result == 'success' || needs.ui.result == 'success')
+    uses: ./.github/workflows/post-deploy-tests.yml
+    secrets:
+      PROD_API_URL: ${{ secrets.PROD_API_URL }}
+      PROD_UI_URL:  ${{ secrets.PROD_UI_URL }}
+
+  # ── PR Quality Gate Summary ──────────────────────────────────────────────
+  summary:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: [detect, validate-secrets, api, ui]
+    if: always() && github.event_name == 'pull_request'
+    steps:
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const apiChanged    = '${{ needs.detect.outputs.api }}' === 'true'
+            const uiChanged     = '${{ needs.detect.outputs.ui }}'  === 'true'
+            const secretsResult = '${{ needs.validate-secrets.result }}'
+            const apiResult     = '${{ needs.api.result }}'
+            const uiResult      = '${{ needs.ui.result }}'
+            const sha           = '${{ github.event.pull_request.head.sha }}'.slice(0, 7)
+            const runUrl        = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`
+            const icon = (r) => r === 'success' ? '✅' : r === 'failure' ? '❌' : r === 'skipped' ? '⏭️' : '⏳'
+            const rows = []
+            rows.push(`| Secrets Validation | ${icon(secretsResult)} ${secretsResult} |`)
+            if (apiChanged) rows.push(`| API — Lint + Tests + Security | ${icon(apiResult)} ${apiResult} |`)
+            if (uiChanged)  rows.push(`| UI  — Lint + Tests + Audit    | ${icon(uiResult)}  ${uiResult}  |`)
+            if (!apiChanged && !uiChanged) rows.push(`| No source changes | ⏭️ skipped |`)
+            const body = [
+              `## PR Quality Gate — \`${sha}\``,
+              `| Pipeline | Result |`,
+              `|----------|--------|`,
+              ...rows,
+              ``,
+              `[View full run](${runUrl})`,
+            ].join('\n')
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+            })
+            const existing = comments.find(c => c.body.includes('PR Quality Gate'))
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              })
+            }

@@ -16,6 +16,8 @@ build/
 *.db
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
 
 # Logs (keep directory, not contents)
 logs/*.jsonl
@@ -34,6 +36,12 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Claude Code — local permissions (machine-specific paths, not for sharing)
+.claude/settings.local.json
+
+# Generated HTML docs (not source)
+docs/
 
 # Playwright
 playwright/.auth/
