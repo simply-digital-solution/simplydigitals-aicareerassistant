@@ -18,6 +18,7 @@ Playwright ATS scrapers (Workday, Greenhouse, Lever) are Phase 1.
 import asyncio
 import json
 import logging
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -25,8 +26,6 @@ from typing import Optional
 import httpx
 import feedparser
 from bs4 import BeautifulSoup
-
-from app.shared.industry_extractor import extract_industry_names
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +100,7 @@ def _mcf_categories_to_industries(item: dict) -> list[str]:
                 result.append(t)
     return result
 
-DATA_DIR = Path(__file__).parents[4] / "data" / "jobs_raw"
+DATA_DIR = Path(tempfile.gettempdir()) / "aicareer_jobs_raw"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 SCRAPE_DELAY_SECONDS = 1.5

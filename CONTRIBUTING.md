@@ -48,9 +48,6 @@
 │   └── public/           # Static assets (favicons, manifest)
 ├── nginx/                # Nginx config for production
 ├── prompts/              # LLM prompt markdown files (read-only at runtime)
-├── data/
-│   ├── templates/        # Resume and document templates
-│   └── skills_taxonomy.json
 ├── docker-compose.prod.yml
 ├── .github/workflows/    # CI/CD pipelines
 ├── CLAUDE.md             # AI assistant instructions (read by Claude Code)

@@ -46,5 +46,3 @@ docs/
 # Playwright
 playwright/.auth/
 
-# Data (raw scraped jobs — audit trail, not source code)
-data/jobs_raw/
