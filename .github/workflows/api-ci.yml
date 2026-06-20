@@ -244,12 +244,13 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          RANGES=$(curl -s https://api.github.com/meta | jq -r '.actions[]')
-          for cidr in $RANGES; do
-            aws ec2 authorize-security-group-ingress \
-              --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
-              --protocol tcp --port 22 --cidr "$cidr" 2>/dev/null || true
-          done
+          IP_PERMS=$(curl -s https://api.github.com/meta | jq -c '
+            [.actions[] | {"CidrIp": .}] |
+            [{"IpProtocol":"tcp","FromPort":22,"ToPort":22,"IpRanges":.}]
+          ')
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
+            --ip-permissions "$IP_PERMS" 2>/dev/null || true
           echo "✅ SSH open for GitHub Actions IP ranges"
 
       - name: Copy compose and nginx config to EC2
@@ -325,12 +326,13 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          RANGES=$(curl -s https://api.github.com/meta | jq -r '.actions[]')
-          for cidr in $RANGES; do
-            aws ec2 revoke-security-group-ingress \
-              --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
-              --protocol tcp --port 22 --cidr "$cidr" 2>/dev/null || true
-          done
+          IP_PERMS=$(curl -s https://api.github.com/meta | jq -c '
+            [.actions[] | {"CidrIp": .}] |
+            [{"IpProtocol":"tcp","FromPort":22,"ToPort":22,"IpRanges":.}]
+          ')
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
+            --ip-permissions "$IP_PERMS" 2>/dev/null || true
           echo "✅ SSH closed for GitHub Actions IP ranges"
 
       - name: Health check
