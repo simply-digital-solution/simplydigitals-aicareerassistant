@@ -237,6 +237,15 @@ jobs:
           build-args: |
             APP_VERSION=${{ needs.version.outputs.version }}
 
+      - name: Copy compose and nginx config to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.prod.yml,nginx/"
+          target: /home/ubuntu/app
+
       - name: Write .env file to EC2
         uses: appleboy/ssh-action@v1
         with:
@@ -244,7 +253,8 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cat > /app/.env << 'ENVEOF'
+            mkdir -p /home/ubuntu/app
+            cat > /home/ubuntu/app/.env << 'ENVEOF'
             APP_ENV=production
             LOG_LEVEL=INFO
             ENABLE_SCHEDULER=false
@@ -254,7 +264,7 @@ jobs:
             HCAPTCHA_SECRET_KEY=${{ secrets.HCAPTCHA_SECRET_KEY }}
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
-            GOOGLE_REDIRECT_URI=https://${{ secrets.EC2_HOST }}/api/v1/auth/google/callback
+            GOOGLE_REDIRECT_URI=${{ secrets.PROD_API_URL }}/api/v1/auth/google/callback
             ENVEOF
 
       - name: Deploy containers on EC2
@@ -276,7 +286,7 @@ jobs:
             docker pull $ECR_IMAGE
 
             # Update compose to use the new image and restart
-            cd /app
+            cd /home/ubuntu/app
             ECR_IMAGE=$ECR_IMAGE docker compose -f docker-compose.prod.yml up -d \
               --no-build \
               --remove-orphans
@@ -289,7 +299,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /app
+            cd /home/ubuntu/app
             docker compose -f docker-compose.prod.yml run --rm migrate
             echo "Migrations applied successfully"
 
