@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider
 import adminApi from '../api/adminApi'
 import type { AdminUser, DailyCount, DailyTokens, UserTokenDay, AgentRunStats } from '../api/adminApi'
 
-const ADMIN_EMAIL = 'pandiri.vasu@gmail.com'
+const ADMIN_EMAIL = 'pandiri.vasu@simplydigitals.com.sg'
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 60_000 } } })
 
 function useAdminEmail(): string | null {

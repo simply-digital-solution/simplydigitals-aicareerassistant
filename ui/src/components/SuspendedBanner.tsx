@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { accountApi } from '../api/client'
 
-const SUPPORT_EMAIL = 'pandiri.vasu@gmail.com'
+const SUPPORT_EMAIL = 'pandiri.vasu@simplydigitals.com.sg'
 const WHATSAPP_NUMBER = '6590673055'
 
 export default function SuspendedBanner() {

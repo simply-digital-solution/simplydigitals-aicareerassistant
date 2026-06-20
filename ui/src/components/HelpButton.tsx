@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const SUPPORT_EMAIL = 'pandiri.vasu@gmail.com'
+const SUPPORT_EMAIL = 'pandiri.vasu@simplydigitals.com.sg'
 const WHATSAPP_NUMBER = '6590673055'
 
 function ContactModal({ onClose }: { onClose: () => void }) {
