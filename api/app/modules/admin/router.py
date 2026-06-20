@@ -10,7 +10,7 @@ from app.pipeline.suspension import suspend_inactive_users, reactivate_user
 
 _dialect = get_dialect(get_settings().database_url)
 
-ADMIN_EMAIL = "pandiri.vasu@gmail.com"
+ADMIN_EMAIL = "pandiri.vasu@simplydigitals.com.sg"
 
 router = APIRouter(prefix="/api/v1", tags=["admin"])
 

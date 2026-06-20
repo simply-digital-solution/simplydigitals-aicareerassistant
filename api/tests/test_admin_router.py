@@ -5,7 +5,7 @@ from httpx import AsyncClient, ASGITransport
 
 from app.shared.database import get_db
 
-ADMIN_EMAIL = "pandiri.vasu@gmail.com"
+ADMIN_EMAIL = "pandiri.vasu@simplydigitals.com.sg"
 OTHER_EMAIL = "other@example.com"
 
 

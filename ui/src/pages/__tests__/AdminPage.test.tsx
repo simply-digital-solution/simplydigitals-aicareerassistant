@@ -50,7 +50,7 @@ describe('AdminPage', () => {
   })
 
   it('shows dashboard when admin email is set', async () => {
-    mockLocalStorage('pandiri.vasu@gmail.com')
+    mockLocalStorage('pandiri.vasu@simplydigitals.com.sg')
     const { default: AdminPage } = await import('../AdminPage')
     render(<AdminPage />)
     expect(screen.getByText('Admin Dashboard')).toBeTruthy()
@@ -69,6 +69,6 @@ describe('AdminPage', () => {
     mockLocalStorage(null)
     const { default: AdminPage } = await import('../AdminPage')
     render(<AdminPage />)
-    expect(screen.getByText('pandiri.vasu@gmail.com')).toBeTruthy()
+    expect(screen.getByText('pandiri.vasu@simplydigitals.com.sg')).toBeTruthy()
   })
 })

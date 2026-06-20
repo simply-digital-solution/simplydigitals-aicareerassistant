@@ -180,7 +180,7 @@ async def test_admin_cleanup_endpoint_returns_deleted_count():
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
                 "/api/v1/admin/cleanup/research-jobs?days=30",
-                headers={"X-User-Email": "pandiri.vasu@gmail.com"},
+                headers={"X-User-Email": "pandiri.vasu@simplydigitals.com.sg"},
             )
         assert resp.status_code == 200
         body = resp.json()
