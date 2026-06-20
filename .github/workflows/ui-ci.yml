@@ -19,7 +19,7 @@ on:
       AWS_ACCESS_KEY_ID:          { required: false }
       AWS_SECRET_ACCESS_KEY:      { required: false }
       AWS_REGION:                 { required: false }
-      S3_UI_BUCKET:               { required: false }
+      S3_BUCKET:               { required: false }
       CLOUDFRONT_DISTRIBUTION_ID: { required: false }
       PROD_API_URL:               { required: false }
       VITE_HCAPTCHA_SITE_KEY:     { required: false }
@@ -141,13 +141,13 @@ jobs:
 
       - name: Sync static assets to S3 (immutable cache)
         run: |
-          aws s3 sync dist/assets/ s3://${{ secrets.S3_UI_BUCKET }}/assets/ \
+          aws s3 sync dist/assets/ s3://${{ secrets.S3_BUCKET }}/assets/ \
             --cache-control "public,max-age=31536000,immutable" \
             --delete
 
       - name: Sync HTML + root files to S3 (no cache)
         run: |
-          aws s3 sync dist/ s3://${{ secrets.S3_UI_BUCKET }}/ \
+          aws s3 sync dist/ s3://${{ secrets.S3_BUCKET }}/ \
             --exclude "assets/*" \
             --cache-control "no-cache,no-store,must-revalidate" \
             --delete
