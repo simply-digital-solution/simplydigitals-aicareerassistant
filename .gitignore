@@ -44,7 +44,7 @@ Thumbs.db
 .claude/settings.local.json
 
 # Generated HTML docs (not source)
-docs/
+docs/_build/
 
 # Playwright
 playwright/.auth/
