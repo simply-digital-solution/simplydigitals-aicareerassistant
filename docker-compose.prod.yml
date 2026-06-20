@@ -12,6 +12,7 @@ services:
     volumes:
       - socket:/run/app           # shared Unix socket with nginx
       - prompts:/prompts:ro       # prompt markdown files (read-only)
+      - logs:/var/log/aicareer    # persistent log storage
     depends_on:
       - migrate
 
@@ -36,6 +37,7 @@ services:
     command: ["python", "-m", "app.scheduler_worker"]
     volumes:
       - prompts:/prompts:ro
+      - logs:/var/log/aicareer    # same volume as api — shared log dir
     depends_on:
       - migrate
 
@@ -58,3 +60,4 @@ services:
 volumes:
   socket:    # Unix socket file shared between api and nginx
   prompts:   # Prompt markdown files — populated by CI deploy step
+  logs:      # Audit + LLM usage logs — survives container restarts

@@ -1,32 +1,9 @@
 """
-Tests for industry inference and the 80% match filter.
+Tests for industry filter logic: fuzzy match and job-list filtering.
+(industry_extractor.py was removed in favour of LLM-based extraction.)
 """
 import pytest
-from app.shared.industry_extractor import extract_industry_names
 from app.modules.agents.router import _filter_by_industry, _industry_match
-
-
-# ---------------------------------------------------------------------------
-# Industry inference from job descriptions
-# ---------------------------------------------------------------------------
-
-def test_infer_banking_from_description():
-    desc = "Looking for a KYC/AML analyst with Basel III experience. Work with MAS regulations and trade finance."
-    result = extract_industry_names(desc)
-    assert "Banking & Financial Services" in result
-
-
-def test_infer_tech_from_description():
-    desc = "Senior software engineer needed. Stack: AWS, Kubernetes, Docker. SaaS product, CI/CD pipeline, agile team."
-    result = extract_industry_names(desc)
-    assert "Technology & Software" in result
-
-
-def test_no_industry_for_generic_description():
-    desc = "We are looking for a motivated individual to join our team."
-    result = extract_industry_names(desc)
-    # Generic description should return empty or very few industries
-    assert isinstance(result, list)
 
 
 # ---------------------------------------------------------------------------

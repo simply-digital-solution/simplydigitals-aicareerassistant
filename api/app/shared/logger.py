@@ -1,7 +1,10 @@
 import hashlib
 import json
+import logging
+import os
 import time
 from datetime import datetime, timezone
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +12,27 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
-LOG_FILE = Path(__file__).parents[3] / "logs" / "audit.jsonl"
+_PROD_LOGS_DIR = Path("/var/log/aicareer")
+_DEV_LOGS_DIR = Path(__file__).parents[3] / "logs"
+_LOGS_DIR = _PROD_LOGS_DIR if os.access(_PROD_LOGS_DIR.parent, os.W_OK) else _DEV_LOGS_DIR
+_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Thread-safe rotating file handler — one file per day, kept for 90 days
+_audit_handler = TimedRotatingFileHandler(
+    filename=str(_LOGS_DIR / "audit.jsonl"),
+    when="midnight",
+    interval=1,
+    backupCount=90,
+    utc=True,
+    encoding="utf-8",
+)
+_audit_handler.suffix = "%Y-%m-%d"
+_audit_logger = logging.getLogger("audit_file")
+_audit_logger.setLevel(logging.INFO)
+_audit_logger.addHandler(_audit_handler)
+_audit_logger.propagate = False
+
+LOG_FILE = _LOGS_DIR / "audit.jsonl"
 
 
 def _configure_structlog():
@@ -79,8 +102,7 @@ class AuditLogger:
             },
         )
 
-        # Append to JSONL file as secondary tamper-evident archive
-        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # Append to JSONL file as secondary tamper-evident archive (thread-safe via handler)
         entry = {
             "timestamp": timestamp,
             "event_type": event_type,
@@ -91,8 +113,7 @@ class AuditLogger:
             "prev_hash": prev_hash,
             "chain_hash": chain_hash,
         }
-        with LOG_FILE.open("a") as f:
-            f.write(json.dumps(entry) + "\n")
+        _audit_logger.info(json.dumps(entry))
 
     async def verify_chain(self, db: AsyncSession) -> tuple[bool, list[int]]:
         """Replay all entries and verify hash chain integrity."""

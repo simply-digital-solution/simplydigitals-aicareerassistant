@@ -23,6 +23,9 @@ build/
 logs/*.jsonl
 logs/*.log
 
+# Production log volume (Docker named volume on host — never commit)
+/var/log/aicareer/
+
 # Node
 node_modules/
 ui/dist/

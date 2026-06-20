@@ -1,15 +1,20 @@
 """
 Daily rotating file logger for LLM usage.
 
-Writes one line per LLM call to api/logs/llm_usage_YYYY-MM-DD.log.
-A new file is created automatically at midnight.
+Writes one line per LLM call to /var/log/aicareer/llm_usage_YYYY-MM-DD.log.
+A new file is created automatically at midnight. Kept for 90 days.
+In production this directory is a Docker named volume so logs survive restarts.
+In development it falls back to api/logs/ if /var/log/aicareer/ is not writable.
 """
 import logging
+import os
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
-_LOGS_DIR = Path(__file__).resolve().parents[3] / "logs"
-_LOGS_DIR.mkdir(exist_ok=True)
+_PROD_LOGS_DIR = Path("/var/log/aicareer")
+_DEV_LOGS_DIR = Path(__file__).resolve().parents[3] / "logs"
+_LOGS_DIR = _PROD_LOGS_DIR if os.access(_PROD_LOGS_DIR.parent, os.W_OK) else _DEV_LOGS_DIR
+_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 _file_handler = TimedRotatingFileHandler(
     filename=str(_LOGS_DIR / "llm_usage.log"),
