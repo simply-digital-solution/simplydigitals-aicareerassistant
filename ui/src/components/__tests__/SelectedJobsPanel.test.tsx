@@ -189,7 +189,7 @@ describe('SelectedJobsPanel — mark as applied', () => {
     const btn = await screen.findByRole('button', { name: /mark job as applied/i })
     fireEvent.click(btn)
     expect(await screen.findByRole('button', { name: /confirm mark as applied/i })).toBeInTheDocument()
-    expect(screen.getByText('Applied?')).toBeInTheDocument()
+    expect(screen.getByText(/resume uploaded to the listing/i)).toBeInTheDocument()
   })
 
   it('calls applicationsApi.move with "applied" on confirm', async () => {
@@ -211,8 +211,8 @@ describe('SelectedJobsPanel — mark as applied', () => {
     const btn = await screen.findByRole('button', { name: /mark job as applied/i })
     fireEvent.click(btn)
     await screen.findByRole('button', { name: /confirm mark as applied/i })
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
     expect(await screen.findByRole('button', { name: /mark job as applied/i })).toBeInTheDocument()
-    expect(screen.queryByText('Applied?')).not.toBeInTheDocument()
+    expect(screen.queryByText(/resume uploaded/i)).not.toBeInTheDocument()
   })
 })

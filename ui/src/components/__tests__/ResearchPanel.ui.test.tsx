@@ -122,6 +122,6 @@ describe('Latest Jobs section', () => {
 
   it('shows empty state when no jobs returned', async () => {
     wrap()
-    expect(await screen.findByText(/no jobs yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no jobs matching your industry/i)).toBeInTheDocument()
   })
 })

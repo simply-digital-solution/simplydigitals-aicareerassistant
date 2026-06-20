@@ -126,13 +126,15 @@ describe('LatestJobs — empty state', () => {
   it('shows empty-state message when no jobs returned', async () => {
     setupApiMocks([])
     wrap()
-    expect(await screen.findByText(/no jobs yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no jobs matching your industry/i)).toBeInTheDocument()
   })
 
   it('suggests clicking Refresh in empty state', async () => {
     setupApiMocks([])
     wrap()
-    expect(await screen.findByText(/07:00 daily run/i)).toBeInTheDocument()
+    // Text contains <strong>↻ Refresh</strong> so regex won't span elements — check the container
+    const el = await screen.findByText(/scored and classified automatically/i)
+    expect(el).toBeInTheDocument()
   })
 })
 
@@ -195,7 +197,8 @@ describe('LatestJobs — score error state', () => {
   it('shows error label when score_error is set', async () => {
     setupApiMocks([makeJob({ scored: false, fit_score: null, score_error: 'RuntimeError: connection refused' })])
     wrap()
-    expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
+    // score_error with no fit_score → "⚠ Not yet scored" badge + "⚠ Scoring failed" footer
+    expect(await screen.findByText(/not yet scored/i)).toBeInTheDocument()
   })
 
   it('shows re-score button when score_error is set', async () => {
@@ -207,14 +210,15 @@ describe('LatestJobs — score error state', () => {
   it('does not show "Scoring…" when score_error is set', async () => {
     setupApiMocks([makeJob({ scored: false, fit_score: null, score_error: 'parse failed' })])
     wrap()
-    await screen.findByText(/something went wrong/i)
+    await screen.findByText(/not yet scored/i)
     expect(screen.queryByText(/scoring…/i)).not.toBeInTheDocument()
   })
 
   it('shows error label for legacy scored=1 fit_score=null score_error=null state', async () => {
+    // scored=true but fit_score=null → treated as error: "⚠ Not yet scored"
     setupApiMocks([makeJob({ scored: true, fit_score: null, score_error: null })])
     wrap()
-    expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument()
+    expect(await screen.findByText(/not yet scored/i)).toBeInTheDocument()
   })
 
   it('shows re-score button for legacy scored=1 fit_score=null state', async () => {
@@ -226,7 +230,7 @@ describe('LatestJobs — score error state', () => {
   it('does not show "Scoring…" for legacy scored=1 fit_score=null state', async () => {
     setupApiMocks([makeJob({ scored: true, fit_score: null, score_error: null })])
     wrap()
-    await screen.findByText(/something went wrong/i)
+    await screen.findByText(/not yet scored/i)
     expect(screen.queryByText(/scoring…/i)).not.toBeInTheDocument()
   })
 })
@@ -475,19 +479,23 @@ describe('LatestJobs — filters', () => {
 
   it('renders score filter button group', async () => {
     setupApiMocks([makeJob()])
-    wrap()
+    const { container } = wrap()
     const group = await screen.findByRole('group', { name: /filter by fit score/i })
     expect(group).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /all/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /50%\+/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /80%\+/i })).toBeInTheDocument()
+    // query within the group to avoid matching "↻ Rescore All"
+    const buttons = Array.from(group.querySelectorAll('button'))
+    expect(buttons.some(b => b.textContent === 'All')).toBe(true)
+    expect(buttons.some(b => b.textContent === '50%+')).toBe(true)
+    expect(buttons.some(b => b.textContent === '80%+')).toBe(true)
   })
 
   it('"All" button is active by default', async () => {
     setupApiMocks([makeJob()])
     wrap()
-    await screen.findByRole('group', { name: /filter by fit score/i })
-    expect(screen.getByRole('button', { name: /all/i })).toHaveAttribute('aria-pressed', 'true')
+    const group = await screen.findByRole('group', { name: /filter by fit score/i })
+    const allBtn = Array.from(group.querySelectorAll('button')).find(b => b.textContent === 'All')
+    expect(allBtn).toBeTruthy()
+    expect(allBtn).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('passes min_score param to API when score filter is set', async () => {
@@ -522,7 +530,8 @@ describe('LatestJobs — filters', () => {
   it('shows empty state when server returns no jobs for filter', async () => {
     setupApiMocks([], 0)
     wrap()
-    expect(await screen.findByText(/no jobs yet/i)).toBeInTheDocument()
+    // no active filter → shows "no jobs matching your industry" empty state
+    expect(await screen.findByText(/no jobs matching your industry/i)).toBeInTheDocument()
   })
 })
 

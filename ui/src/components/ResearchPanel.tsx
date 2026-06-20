@@ -146,8 +146,8 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
         <div className="flex items-center gap-2 shrink-0">
           {!!job.scored && job.fit_score !== null
             ? <FitBadge score={job.fit_score} />
-            : !rescoring && !job.rescoring && job.score_error
-            ? <span className="text-xs text-red-400 italic" title={job.score_error}>
+            : !rescoring && !job.rescoring && (job.score_error || (!!job.scored && job.fit_score === null))
+            ? <span className="text-xs text-red-400 italic" title={job.score_error ?? undefined}>
                 ⚠ Not yet scored
               </span>
             : !rescoring && !job.rescoring
