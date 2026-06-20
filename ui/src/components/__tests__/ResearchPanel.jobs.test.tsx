@@ -53,8 +53,11 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob {
     risks:                JSON.stringify(['No cloud experience stated']),
     key_keywords:         JSON.stringify(['Python', 'Spark']),
     scoring_breakdown:    null,
+    recommendation:       null,
     score_error:          null,
     scored_at:            '2026-06-11T08:00:00Z',
+    scored_by_model:      null,
+    rescoring:            false,
     archived:             false,
     ...overrides,
   }
@@ -87,8 +90,8 @@ function wrap() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(clientModule.researchApi.archiveJob).mockResolvedValue({ data: {} } as ReturnType<typeof clientModule.researchApi.archiveJob>)
-  vi.mocked(clientModule.applicationsApi.create).mockResolvedValue({ data: {} } as ReturnType<typeof clientModule.applicationsApi.create>)
+  vi.mocked(clientModule.researchApi.archiveJob).mockResolvedValue({ data: {} } as never)
+  vi.mocked(clientModule.applicationsApi.create).mockResolvedValue({ data: {} } as never)
 })
 
 function setupApiMocks(jobs: StoredJob[] = [], total?: number) {
@@ -479,7 +482,7 @@ describe('LatestJobs — filters', () => {
 
   it('renders score filter button group', async () => {
     setupApiMocks([makeJob()])
-    const { container } = wrap()
+    wrap()
     const group = await screen.findByRole('group', { name: /filter by fit score/i })
     expect(group).toBeInTheDocument()
     // query within the group to avoid matching "↻ Rescore All"

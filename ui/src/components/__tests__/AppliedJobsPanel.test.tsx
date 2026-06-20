@@ -40,7 +40,8 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob & { application_
     reasons: JSON.stringify(['Python skills match']),
     risks: JSON.stringify(['No cloud experience']),
     key_keywords: JSON.stringify(['Python', 'Spark']),
-    scoring_breakdown: null, score_error: null, scored_at: '2026-06-11T08:00:00Z',
+    scoring_breakdown: null, recommendation: null, score_error: null,
+    scored_at: '2026-06-11T08:00:00Z', scored_by_model: null, rescoring: false,
     archived: false, application_id: 10, applied_at: '2026-06-16T10:00:00Z',
     ...overrides,
   }

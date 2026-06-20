@@ -24,9 +24,9 @@ vi.mock('../../api/client', () => ({
 
 // Mock docx so tests don't need to run the real packer
 vi.mock('docx', () => {
-  class FakeParagraph { constructor(public opts: unknown) {} }
-  class FakeTextRun { constructor(public opts: unknown) {} }
-  class FakeDocument { constructor(public opts: unknown) {} }
+  class FakeParagraph { constructor(_opts: unknown) {} }
+  class FakeTextRun { constructor(_opts: unknown) {} }
+  class FakeDocument { constructor(_opts: unknown) {} }
   const FakePacker = { toBlob: vi.fn().mockResolvedValue(new Blob(['fake-docx'])) }
   return {
     Document: FakeDocument,
@@ -114,7 +114,7 @@ beforeEach(() => {
 describe('TailoredResumePanel', () => {
   it('shows spinner while loading existing resume', async () => {
     mockResearchApi.getGeneratedResume.mockReturnValue(
-      new Promise(() => {}) as ReturnType<typeof mockResearchApi.getGeneratedResume>,
+      new Promise(() => {}) as never,
     )
     renderPanel()
     await waitFor(() => {
@@ -149,7 +149,7 @@ describe('TailoredResumePanel', () => {
   })
 
   it('shows the resume document when one already exists', async () => {
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as never)
     renderPanel()
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     fireEvent.click(screen.getByRole('button', { name: /toggle resume preview/i }))
@@ -160,7 +160,7 @@ describe('TailoredResumePanel', () => {
 
   it('calls generateResume when Generate button is clicked', async () => {
     mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
-    mockResearchApi.generateResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.generateResume>)
+    mockResearchApi.generateResume.mockResolvedValue({ data: makeResume() } as never)
 
     renderPanel(42)
     await waitFor(() => screen.getByRole('button', { name: /generate/i }))
@@ -170,7 +170,7 @@ describe('TailoredResumePanel', () => {
 
   it('renders generated resume after Generate succeeds', async () => {
     mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
-    mockResearchApi.generateResume.mockResolvedValue({ data: makeResume('Alice') } as ReturnType<typeof mockResearchApi.generateResume>)
+    mockResearchApi.generateResume.mockResolvedValue({ data: makeResume('Alice') } as never)
 
     renderPanel()
     await waitFor(() => screen.getByRole('button', { name: /generate/i }))
@@ -181,7 +181,7 @@ describe('TailoredResumePanel', () => {
   })
 
   it('shows Regenerate button when resume already exists', async () => {
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as never)
     renderPanel()
     await waitFor(() => screen.getByRole('button', { name: /regenerate/i }))
     expect(screen.getByRole('button', { name: /regenerate/i })).toBeInTheDocument()
@@ -189,21 +189,21 @@ describe('TailoredResumePanel', () => {
 
   it('Regenerate button is disabled when Drive not connected', async () => {
     mockAuthApi.googleStatus.mockResolvedValue({ data: { connected: false } } as never)
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as never)
     renderPanel()
     await waitFor(() => screen.getByRole('button', { name: /regenerate/i }))
     expect(screen.getByRole('button', { name: /regenerate/i })).toBeDisabled()
   })
 
   it('does not show Download link when no drive_file_id yet', async () => {
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as never)
     renderPanel()
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     expect(screen.queryByRole('link', { name: /download resume from google drive/i })).not.toBeInTheDocument()
   })
 
   it('renders experience bullets', async () => {
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as never)
     renderPanel()
     await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
     fireEvent.click(screen.getByRole('button', { name: /toggle resume preview/i }))
@@ -212,7 +212,7 @@ describe('TailoredResumePanel', () => {
   })
 
   it('hides Regenerate button in readOnly mode', async () => {
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as never)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
@@ -224,7 +224,7 @@ describe('TailoredResumePanel', () => {
   })
 
   it('shows Preview button in readOnly mode', async () => {
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: makeResume() } as never)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
@@ -237,7 +237,7 @@ describe('TailoredResumePanel', () => {
 
   it('shows Download link when drive_file_id exists', async () => {
     const resumeWithDrive = { ...makeResume(), drive_file_id: 'abc123', drive_link: 'https://drive.google.com/file/d/abc123/view' }
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithDrive } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithDrive } as never)
     renderPanel()
     const link = await screen.findByRole('link', { name: /download resume from google drive/i })
     expect(link).toHaveAttribute('href', 'https://drive.google.com/uc?export=download&id=abc123')
@@ -245,7 +245,7 @@ describe('TailoredResumePanel', () => {
 
   it('shows Open in Drive link when drive_link exists', async () => {
     const resumeWithDrive = { ...makeResume(), drive_file_id: 'abc123', drive_link: 'https://drive.google.com/file/d/abc123/view' }
-    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithDrive } as ReturnType<typeof mockResearchApi.getGeneratedResume>)
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeWithDrive } as never)
     renderPanel()
     await waitFor(() =>
       expect(screen.getByRole('link', { name: /open resume in google drive/i })).toBeInTheDocument(),

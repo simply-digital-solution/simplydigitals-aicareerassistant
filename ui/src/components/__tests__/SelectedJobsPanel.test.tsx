@@ -34,7 +34,8 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob & { application_
     reasons: JSON.stringify(['Python skills match']),
     risks: JSON.stringify(['No cloud experience']),
     key_keywords: JSON.stringify(['Python', 'Spark']),
-    scoring_breakdown: null, score_error: null, scored_at: '2026-06-11T08:00:00Z',
+    scoring_breakdown: null, recommendation: null, score_error: null,
+    scored_at: '2026-06-11T08:00:00Z', scored_by_model: null, rescoring: false,
     archived: false, application_id: 10,
     ...overrides,
   }
@@ -51,15 +52,15 @@ function wrap() {
 
 function setupMocks(jobs: ReturnType<typeof makeJob>[] = []) {
   vi.mocked(api.get).mockImplementation((path: string) => {
-    if (path === '/research/feedback') return Promise.resolve({ data: { feedback: [] } }) as ReturnType<typeof api.get>
-    return Promise.resolve({ data: {} }) as ReturnType<typeof api.get>
+    if (path === '/research/feedback') return Promise.resolve({ data: { feedback: [] } }) as never
+    return Promise.resolve({ data: {} }) as never
   })
-  vi.mocked(clientModule.researchApi.getSelectedJobs).mockReturnValue(makeSelectedResponse(jobs) as ReturnType<typeof clientModule.researchApi.getSelectedJobs>)
+  vi.mocked(clientModule.researchApi.getSelectedJobs).mockReturnValue(makeSelectedResponse(jobs) as never)
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(clientModule.researchApi.archiveJob).mockResolvedValue({ data: {} } as ReturnType<typeof clientModule.researchApi.archiveJob>)
+  vi.mocked(clientModule.researchApi.archiveJob).mockResolvedValue({ data: {} } as never)
   vi.mocked(clientModule.researchApi.rescoreJob).mockResolvedValue({} as never)
 })
 
@@ -106,8 +107,8 @@ describe('SelectedJobsPanel — job cards', () => {
   })
 
   it('shows loading skeletons while fetching', () => {
-    vi.mocked(clientModule.researchApi.getSelectedJobs).mockReturnValue(new Promise(() => {}) as ReturnType<typeof clientModule.researchApi.getSelectedJobs>)
-    vi.mocked(api.get).mockResolvedValue({ data: { feedback: [] } } as ReturnType<typeof api.get>)
+    vi.mocked(clientModule.researchApi.getSelectedJobs).mockReturnValue(new Promise(() => {}) as never)
+    vi.mocked(api.get).mockResolvedValue({ data: { feedback: [] } } as never)
     wrap()
     const skeletons = document.querySelectorAll('.animate-pulse')
     expect(skeletons.length).toBeGreaterThan(0)

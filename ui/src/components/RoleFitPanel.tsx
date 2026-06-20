@@ -90,15 +90,15 @@ export default function RoleFitPanel({ onSearchRole }: { onSearchRole?: (query: 
   })
 
   const saveRoleToProfile = async (title: string) => {
-    const existing: string[] = profile?.target_roles
-      ? JSON.parse(profile.target_roles).catch?.(() => []) ?? JSON.parse(profile.target_roles)
+    const existing: string[] = profile?.target_titles
+      ? JSON.parse(profile.target_titles).catch?.(() => []) ?? JSON.parse(profile.target_titles)
       : []
     if (existing.includes(title)) {
       setSavedRoles(prev => new Set(prev).add(title))
       return
     }
     const updated = [...existing, title]
-    await api.patch('/profile', { target_roles: JSON.stringify(updated) })
+    await api.patch('/profile', { target_titles: JSON.stringify(updated) })
     qc.invalidateQueries({ queryKey: ['profile'] })
     setSavedRoles(prev => new Set(prev).add(title))
   }

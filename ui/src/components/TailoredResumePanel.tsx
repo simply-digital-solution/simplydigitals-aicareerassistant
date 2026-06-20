@@ -30,8 +30,8 @@ const BODY_FONT   = 'Calibri'
 const BODY_SIZE   = 22   // 11pt in half-points
 const PAGE_WIDTH  = 9360 // usable width in twips (A4 minus 1" margins each side)
 
-function run(text: string, opts: ConstructorParameters<typeof TextRun>[0] = {}): TextRun {
-  return new TextRun({ font: BODY_FONT, size: BODY_SIZE, text, ...opts })
+function run(text: string, opts: Record<string, unknown> = {}): TextRun {
+  return new TextRun({ font: BODY_FONT, size: BODY_SIZE, text, ...opts } as ConstructorParameters<typeof TextRun>[0])
 }
 
 function sectionHeading(title: string): Paragraph {
@@ -259,7 +259,7 @@ function MarkAppliedButton({ applicationId, jobUrl }: { applicationId: number; j
   )
 }
 
-export default function TailoredResumePanel({ jobId, company, jobUrl, readOnly = false, isGenerating = false, applicationId }: TailoredResumePanelProps) {
+export default function TailoredResumePanel({ jobId, company: _company, jobUrl, readOnly = false, isGenerating = false, applicationId }: TailoredResumePanelProps) {
   const queryClient = useQueryClient()
   const [showPreview, setShowPreview] = useState(false)
   const [generateError, setGenerateError] = useState('')

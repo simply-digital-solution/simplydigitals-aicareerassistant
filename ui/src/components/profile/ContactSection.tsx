@@ -23,7 +23,6 @@ export default function ContactSection({
   const initial = splitPhone(data.phone_number)
   const [countryCode, setCountryCode] = useState(initial.code)
   const [phoneNumber, setPhoneNumber] = useState(initial.number)
-  const [email, setEmail] = useState(data.linkedin_url ?? '')  // email stored separately on User — show read-only from auth
   const [saving, setSaving] = useState(false)
 
   const combined = countryCode && phoneNumber ? `${countryCode} ${phoneNumber}` : phoneNumber || ''
