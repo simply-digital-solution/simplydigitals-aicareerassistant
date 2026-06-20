@@ -267,15 +267,16 @@ jobs:
 
       - name: Authenticate Docker with ECR
         run: |
+          ECR_REGISTRY="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
-            docker login --username AWS --password-stdin ${{ needs.build.outputs.registry }}
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
       - name: Pull and deploy containers
         run: |
-          ECR_IMAGE=${{ needs.build.outputs.image }}
-          docker pull $ECR_IMAGE
+          ECR_IMAGE="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}"
+          docker pull "$ECR_IMAGE"
           cd /home/ubuntu/app
-          ECR_IMAGE=$ECR_IMAGE docker compose -f docker-compose.prod.yml up -d \
+          ECR_IMAGE="$ECR_IMAGE" docker compose -f docker-compose.prod.yml up -d \
             --no-build \
             --remove-orphans
 
@@ -307,6 +308,6 @@ jobs:
         run: |
           echo "=================================="
           echo " Version : ${{ needs.version.outputs.version }}"
-          echo " Image   : ${{ needs.build.outputs.image }}"
+          echo " Image   : ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}"
           echo " Region  : ${{ secrets.AWS_REGION }}"
           echo "=================================="
