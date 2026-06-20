@@ -165,9 +165,10 @@ jobs:
       needs.ui.result != 'failure' &&
       (needs.api.result == 'success' || needs.ui.result == 'success')
     uses: ./.github/workflows/post-deploy-tests.yml
+    with:
+      prod_ui_url: ${{ vars.PROD_UI_URL || 'https://aicareerassistant.simplydigitals.com.sg' }}
     secrets:
       PROD_API_URL: ${{ secrets.PROD_API_URL }}
-      PROD_UI_URL:  ${{ secrets.PROD_UI_URL }}
 
   # ── PR Quality Gate Summary ──────────────────────────────────────────────
   summary:

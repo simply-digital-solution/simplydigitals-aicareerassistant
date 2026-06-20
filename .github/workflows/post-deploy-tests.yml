@@ -2,6 +2,11 @@ name: Post-Deploy Tests
 
 on:
   workflow_call:
+    inputs:
+      prod_ui_url:
+        required: false
+        type: string
+        default: ''
     secrets:
       PROD_API_URL: { required: true }
       PROD_UI_URL:  { required: false }
@@ -53,11 +58,11 @@ jobs:
     name: UI Reachability
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: secrets.PROD_UI_URL != ''
+    if: inputs.prod_ui_url != ''
     steps:
       - name: Check CloudFront / S3 serves the SPA
         run: |
-          URL="${{ secrets.PROD_UI_URL }}"
+          URL="${{ inputs.prod_ui_url }}"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
           echo "GET $URL → $STATUS"
           [ "$STATUS" = "200" ] || { echo "❌ UI returned $STATUS"; exit 1; }
@@ -65,7 +70,7 @@ jobs:
 
       - name: Check SPA 404 → index.html fallback
         run: |
-          URL="${{ secrets.PROD_UI_URL }}/some-deep-route"
+          URL="${{ inputs.prod_ui_url }}/some-deep-route"
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
           echo "GET $URL → $STATUS"
           [ "$STATUS" = "200" ] || { echo "❌ SPA fallback returned $STATUS (expected 200)"; exit 1; }
