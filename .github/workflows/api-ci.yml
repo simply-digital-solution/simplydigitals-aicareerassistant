@@ -262,8 +262,8 @@ jobs:
 
       - name: Copy compose and nginx config
         run: |
-          cp docker-compose.prod.yml /home/ubuntu/app/
-          cp -r nginx/ /home/ubuntu/app/
+          cp $GITHUB_WORKSPACE/docker-compose.prod.yml /home/ubuntu/app/
+          cp -r $GITHUB_WORKSPACE/nginx/ /home/ubuntu/app/
 
       - name: Authenticate Docker with ECR
         run: |
