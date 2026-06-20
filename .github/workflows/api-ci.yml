@@ -21,9 +21,6 @@ on:
       AWS_ACCOUNT_ID:        { required: false }
       AWS_REGION:            { required: false }
       ECR_REPOSITORY:        { required: false }
-      EC2_HOST:              { required: false }
-      EC2_SSH_KEY:           { required: false }
-      EC2_USER:              { required: false }
       DATABASE_URL:          { required: false }
       JWT_SECRET_KEY:        { required: false }
       GEMINI_API_KEY:        { required: false }
@@ -31,7 +28,6 @@ on:
       GOOGLE_CLIENT_ID:      { required: false }
       GOOGLE_CLIENT_SECRET:  { required: false }
       PROD_API_URL:          { required: false }
-      EC2_SECURITY_GROUP_ID: { required: false }
 
 permissions:
   contents: read
@@ -192,26 +188,17 @@ jobs:
           echo "is_release=$IS_RELEASE" >> $GITHUB_OUTPUT
           echo "Version: $VERSION (release=$IS_RELEASE)"
 
-  # ── 5. BUILD + DEPLOY — merge to main ────────────────────────────────────
-  deploy:
-    name: Build & Deploy to EC2
+  # ── 5. BUILD — merge to main ─────────────────────────────────────────────
+  build:
+    name: Build & Push to ECR
     runs-on: ubuntu-latest
     needs: [version]
     if: inputs.run_deploy
-    environment:
-      name: production
+    outputs:
+      registry: ${{ steps.ecr.outputs.registry }}
+      image:    ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Detect migration changes
-        id: migration_check
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            migrations:
-              - 'api/migrations/versions/**'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -238,102 +225,66 @@ jobs:
           build-args: |
             APP_VERSION=${{ needs.version.outputs.version }}
 
-      - name: Open SSH for GitHub Actions
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+  # ── 6. DEPLOY — runs directly on EC2 via self-hosted runner ──────────────
+  deploy:
+    name: Deploy to EC2
+    runs-on: [self-hosted, ec2, production]
+    needs: [version, build]
+    if: inputs.run_deploy
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect migration changes
+        id: migration_check
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            migrations:
+              - 'api/migrations/versions/**'
+
+      - name: Write .env file
         run: |
-          IP_PERMS=$(curl -s https://api.github.com/meta | jq -c '
-            [.actions[] | {"CidrIp": .}] |
-            [{"IpProtocol":"tcp","FromPort":22,"ToPort":22,"IpRanges":.}]
-          ')
-          aws ec2 authorize-security-group-ingress \
-            --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
-            --ip-permissions "$IP_PERMS" 2>/dev/null || true
-          echo "✅ SSH open for GitHub Actions IP ranges"
+          mkdir -p /home/ubuntu/app
+          cat > /home/ubuntu/app/.env << 'ENVEOF'
+          APP_ENV=production
+          LOG_LEVEL=INFO
+          ENABLE_SCHEDULER=false
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          HCAPTCHA_SECRET_KEY=${{ secrets.HCAPTCHA_SECRET_KEY }}
+          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI=${{ secrets.PROD_API_URL }}/api/v1/auth/google/callback
+          ENVEOF
 
-      - name: Copy compose and nginx config to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.prod.yml,nginx/"
-          target: /home/ubuntu/app
+      - name: Copy compose and nginx config
+        run: |
+          cp docker-compose.prod.yml /home/ubuntu/app/
+          cp -r nginx/ /home/ubuntu/app/
 
-      - name: Write .env file to EC2
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            mkdir -p /home/ubuntu/app
-            cat > /home/ubuntu/app/.env << 'ENVEOF'
-            APP_ENV=production
-            LOG_LEVEL=INFO
-            ENABLE_SCHEDULER=false
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            HCAPTCHA_SECRET_KEY=${{ secrets.HCAPTCHA_SECRET_KEY }}
-            GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
-            GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
-            GOOGLE_REDIRECT_URI=${{ secrets.PROD_API_URL }}/api/v1/auth/google/callback
-            ENVEOF
+      - name: Authenticate Docker with ECR
+        run: |
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+            docker login --username AWS --password-stdin ${{ needs.build.outputs.registry }}
 
-      - name: Deploy containers on EC2
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          envs: ECR_IMAGE
-          script: |
-            ECR_IMAGE=${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
-
-            # Authenticate Docker with ECR
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
-              docker login --username AWS --password-stdin \
-              ${{ steps.ecr.outputs.registry }}
-
-            # Pull new image
-            docker pull $ECR_IMAGE
-
-            # Update compose to use the new image and restart
-            cd /home/ubuntu/app
-            ECR_IMAGE=$ECR_IMAGE docker compose -f docker-compose.prod.yml up -d \
-              --no-build \
-              --remove-orphans
+      - name: Pull and deploy containers
+        run: |
+          ECR_IMAGE=${{ needs.build.outputs.image }}
+          docker pull $ECR_IMAGE
+          cd /home/ubuntu/app
+          ECR_IMAGE=$ECR_IMAGE docker compose -f docker-compose.prod.yml up -d \
+            --no-build \
+            --remove-orphans
 
       - name: Run database migrations
         if: steps.migration_check.outputs.migrations == 'true'
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /home/ubuntu/app
-            docker compose -f docker-compose.prod.yml run --rm migrate
-            echo "Migrations applied successfully"
-
-      - name: Close SSH for GitHub Actions
-        if: always()
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          IP_PERMS=$(curl -s https://api.github.com/meta | jq -c '
-            [.actions[] | {"CidrIp": .}] |
-            [{"IpProtocol":"tcp","FromPort":22,"ToPort":22,"IpRanges":.}]
-          ')
-          aws ec2 revoke-security-group-ingress \
-            --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
-            --ip-permissions "$IP_PERMS" 2>/dev/null || true
-          echo "✅ SSH closed for GitHub Actions IP ranges"
+          cd /home/ubuntu/app
+          docker compose -f docker-compose.prod.yml run --rm migrate
+          echo "Migrations applied successfully"
 
       - name: Health check
         run: |
@@ -356,7 +307,6 @@ jobs:
         run: |
           echo "=================================="
           echo " Version : ${{ needs.version.outputs.version }}"
-          echo " Image   : ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}"
-          echo " Host    : ${{ secrets.EC2_HOST }}"
+          echo " Image   : ${{ needs.build.outputs.image }}"
           echo " Region  : ${{ secrets.AWS_REGION }}"
           echo "=================================="

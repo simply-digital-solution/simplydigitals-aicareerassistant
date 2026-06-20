@@ -65,10 +65,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_ACCOUNT_ID:        ${{ secrets.AWS_ACCOUNT_ID }}
           ECR_REPOSITORY:        ${{ secrets.ECR_REPOSITORY }}
-          EC2_HOST:              ${{ secrets.EC2_HOST }}
-          EC2_SSH_KEY:           ${{ secrets.EC2_SSH_KEY }}
-          EC2_USER:              ${{ secrets.EC2_USER }}
-          EC2_SECURITY_GROUP_ID: ${{ secrets.EC2_SECURITY_GROUP_ID }}
           DATABASE_URL:          ${{ secrets.DATABASE_URL }}
           JWT_SECRET_KEY:        ${{ secrets.JWT_SECRET_KEY }}
           GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
@@ -78,10 +74,6 @@ jobs:
           [ -z "$AWS_SECRET_ACCESS_KEY" ] && missing+=("AWS_SECRET_ACCESS_KEY")
           [ -z "$AWS_ACCOUNT_ID" ]        && missing+=("AWS_ACCOUNT_ID")
           [ -z "$ECR_REPOSITORY" ]        && missing+=("ECR_REPOSITORY")
-          [ -z "$EC2_HOST" ]              && missing+=("EC2_HOST")
-          [ -z "$EC2_SSH_KEY" ]           && missing+=("EC2_SSH_KEY")
-          [ -z "$EC2_USER" ]              && missing+=("EC2_USER")
-          [ -z "$EC2_SECURITY_GROUP_ID" ] && missing+=("EC2_SECURITY_GROUP_ID")
           [ -z "$DATABASE_URL" ]          && missing+=("DATABASE_URL")
           [ -z "$JWT_SECRET_KEY" ]        && missing+=("JWT_SECRET_KEY")
           [ -z "$GEMINI_API_KEY" ]        && missing+=("GEMINI_API_KEY")
@@ -125,9 +117,6 @@ jobs:
       AWS_ACCOUNT_ID:        ${{ secrets.AWS_ACCOUNT_ID }}
       AWS_REGION:            ${{ secrets.AWS_REGION }}
       ECR_REPOSITORY:        ${{ secrets.ECR_REPOSITORY }}
-      EC2_HOST:              ${{ secrets.EC2_HOST }}
-      EC2_SSH_KEY:           ${{ secrets.EC2_SSH_KEY }}
-      EC2_USER:              ${{ secrets.EC2_USER }}
       DATABASE_URL:          ${{ secrets.DATABASE_URL }}
       JWT_SECRET_KEY:        ${{ secrets.JWT_SECRET_KEY }}
       GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
@@ -135,7 +124,6 @@ jobs:
       GOOGLE_CLIENT_ID:      ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET:  ${{ secrets.GOOGLE_CLIENT_SECRET }}
       PROD_API_URL:          ${{ secrets.PROD_API_URL }}
-      EC2_SECURITY_GROUP_ID: ${{ secrets.EC2_SECURITY_GROUP_ID }}
 
   # ── UI Pipeline ──────────────────────────────────────────────────────────
   ui:
