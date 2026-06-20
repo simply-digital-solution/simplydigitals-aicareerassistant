@@ -48,7 +48,8 @@ const CHART_MARGIN = { top: 4, right: 4, left: -20, bottom: 0 }
 // ---------------------------------------------------------------------------
 
 function SingleChart({ data, color, dataKey, title, subtitle, total }: {
-  data: Record<string, unknown>[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any[]
   color: string
   dataKey: string
   title: string
@@ -99,7 +100,8 @@ function SingleChart({ data, color, dataKey, title, subtitle, total }: {
 // ---------------------------------------------------------------------------
 
 function DualChart({ data, title, subtitle, keys, total, totalColor }: {
-  data: Record<string, unknown>[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any[]
   title: string
   subtitle: string
   keys: { key: string; color: string; label: string }[]
@@ -136,7 +138,7 @@ function DualChart({ data, title, subtitle, keys, total, totalColor }: {
             tickLine={false}
           />
           <Tooltip
-            formatter={(v: unknown, name: unknown) => [Number(v).toLocaleString(), name]}
+            formatter={(v, name) => [Number(v).toLocaleString(), name]}
             labelFormatter={(l) => l}
             contentStyle={{ fontSize: 12, borderRadius: 6 }}
           />
@@ -391,9 +393,9 @@ function AdminDashboard() {
             title="5 · Jobs scored per day"
             subtitle="From daily scoring usage"
             color="#7c3aed"
-            data={scoring as Record<string, unknown>[]}
+            data={scoring}
             dataKey="jobs_scored"
-            total={(scoring as Record<string, unknown>[]).reduce((s, d) => s + (Number(d.jobs_scored) || 0), 0)}
+            total={scoring.reduce((s, d) => s + (Number(d.jobs_scored) || 0), 0)}
           />
         </div>
 
