@@ -498,9 +498,21 @@ _client: Optional[BaseLLMClient] = None
 
 
 def get_llm_client() -> BaseLLMClient:
-    """Returns GeminiClient if GEMINI_API_KEY is set, otherwise OllamaClient."""
+    """
+    Returns GeminiClient if GEMINI_API_KEY is set.
+    Falls back to OllamaClient in development only.
+    Raises RuntimeError in production if GEMINI_API_KEY is missing.
+    """
     global _client
     if _client is None:
         settings = get_settings()
-        _client = GeminiClient() if settings.gemini_api_key else OllamaClient()
+        if settings.gemini_api_key:
+            _client = GeminiClient()
+        elif settings.app_env == "production":
+            raise RuntimeError(
+                "GEMINI_API_KEY is required in production. "
+                "Set it as a GitHub Secret and ensure the CI pipeline writes it to .env."
+            )
+        else:
+            _client = OllamaClient()
     return _client

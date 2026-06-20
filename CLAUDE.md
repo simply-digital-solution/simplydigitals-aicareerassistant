@@ -40,7 +40,11 @@ Copy `.env.example` to `api/.env`. Backend reads config from `api/.env` via `pyd
 
 ### LLM backend
 
-`get_llm_client()` returns `GeminiClient` if `GEMINI_API_KEY` is set in `.env`, otherwise `OllamaClient`. This means the active LLM switches silently based on the env var — always check `.env` before assuming which backend is in use.
+`get_llm_client()` returns `GeminiClient` if `GEMINI_API_KEY` is set in `.env`.
+- **Production** (`APP_ENV=production`): `GEMINI_API_KEY` is required — raises `RuntimeError` at startup if missing. No Ollama fallback.
+- **Development**: falls back to `OllamaClient` if `GEMINI_API_KEY` is empty. Requires Ollama running locally.
+
+Always check `.env` before assuming which backend is in use.
 
 ### Authentication
 

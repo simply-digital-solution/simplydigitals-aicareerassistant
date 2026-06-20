@@ -25,16 +25,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 10080  # 7 days
 
-    # Claude
-    anthropic_api_key: str = ""
-
-    # Ollama model (local, no API cost)
-    coordinator_model: str = "llama3.1:8b"
-    specialist_model: str = "llama3.1:8b"
-
-    # Gemini
+    # Gemini — required in production, optional in dev (falls back to Ollama)
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash-lite"
+
+    # Ollama — local dev only, not used in production
+    specialist_model: str = "deepseek-r1:7b"
 
     # Agent limits
     max_tool_iterations: int = 25

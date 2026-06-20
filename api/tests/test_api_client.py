@@ -2,6 +2,7 @@
 Unit tests for BaseLLMClient.run_agent() reflexion behaviour:
   - max_self_corrections override (0 = no retries)
   - asyncio.sleep(5) called between reflexion retries
+  - get_llm_client() production guard
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
@@ -141,5 +142,61 @@ async def test_no_sleep_when_parse_succeeds_first_try():
 
     assert result.value == "ok"
     mock_sleep.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# get_llm_client() production guard
+# ---------------------------------------------------------------------------
+
+def test_get_llm_client_raises_in_production_without_gemini_key():
+    """Missing GEMINI_API_KEY in production must raise RuntimeError at startup."""
+    import app.shared.api_client as mod
+    original = mod._client
+    mod._client = None
+    try:
+        mock_settings = MagicMock()
+        mock_settings.gemini_api_key = ""
+        mock_settings.app_env = "production"
+        with patch("app.shared.api_client.get_settings", return_value=mock_settings):
+            with pytest.raises(RuntimeError, match="GEMINI_API_KEY is required in production"):
+                mod.get_llm_client()
+    finally:
+        mod._client = original
+
+
+def test_get_llm_client_returns_ollama_in_dev_without_gemini_key():
+    """Missing GEMINI_API_KEY in development falls back to OllamaClient silently."""
+    import app.shared.api_client as mod
+    original = mod._client
+    mod._client = None
+    try:
+        mock_settings = MagicMock()
+        mock_settings.gemini_api_key = ""
+        mock_settings.app_env = "development"
+        mock_settings.specialist_model = "deepseek-r1:7b"
+        mock_settings.max_self_corrections = 3
+        with patch("app.shared.api_client.get_settings", return_value=mock_settings):
+            client = mod.get_llm_client()
+            assert isinstance(client, mod.OllamaClient)
+    finally:
+        mod._client = original
+
+
+def test_get_llm_client_returns_gemini_when_key_set():
+    """GEMINI_API_KEY set → GeminiClient regardless of APP_ENV."""
+    import app.shared.api_client as mod
+    original = mod._client
+    mod._client = None
+    try:
+        mock_settings = MagicMock()
+        mock_settings.gemini_api_key = "AIza-fake-key"
+        mock_settings.app_env = "production"
+        mock_settings.gemini_model = "gemini-2.5-flash-lite"
+        mock_settings.max_self_corrections = 3
+        with patch("app.shared.api_client.get_settings", return_value=mock_settings):
+            client = mod.get_llm_client()
+            assert isinstance(client, mod.GeminiClient)
+    finally:
+        mod._client = original
 
 
