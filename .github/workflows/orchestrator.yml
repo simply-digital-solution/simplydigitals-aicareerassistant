@@ -91,13 +91,13 @@ jobs:
 
       - name: Check UI secrets
         env:
-          S3_UI_BUCKET:               ${{ secrets.S3_UI_BUCKET }}
+          S3_BUCKET:                  ${{ secrets.S3_BUCKET }}
           CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
           PROD_API_URL:               ${{ secrets.PROD_API_URL }}
           VITE_HCAPTCHA_SITE_KEY:     ${{ secrets.VITE_HCAPTCHA_SITE_KEY }}
         run: |
           missing=()
-          [ -z "$S3_UI_BUCKET" ]           && missing+=("S3_UI_BUCKET")
+          [ -z "$S3_BUCKET" ]              && missing+=("S3_BUCKET")
           [ -z "$PROD_API_URL" ]           && missing+=("PROD_API_URL")
           [ -z "$VITE_HCAPTCHA_SITE_KEY" ] && missing+=("VITE_HCAPTCHA_SITE_KEY")
           if [ ${#missing[@]} -gt 0 ]; then
@@ -148,7 +148,7 @@ jobs:
       AWS_ACCESS_KEY_ID:          ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY:      ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION:                 ${{ secrets.AWS_REGION }}
-      S3_UI_BUCKET:               ${{ secrets.S3_UI_BUCKET }}
+      S3_BUCKET:                  ${{ secrets.S3_BUCKET }}
       CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
       PROD_API_URL:               ${{ secrets.PROD_API_URL }}
       VITE_HCAPTCHA_SITE_KEY:     ${{ secrets.VITE_HCAPTCHA_SITE_KEY }}
