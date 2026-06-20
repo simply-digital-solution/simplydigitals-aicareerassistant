@@ -13,6 +13,7 @@ All fields default to empty list / empty string if not found — never raises.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 
@@ -128,10 +129,13 @@ def _parse_response(raw: str) -> dict:
     return result
 
 
+LLM_EXTRACTION_TIMEOUT = 30.0
+
+
 async def extract_resume_details(resume_text: str, api_client) -> dict:
     """
-    Call LLM to extract all 6 categories from the resume.
-    Returns _empty_result() structure on any failure — never raises.
+    Call LLM to extract all fields from the resume.
+    Times out after 30s and returns _empty_result() on any failure — never raises.
     """
     snippet = resume_text[:12000]
     messages = [
@@ -139,7 +143,10 @@ async def extract_resume_details(resume_text: str, api_client) -> dict:
         {"role": "user", "content": _USER_PROMPT.format(resume_text=snippet)},
     ]
     try:
-        raw, _ = await api_client._call(messages)
+        raw, _ = await asyncio.wait_for(
+            api_client._call(messages),
+            timeout=LLM_EXTRACTION_TIMEOUT,
+        )
         return _parse_response(raw)
     except Exception:
         return _empty_result()

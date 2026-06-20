@@ -146,6 +146,31 @@ async def test_extract_resume_details_returns_empty_on_llm_error():
     assert result["contact"]["phone"] == ""
 
 
+@pytest.mark.asyncio
+async def test_extract_resume_details_returns_empty_on_timeout():
+    import asyncio
+    from app.shared.resume_detail_extractor import extract_resume_details
+
+    async def _slow(*args, **kwargs):
+        await asyncio.sleep(60)
+        return "", {}
+
+    client = MagicMock()
+    client._call = _slow
+
+    # Patch timeout to 0.05s so test completes fast
+    import app.shared.resume_detail_extractor as mod
+    original = mod.LLM_EXTRACTION_TIMEOUT
+    mod.LLM_EXTRACTION_TIMEOUT = 0.05
+    try:
+        result = await extract_resume_details("Resume text", client)
+    finally:
+        mod.LLM_EXTRACTION_TIMEOUT = original
+
+    assert result["skills"] == []
+    assert result["years_experience"] is None
+
+
 # ---------------------------------------------------------------------------
 # Additive merge logic tests (test via router helper functions indirectly
 # by importing the merge logic extracted into testable functions)

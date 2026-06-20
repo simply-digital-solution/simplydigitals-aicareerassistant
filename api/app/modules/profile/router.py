@@ -3,12 +3,12 @@ import json
 import pdfplumber
 import docx
 
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.database import get_db
+from app.shared.database import get_db, get_db_context
 from app.modules.auth.router import get_current_user
 from app.shared.models import Profile
 from app.shared.resume_detail_extractor import extract_resume_details, deduplicate_certifications
@@ -307,9 +307,37 @@ async def get_profile(
     return profile
 
 
+async def _background_extract(user_id: int) -> None:
+    """Run LLM extraction on saved resume_text and merge results — called as a background task."""
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        async with get_db_context() as db:
+            result = await db.execute(select(Profile).where(Profile.user_id == user_id))
+            profile = result.scalar_one_or_none()
+            if not profile or not profile.resume_text:
+                return
+            client = get_llm_client()
+            extracted = await extract_resume_details(profile.resume_text, client)
+            if extracted["years_experience"] is not None:
+                profile.years_experience = extracted["years_experience"]
+            if extracted["seniority_level"]:
+                profile.seniority_level = extracted["seniority_level"]
+            if extracted["target_industries"]:
+                profile.target_industries = _dedupe_json_array(json.dumps(extracted["target_industries"]))
+            if extracted["skills"]:
+                existing_skills = json.loads(profile.skills) if profile.skills else []
+                if not existing_skills:
+                    profile.skills = _dedupe_json_array(json.dumps(extracted["skills"]))
+            await db.commit()
+    except Exception:
+        _log.warning("Background LLM extraction failed for user %s", user_id, exc_info=True)
+
+
 @router.patch("", response_model=ProfileResponse)
 async def update_profile(
     body: ProfileUpdate,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -324,22 +352,13 @@ async def update_profile(
     for field, value in updates.items():
         setattr(profile, field, value)
 
-    if 'resume_text' in updates and updates['resume_text']:
-        client = get_llm_client()
-        extracted = await extract_resume_details(updates['resume_text'], client)
-        if extracted["years_experience"] is not None:
-            profile.years_experience = extracted["years_experience"]
-        if extracted["seniority_level"]:
-            profile.seniority_level = extracted["seniority_level"]
-        if extracted["target_industries"]:
-            profile.target_industries = _dedupe_json_array(json.dumps(extracted["target_industries"]))
-        if extracted["skills"]:
-            existing_skills = json.loads(profile.skills) if profile.skills else []
-            if not existing_skills:
-                profile.skills = _dedupe_json_array(json.dumps(extracted["skills"]))
-
     await db.commit()
     await db.refresh(profile)
+
+    # Fire LLM extraction after response is sent — doesn't block the user
+    if 'resume_text' in updates and updates['resume_text']:
+        background_tasks.add_task(_background_extract, current_user.id)
+
     return profile
 
 
