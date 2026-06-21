@@ -230,6 +230,11 @@ jobs:
     name: Deploy to EC2
     runs-on: [self-hosted, ec2, production]
     needs: [version, build]
+    env:
+      DATABASE_URL: ""
+      JWT_SECRET_KEY: ""
+      APP_ENV: ""
+      ENABLE_SCHEDULER: ""
     if: inputs.run_deploy
     environment:
       name: production
