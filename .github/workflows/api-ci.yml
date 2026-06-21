@@ -278,13 +278,35 @@ jobs:
             docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
       - name: Pull and deploy containers
+        timeout-minutes: 10
         run: |
           cd /home/ubuntu/app
           source .env
+
+          echo "▶ Pulling image: $ECR_IMAGE"
           docker pull "$ECR_IMAGE"
+
+          echo "▶ Starting containers"
           docker compose -f docker-compose.prod.yml up -d \
             --no-build \
             --remove-orphans
+
+          echo "▶ Waiting for api container to be healthy (max 60s)"
+          for i in $(seq 1 12); do
+            STATUS=$(docker inspect --format='{{.State.Status}}' app-api-1 2>/dev/null || echo "missing")
+            RESTARTING=$(docker inspect --format='{{.State.Restarting}}' app-api-1 2>/dev/null || echo "false")
+            echo "  [$i/12] api status=$STATUS restarting=$RESTARTING"
+            if [ "$STATUS" = "running" ] && [ "$RESTARTING" = "false" ]; then
+              echo "✅ api container is running"
+              break
+            fi
+            if [ "$RESTARTING" = "true" ] && [ "$i" -ge 3 ]; then
+              echo "❌ api container is crash-looping — showing logs:"
+              docker logs app-api-1 --tail=40
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: Run database migrations
         if: steps.migration_check.outputs.migrations == 'true'
