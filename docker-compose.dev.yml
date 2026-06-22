@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: aicareer-pg
+    environment:
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: aicareer
+      POSTGRES_USER: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - aicareer-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  aicareer-pgdata:
