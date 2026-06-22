@@ -276,6 +276,39 @@ jobs:
               --check-config
           echo "✅ gunicorn config valid"
 
+      - name: Start test Postgres
+        run: |
+          docker run -d --name smoke-pg \
+            -e POSTGRES_PASSWORD=smoketest \
+            -e POSTGRES_DB=smokedb \
+            -e POSTGRES_USER=smokeuser \
+            -p 5432:5432 \
+            postgres:15-alpine
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in $(seq 1 20); do
+            docker exec smoke-pg pg_isready -U smokeuser && break
+            echo "  [$i/20] waiting for postgres..."
+            sleep 2
+          done
+          docker exec smoke-pg pg_isready -U smokeuser || (echo "❌ Postgres never became ready" && exit 1)
+
+      - name: Run migrations against test Postgres
+        run: |
+          docker run --rm \
+            --network host \
+            -e APP_ENV=testing \
+            -e DATABASE_URL="postgresql+asyncpg://smokeuser:smoketest@localhost:5432/smokedb" \
+            -e JWT_SECRET_KEY="smoke-test-key-at-least-32-chars!!" \
+            "$ECR_IMAGE" \
+            python -m alembic upgrade head
+          echo "✅ All migrations applied cleanly"
+
+      - name: Stop test Postgres
+        if: always()
+        run: docker rm -f smoke-pg || true
+
   # ── 7. DEPLOY — runs directly on EC2 via self-hosted runner ──────────────
   deploy:
     name: Deploy to EC2
