@@ -292,6 +292,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Pre-deploy cleanup
+        run: |
+          echo "▶ Removing stopped containers"
+          docker container prune -f
+
+          echo "▶ Removing dangling images"
+          docker image prune -f
+
+          echo "▶ Removing ECR images older than 3 tags (keep latest 3)"
+          docker images --format '{{.Repository}}:{{.Tag}} {{.CreatedAt}}' | \
+            grep "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr" | \
+            sort -k2 -r | \
+            tail -n +4 | \
+            awk '{print $1}' | \
+            xargs -r docker rmi || true
+
+          echo "▶ Purging runner diagnostic logs older than 3 days"
+          find /home/ubuntu/actions-runner/_diag -name "*.log" -mtime +3 -delete || true
+
+          df -h / | tail -1 | awk '{print "▶ Disk usage: " $3 " used, " $4 " free (" $5 ")"}'
+
       - name: Validate required secrets
         run: |
           MISSING=""
