@@ -39,11 +39,9 @@ def upgrade() -> None:
         sa.Column('scored_at', sa.DateTime(timezone=True), nullable=True),
         sa.UniqueConstraint('user_id', 'mcf_uuid', name='uq_job_postings_user_uuid'),
     )
-    op.create_index('ix_job_postings_user_id', 'job_postings', ['user_id'])
     op.create_index('ix_job_postings_scored', 'job_postings', ['scored'])
 
 
 def downgrade() -> None:
     op.drop_index('ix_job_postings_scored', table_name='job_postings')
-    op.drop_index('ix_job_postings_user_id', table_name='job_postings')
     op.drop_table('job_postings')
