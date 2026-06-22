@@ -1,4 +1,4 @@
-"""008_add_job_feedback_reason
+"""008_create_job_feedback
 
 Revision ID: 276095669f8d
 Revises: b2c3d4e5f6a7
@@ -18,8 +18,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('job_feedback', sa.Column('reason', sa.String(100), nullable=True))
+    op.create_table(
+        'job_feedback',
+        sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False, index=True),
+        sa.Column('job_url', sa.String(1000), nullable=False),
+        sa.Column('job_title', sa.String(255), nullable=False),
+        sa.Column('company', sa.String(255), nullable=False),
+        sa.Column('relevance', sa.String(20), nullable=False),
+        sa.Column('reason', sa.String(100), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
+        sa.UniqueConstraint('user_id', 'job_url', name='uq_job_feedback_user_url'),
+    )
 
 
 def downgrade() -> None:
-    op.drop_column('job_feedback', 'reason')
+    op.drop_table('job_feedback')
