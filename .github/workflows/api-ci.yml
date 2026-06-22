@@ -340,7 +340,7 @@ jobs:
         run: |
           PROD_URL="${{ secrets.PROD_API_URL }}"
           echo "Health check: ${PROD_URL}/health"
-          for i in $(seq 1 12); do
+          for i in $(seq 1 3); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/health")
             echo "Attempt $i — HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
@@ -354,7 +354,7 @@ jobs:
             fi
             sleep 10
           done
-          echo "❌ Health check failed after 12 attempts"
+          echo "❌ Health check failed after 3 attempts"
           docker logs app-api-1 --tail=50
           docker logs app-nginx-1 --tail=20
           exit 1
