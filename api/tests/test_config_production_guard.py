@@ -10,6 +10,11 @@ VALID = dict(
 )
 
 
+def test_production_empty_database_url_raises():
+    with pytest.raises(RuntimeError, match="not set"):
+        Settings(**{**VALID, "database_url": ""})
+
+
 def test_production_sqlite_raises():
     with pytest.raises(RuntimeError, match="SQLite"):
         Settings(**{**VALID, "database_url": "sqlite+aiosqlite:///./test.db"})

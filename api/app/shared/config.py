@@ -73,9 +73,13 @@ class Settings(BaseSettings):
     def _validate_production(self) -> "Settings":
         if self.app_env != "production":
             return self
+        if not self.database_url:
+            raise RuntimeError(
+                "DATABASE_URL is not set in production."
+            )
         if "sqlite" in self.database_url:
             raise RuntimeError(
-                "DATABASE_URL is SQLite in production — secret was not injected correctly."
+                "DATABASE_URL is SQLite in production — must be PostgreSQL."
             )
         if self.database_url.startswith("${{"):
             raise RuntimeError(
