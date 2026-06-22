@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.shared.database import init_db, get_db_context
+from app.shared.config import get_settings
 from app.modules.applications.router import router as applications_router
 from app.modules.agents.router import router as agents_router
 from app.modules.profile.router import router as profile_router
@@ -40,11 +41,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://aicareerassistant.simplydigitals.com.sg",
-    ],
+    allow_origins=[o.strip() for o in get_settings().allowed_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*", "X-User-Email"],

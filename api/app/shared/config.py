@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     log_level: str = "INFO"
+    frontend_url: str = "http://localhost:5173"
+    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
 
     # Database — absolute path so it never moves regardless of cwd
     database_url: str = f"sqlite+aiosqlite:///{_API_DIR}/aicareercoach.db"

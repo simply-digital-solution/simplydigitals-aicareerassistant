@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.shared.database import get_db
+from app.shared.config import get_settings
 from app.modules.auth.router import get_current_user
 from app.modules.agents.research_agent import run_research_agent
 from app.modules.agents.resume_agent import run_resume_agent
@@ -1693,7 +1694,7 @@ async def google_oauth_callback(
     await db.commit()
 
     # Redirect back to the frontend with a success flag
-    return RedirectResponse("http://localhost:5173/?drive=connected")
+    return RedirectResponse(f"{get_settings().frontend_url}/?drive=connected")
 
 
 @router.get("/auth/google/status")

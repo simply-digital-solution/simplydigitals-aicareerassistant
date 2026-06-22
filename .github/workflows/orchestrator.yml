@@ -124,6 +124,7 @@ jobs:
       GOOGLE_CLIENT_ID:      ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET:  ${{ secrets.GOOGLE_CLIENT_SECRET }}
       PROD_API_URL:          ${{ secrets.PROD_API_URL }}
+      PROD_UI_URL:           ${{ secrets.PROD_UI_URL }}
 
   # ── UI Pipeline ──────────────────────────────────────────────────────────
   ui:

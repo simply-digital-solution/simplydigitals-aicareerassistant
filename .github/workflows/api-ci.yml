@@ -28,6 +28,7 @@ on:
       GOOGLE_CLIENT_ID:      { required: false }
       GOOGLE_CLIENT_SECRET:  { required: false }
       PROD_API_URL:          { required: false }
+      PROD_UI_URL:           { required: false }
 
 permissions:
   contents: read
@@ -283,6 +284,8 @@ jobs:
             echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"
             echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}"
             echo "GOOGLE_REDIRECT_URI=${{ secrets.PROD_API_URL }}/api/v1/auth/google/callback"
+            echo "FRONTEND_URL=${{ secrets.PROD_UI_URL }}"
+            echo "ALLOWED_ORIGINS=${{ secrets.PROD_UI_URL }}"
             echo "ECR_IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}"
           } > /home/ubuntu/app/.env
 
