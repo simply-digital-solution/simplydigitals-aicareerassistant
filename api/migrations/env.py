@@ -16,6 +16,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Override sqlalchemy.url from DATABASE_URL env var — alembic.ini value is ignored
+_db_url = os.environ.get("DATABASE_URL")
+if not _db_url:
+    raise RuntimeError("DATABASE_URL environment variable is not set — cannot run migrations.")
+config.set_main_option("sqlalchemy.url", _db_url)
+
 target_metadata = Base.metadata
 
 
