@@ -290,21 +290,40 @@ jobs:
           docker compose -f docker-compose.prod.yml down --remove-orphans || true
 
           echo "▶ Starting containers"
-          docker compose -f docker-compose.prod.yml up -d \
-            --no-build
+          docker compose -f docker-compose.prod.yml up -d --no-build
 
-          echo "▶ Waiting for api container to be healthy (max 60s)"
+          echo "▶ Waiting for migrate container to finish (max 60s)"
           for i in $(seq 1 12); do
+            STATE=$(docker inspect --format='{{.State.Status}}' app-migrate-1 2>/dev/null || echo "missing")
+            echo "  [$i/12] migrate=$STATE"
+            [ "$STATE" = "exited" ] && break
+            sleep 5
+          done
+          EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' app-migrate-1 2>/dev/null || echo "1")
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "❌ migrate container failed — logs:"
+            docker logs app-migrate-1 --tail=40
+            exit 1
+          fi
+
+          echo "▶ Waiting for api Unix socket to be ready (max 90s)"
+          for i in $(seq 1 18); do
             STATUS=$(docker inspect --format='{{.State.Status}}' app-api-1 2>/dev/null || echo "missing")
             RESTARTING=$(docker inspect --format='{{.State.Restarting}}' app-api-1 2>/dev/null || echo "false")
-            echo "  [$i/12] api status=$STATUS restarting=$RESTARTING"
-            if [ "$STATUS" = "running" ] && [ "$RESTARTING" = "false" ]; then
-              echo "✅ api container is running"
+            echo "  [$i/18] api status=$STATUS restarting=$RESTARTING"
+            if [ "$RESTARTING" = "true" ]; then
+              echo "❌ api container is crash-looping — logs:"
+              docker logs app-api-1 --tail=50
+              exit 1
+            fi
+            # Check the socket is accepting connections inside the container
+            if docker exec app-api-1 curl -sf --unix-socket /run/app/app.sock http://localhost/health > /dev/null 2>&1; then
+              echo "✅ api socket is ready"
               break
             fi
-            if [ "$RESTARTING" = "true" ] && [ "$i" -ge 3 ]; then
-              echo "❌ api container is crash-looping — showing logs:"
-              docker logs app-api-1 --tail=40
+            if [ "$i" = "18" ]; then
+              echo "❌ api socket never became ready — logs:"
+              docker logs app-api-1 --tail=50
               exit 1
             fi
             sleep 5
@@ -321,16 +340,23 @@ jobs:
         run: |
           PROD_URL="${{ secrets.PROD_API_URL }}"
           echo "Health check: ${PROD_URL}/health"
-          for i in $(seq 1 6); do
+          for i in $(seq 1 12); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}/health")
             echo "Attempt $i — HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
               echo "✅ API is live"
               exit 0
             fi
+            if [ "$STATUS" = "502" ] || [ "$STATUS" = "503" ]; then
+              echo "  nginx returned $STATUS — api logs:"
+              docker logs app-api-1 --tail=20
+              docker logs app-nginx-1 --tail=10
+            fi
             sleep 10
           done
-          echo "❌ Health check failed after 6 attempts"
+          echo "❌ Health check failed after 12 attempts"
+          docker logs app-api-1 --tail=50
+          docker logs app-nginx-1 --tail=20
           exit 1
 
       - name: Deployment summary
