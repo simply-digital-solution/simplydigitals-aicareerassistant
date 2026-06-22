@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { ProfileData } from '../../api/client'
 import api, { profileApi } from '../../api/client'
 import Section from './Section'
@@ -68,6 +68,7 @@ export default function ResumeSection({
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState('')
   const [extractDone, setExtractDone] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const wordCount = resumeText.trim() ? resumeText.trim().split(/\s+/).length : 0
   const hasResume = !!resumeText.trim()
 
@@ -138,6 +139,7 @@ export default function ResumeSection({
   }
 
   return (
+    <>
     <Section
       title="Resume"
       badge={hasResume
@@ -145,7 +147,7 @@ export default function ResumeSection({
         : <span className="text-xs text-amber-500 font-normal">Not uploaded</span>}
       actions={
         <div className="flex gap-1.5">
-          {resumeHtml && (
+          {resumeHtml && hasResume && (
             <button
               type="button"
               onClick={() => setShowRaw(v => !v)}
@@ -166,13 +168,13 @@ export default function ResumeSection({
               Download
             </button>
           )}
-          <label
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
             className="text-xs border border-gray-300 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-            onClick={e => e.stopPropagation()}
           >
             Upload
-            <input type="file" accept=".pdf,.docx,.txt,.md" className="hidden" onChange={handleFile} />
-          </label>
+          </button>
         </div>
       }
     >
@@ -233,5 +235,14 @@ export default function ResumeSection({
         </button>
       </div>
     </Section>
+    {/* Hidden file input lives outside the Section header so its click never bubbles into the toggle button */}
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept=".pdf,.docx,.txt,.md"
+      className="hidden"
+      onChange={handleFile}
+    />
+    </>
   )
 }
