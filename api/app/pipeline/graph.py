@@ -9,17 +9,13 @@ Human gates are handled outside the graph in Phase 0
 Phase 1 will add parallel fan-out, ask_user gates, and orchestrator routing.
 """
 import uuid
-from pathlib import Path
 from typing import Any, Optional
 
-import yaml
 from langgraph.graph import StateGraph, END
 
 from app.pipeline.state import GraphState
 from app.modules.agents.research_agent import run_research_agent
 from app.modules.agents.resume_agent import run_resume_agent
-
-PROFILE_PATH = Path(__file__).parents[4] / "config" / "profile.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -27,12 +23,7 @@ PROFILE_PATH = Path(__file__).parents[4] / "config" / "profile.yaml"
 # ---------------------------------------------------------------------------
 
 def load_profile(state: GraphState) -> GraphState:
-    """Loads profile.yaml into state. Pure Python — no Claude call."""
-    try:
-        profile = yaml.safe_load(PROFILE_PATH.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        profile = {}
-    return {**state, "profile": profile, "current_node": "load_profile"}
+    return {**state, "profile": {}, "current_node": "load_profile"}
 
 
 # ---------------------------------------------------------------------------
