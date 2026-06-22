@@ -232,6 +232,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [version, build]
     if: inputs.run_deploy
+    defaults:
+      run:
+        working-directory: .
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
