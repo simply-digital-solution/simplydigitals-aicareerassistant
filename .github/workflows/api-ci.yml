@@ -272,19 +272,19 @@ jobs:
       - name: Write .env file
         run: |
           mkdir -p /home/ubuntu/app
-          cat > /home/ubuntu/app/.env << ENVEOF
-          APP_ENV=production
-          LOG_LEVEL=INFO
-          ENABLE_SCHEDULER=false
-          DATABASE_URL=${{ secrets.DATABASE_URL }}
-          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-          HCAPTCHA_SECRET_KEY=${{ secrets.HCAPTCHA_SECRET_KEY }}
-          GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
-          GOOGLE_REDIRECT_URI=${{ secrets.PROD_API_URL }}/api/v1/auth/google/callback
-          ECR_IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
-          ENVEOF
+          {
+            echo "APP_ENV=production"
+            echo "LOG_LEVEL=INFO"
+            echo "ENABLE_SCHEDULER=false"
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}"
+            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
+            echo "HCAPTCHA_SECRET_KEY=${{ secrets.HCAPTCHA_SECRET_KEY }}"
+            echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"
+            echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}"
+            echo "GOOGLE_REDIRECT_URI=${{ secrets.PROD_API_URL }}/api/v1/auth/google/callback"
+            echo "ECR_IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}"
+          } > /home/ubuntu/app/.env
 
       - name: Copy compose and nginx config
         run: |
