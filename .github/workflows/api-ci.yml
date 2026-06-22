@@ -418,6 +418,27 @@ jobs:
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
             docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
+      - name: Apply ECR lifecycle policy (keep last 3 images)
+        run: |
+          aws ecr put-lifecycle-policy \
+            --region ${{ secrets.AWS_REGION }} \
+            --repository-name ${{ secrets.ECR_REPOSITORY }} \
+            --lifecycle-policy-text '{
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Keep last 3 images, expire the rest",
+                  "selection": {
+                    "tagStatus": "any",
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 3
+                  },
+                  "action": { "type": "expire" }
+                }
+              ]
+            }'
+          echo "✅ ECR lifecycle policy applied — keeping last 3 images"
+
       - name: Pull and deploy containers
         timeout-minutes: 10
         run: |
