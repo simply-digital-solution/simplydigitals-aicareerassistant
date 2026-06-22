@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About — AI Career Assistant</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --indigo:     #4f46e5;
+      --indigo-dark:#3730a3;
+      --indigo-light:#eef2ff;
+      --purple:     #7c3aed;
+      --gray-50:    #f9fafb;
+      --gray-100:   #f3f4f6;
+      --gray-200:   #e5e7eb;
+      --gray-500:   #6b7280;
+      --gray-700:   #374151;
+      --gray-900:   #111827;
+      --white:      #ffffff;
+      --radius:     12px;
+      --shadow:     0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--gray-900);
+      background: var(--white);
+      line-height: 1.65;
+    }
+
+    a { color: var(--indigo); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout helpers ─────────────────────────────────────────── */
+    .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+    section { padding: 64px 0; }
+    section:nth-child(even) { background: var(--gray-50); }
+
+    h2 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 16px;
+    }
+
+    h2 .accent { color: var(--indigo); }
+
+    p { color: var(--gray-700); margin-bottom: 12px; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Nav ────────────────────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      background: var(--white);
+      border-bottom: 1px solid var(--gray-200);
+      z-index: 100;
+      padding: 14px 0;
+    }
+
+    nav .inner {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--indigo);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-brand svg { width: 22px; height: 22px; }
+
+    .btn {
+      display: inline-block;
+      padding: 9px 20px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+
+    .btn-primary {
+      background: var(--indigo);
+      color: var(--white);
+    }
+
+    .btn-primary:hover {
+      background: var(--indigo-dark);
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
+
+    /* ── Hero ───────────────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, var(--indigo) 0%, var(--purple) 100%);
+      color: var(--white);
+      padding: 80px 0 72px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 2.4rem;
+      font-weight: 800;
+      margin-bottom: 16px;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      font-size: 1.125rem;
+      color: rgba(255,255,255,.88);
+      max-width: 580px;
+      margin: 0 auto 32px;
+    }
+
+    .hero .btn-hero {
+      background: var(--white);
+      color: var(--indigo);
+      font-size: 1rem;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-weight: 700;
+      transition: transform .15s, box-shadow .15s;
+      box-shadow: 0 4px 14px rgba(0,0,0,.15);
+    }
+
+    .hero .btn-hero:hover {
+      text-decoration: none;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,.2);
+    }
+
+    /* ── Steps grid ─────────────────────────────────────────────── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+      margin-top: 32px;
+    }
+
+    .step-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--indigo-light);
+      color: var(--indigo);
+      font-weight: 700;
+      font-size: 0.875rem;
+      margin-bottom: 12px;
+    }
+
+    .step-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--gray-900);
+    }
+
+    .step-card p {
+      font-size: 0.9rem;
+      color: var(--gray-500);
+      margin: 0;
+    }
+
+    /* ── Feature list ───────────────────────────────────────────── */
+    .feature-list {
+      list-style: none;
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .feature-list li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      color: var(--gray-700);
+      font-size: 0.95rem;
+    }
+
+    .feature-list li::before {
+      content: '';
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+      background: var(--indigo-light);
+      border-radius: 50%;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%234f46e5'%3E%3Cpath fill-rule='evenodd' d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z' clip-rule='evenodd'/%3E%3C/svg%3E");
+      background-size: 14px;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+
+    /* ── Highlight box ──────────────────────────────────────────── */
+    .highlight-box {
+      background: var(--indigo-light);
+      border-left: 4px solid var(--indigo);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 20px 24px;
+      margin-top: 24px;
+      color: var(--gray-700);
+      font-size: 0.95rem;
+    }
+
+    /* ── Two-column ─────────────────────────────────────────────── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 28px;
+    }
+
+    @media (max-width: 640px) {
+      .two-col { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 1.8rem; }
+      h2 { font-size: 1.3rem; }
+    }
+
+    .info-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .info-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--indigo);
+      margin-bottom: 8px;
+    }
+
+    .info-card p {
+      font-size: 0.9rem;
+      color: var(--gray-500);
+      margin: 0;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    footer {
+      background: var(--gray-900);
+      color: var(--gray-500);
+      padding: 40px 0;
+      text-align: center;
+    }
+
+    footer .footer-cta {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--white);
+      margin-bottom: 12px;
+    }
+
+    footer .btn-footer {
+      background: var(--indigo);
+      color: var(--white);
+      padding: 11px 26px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: inline-block;
+      margin-bottom: 28px;
+      transition: background .15s;
+    }
+
+    footer .btn-footer:hover {
+      background: var(--indigo-dark);
+      text-decoration: none;
+    }
+
+    footer p {
+      font-size: 0.825rem;
+      color: var(--gray-500);
+      margin-bottom: 4px;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--gray-200);
+      margin: 32px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="inner">
+      <div class="nav-brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        AI Career Assistant
+      </div>
+      <a href="/" class="btn btn-primary">Get Started</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="container">
+      <h1>Your Intelligent Job Search Companion</h1>
+      <p>From discovery to offer — AI Career Assistant automates the repetitive work so you can focus on what matters: landing the right role.</p>
+      <a href="/" class="btn-hero">Start Your Job Search</a>
+    </div>
+  </div>
+
+  <!-- Section 1: What is it -->
+  <section>
+    <div class="container">
+      <h2>What is <span class="accent">AI Career Assistant?</span></h2>
+      <p>AI Career Assistant is an intelligent job search platform built for beginners, junior professionals, and mid-level career individuals navigating a competitive job market. It consolidates every step of the job search — discovering roles, evaluating your fit, tailoring your resume, preparing for interviews, and tracking your applications — into a single, streamlined workflow.</p>
+      <p>Instead of spending hours manually searching job boards, rewriting resumes, and guessing whether you are a good fit, AI Career Assistant handles the repetitive work intelligently, giving you more time to focus on preparation and performance.</p>
+    </div>
+  </section>
+
+  <!-- Section 2: How it works -->
+  <section>
+    <div class="container">
+      <h2>How It <span class="accent">Works</span></h2>
+      <p>A complete job search workflow in six clear steps — set up once, run continuously.</p>
+      <div class="steps">
+        <div class="step-card">
+          <div class="step-number">1</div>
+          <h3>Build Your Profile</h3>
+          <p>Upload your resume and set your skills, experience, target roles and preferences once. Everything flows from your profile.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">2</div>
+          <h3>Discover Jobs</h3>
+          <p>Jobs are automatically sourced from MyCareersFuture — Singapore's national jobs portal — and matched to your profile.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <h3>ATS Fit Scoring</h3>
+          <p>Every job receives a fit score with a full breakdown — skills match, experience, and keywords — so you know exactly where you stand.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">4</div>
+          <h3>Tailor Your Resume</h3>
+          <p>Generate a resume customised to each specific job with a single click. Saved directly to your Google Drive.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">5</div>
+          <h3>Interview Preparation</h3>
+          <p>Receive tailored behavioural questions, technical questions, and STAR examples generated specifically for each role.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">6</div>
+          <h3>Track Your Pipeline</h3>
+          <p>Manage every application through Research → Selected → Applied → Interview → Offer. Your personal job search CRM.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 3: Why now -->
+  <section>
+    <div class="container">
+      <h2>Why It Matters <span class="accent">Now</span></h2>
+      <p>The job market has become significantly more competitive. Widespread industry restructuring and layoffs mean that roles attract hundreds of applicants. Recruiters spend an average of six to seven seconds reviewing a resume before moving on, and many organisations use Applicant Tracking Systems (ATS) to filter candidates automatically before a human ever sees the application.</p>
+      <ul class="feature-list">
+        <li>ATS systems reject up to 75% of applications before they reach a recruiter</li>
+        <li>Job seekers without optimised resumes are filtered out regardless of their actual capability</li>
+        <li>Manually tailoring resumes and researching each role is time-consuming and unsustainable at scale</li>
+        <li>AI Career Assistant levels the playing field — giving every job seeker the same tools previously available only to those who could afford professional resume services</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Section 4: Role fit -->
+  <section>
+    <div class="container">
+      <h2>Know Your Fit <span class="accent">Before You Apply</span></h2>
+      <p>Applying to roles you are significantly underqualified for wastes time and affects your confidence. AI Career Assistant's Role Fit Analysis evaluates your profile against the market and identifies the roles where you are most competitive.</p>
+      <div class="two-col">
+        <div class="info-card">
+          <h3>Strong Match Roles</h3>
+          <p>Roles where your skills and experience align well — highest probability of progressing to interview.</p>
+        </div>
+        <div class="info-card">
+          <h3>Stretch Goals</h3>
+          <p>Roles slightly above your current level — worth pursuing with a strong tailored application.</p>
+        </div>
+        <div class="info-card">
+          <h3>Adjacent Career Moves</h3>
+          <p>Roles in related areas that leverage your transferable skills — useful for career pivots.</p>
+        </div>
+        <div class="info-card">
+          <h3>Skill Gap Identification</h3>
+          <p>Clearly shows what is missing so you can prioritise learning and development effectively.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 5: LLM -->
+  <section>
+    <div class="container">
+      <h2>Your AI Assistant, <span class="accent">Not Your Replacement</span></h2>
+      <p>AI Career Assistant is built on a large language model (LLM) — the same technology that powers leading AI tools. However, it is designed with a clear principle: the AI handles repetitive, time-consuming tasks while you retain full control over every decision.</p>
+      <ul class="feature-list">
+        <li>The AI scores jobs, tailors resumes and generates interview questions — you decide which jobs to pursue and which applications to send</li>
+        <li>Every generated resume is a starting point — you review, edit and approve before it represents you</li>
+        <li>The tool surfaces insights and recommendations; your judgement and personal narrative remain central</li>
+        <li>Built to empower people entering and progressing in the workforce — not to automate them out of the process</li>
+      </ul>
+      <div class="highlight-box">
+        Using AI to find a job is not unfair — it is the same as using a professional resume writer or career coach. AI Career Assistant makes that level of support accessible to everyone, not just those who can afford it.
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 6: Singapore -->
+  <section>
+    <div class="container">
+      <h2>Built for <span class="accent">Singapore</span></h2>
+      <p>AI Career Assistant is specifically designed for the Singapore job market. Jobs are sourced directly from MyCareersFuture — the national jobs portal operated by Workforce Singapore — ensuring that every opportunity shown is relevant, current, and applicable to professionals based in Singapore.</p>
+      <ul class="feature-list">
+        <li>Real-time job listings from MyCareersFuture</li>
+        <li>Scoring and tailoring calibrated to Singapore hiring practices and industry norms</li>
+        <li>Relevant to all sectors represented in the Singapore economy</li>
+        <li>Designed for Singaporeans and residents navigating the local job market</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Section 7: PDPA -->
+  <section>
+    <div class="container">
+      <h2>Your Privacy, <span class="accent">Our Priority</span></h2>
+      <p>AI Career Assistant is committed to full compliance with Singapore's Personal Data Protection Act (PDPA). Your personal data is handled with care, transparency, and respect.</p>
+      <div class="two-col">
+        <div class="info-card">
+          <h3>Purpose Limitation</h3>
+          <p>Your data is collected and used solely to power your job search. It is never sold, shared with third parties, or used for advertising.</p>
+        </div>
+        <div class="info-card">
+          <h3>Data Minimisation</h3>
+          <p>Only the information necessary to deliver the service is collected. No unnecessary personal data is requested or retained.</p>
+        </div>
+        <div class="info-card">
+          <h3>Your Right to Access and Delete</h3>
+          <p>You may request access to your data or delete your account and all associated data at any time.</p>
+        </div>
+        <div class="info-card">
+          <h3>Secure Storage</h3>
+          <p>All data is stored on secured infrastructure. Your resume text and profile information are accessible only within your private account.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 8: Google Drive -->
+  <section>
+    <div class="container">
+      <h2>Why Your Resumes Live on <span class="accent">Google Drive</span></h2>
+      <p>When AI Career Assistant generates a tailored resume for you, it is saved directly to your own Google Drive account — not on our servers. This is a deliberate design decision that puts you in full control of your documents.</p>
+      <ul class="feature-list">
+        <li>You own your resumes completely — they live in your Google Drive, not ours</li>
+        <li>Access, edit, download and share your resumes directly from Drive at any time, from any device</li>
+        <li>If you disconnect Google Drive or stop using the service, your documents remain yours — nothing is lost</li>
+        <li>Reduces the amount of sensitive personal data held on our infrastructure, consistent with our PDPA obligations</li>
+        <li>Google Drive provides version history, so you can track how your resume has evolved over time</li>
+      </ul>
+      <div class="highlight-box">
+        Connecting Google Drive is optional. You can still use all other features of AI Career Assistant without it. Drive integration is only required if you wish to save generated resumes to your personal storage.
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 9: Gets smarter -->
+  <section>
+    <div class="container">
+      <h2>It Gets Smarter <span class="accent">With You</span></h2>
+      <p>AI Career Assistant improves as your profile becomes more complete. The more information you provide about your skills, experience, target roles, industries and preferences, the more accurately it scores jobs and tailors your applications.</p>
+      <ul class="feature-list">
+        <li>A complete profile produces more relevant job matches and higher-quality tailored resumes</li>
+        <li>Updating your skills and experience after each role keeps scoring accurate as your career develops</li>
+        <li>Setting target industries and roles helps the tool prioritise the most relevant opportunities</li>
+        <li>The tool grows with you — useful at every stage from your first job search to your next career move</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p class="footer-cta">Ready to take control of your job search?</p>
+      <a href="/" class="btn-footer">Start Your Job Search</a>
+      <hr style="border-color: #374151; margin: 0 auto 20px; max-width: 200px;" />
+      <p>Your personal data is handled in accordance with Singapore's Personal Data Protection Act (PDPA).</p>
+      <p style="margin-top: 8px;">© 2026 SimplyDigitals. All rights reserved.</p>
+    </div>
+  </footer>
+
+</body>
+</html>

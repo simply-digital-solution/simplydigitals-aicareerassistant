@@ -125,6 +125,18 @@ export default function LoginPage({ onSignIn }: Props) {
         <p className="text-xs text-gray-400 text-center mt-5">
           No password needed — your email identifies your workspace.
         </p>
+
+        <p className="text-xs text-gray-400 text-center mt-3">
+          New here?{' '}
+          <a
+            href="/about.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-500 hover:text-indigo-700 underline"
+          >
+            Learn about AI Career Assistant
+          </a>
+        </p>
       </div>
     </div>
   )
