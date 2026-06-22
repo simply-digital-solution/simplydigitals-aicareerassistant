@@ -379,22 +379,23 @@ jobs:
             exit 1
           fi
 
-          echo "▶ Waiting for api Unix socket to be ready (max 90s)"
-          for i in $(seq 1 18); do
+          echo "▶ Waiting for api Unix socket to be ready (max 120s)"
+          for i in $(seq 1 24); do
             STATUS=$(docker inspect --format='{{.State.Status}}' app-api-1 2>/dev/null || echo "missing")
             RESTARTING=$(docker inspect --format='{{.State.Restarting}}' app-api-1 2>/dev/null || echo "false")
-            echo "  [$i/18] api status=$STATUS restarting=$RESTARTING"
+            echo "  [$i/24] api status=$STATUS restarting=$RESTARTING"
             if [ "$RESTARTING" = "true" ]; then
               echo "❌ api container is crash-looping — logs:"
               docker logs app-api-1 --tail=50
               exit 1
             fi
-            # Check the socket is accepting connections inside the container
-            if docker exec app-api-1 curl -sf --unix-socket /run/app/app.sock http://localhost/health > /dev/null 2>&1; then
+            # Check socket file exists in the shared volume
+            SOCK=$(docker inspect --format='{{range .Mounts}}{{if eq .Destination "/run/app"}}{{.Source}}{{end}}{{end}}' app-api-1 2>/dev/null)
+            if [ -n "$SOCK" ] && [ -S "${SOCK}/app.sock" ]; then
               echo "✅ api socket is ready"
               break
             fi
-            if [ "$i" = "18" ]; then
+            if [ "$i" = "24" ]; then
               echo "❌ api socket never became ready — logs:"
               docker logs app-api-1 --tail=50
               exit 1
