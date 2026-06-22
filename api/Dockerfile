@@ -11,14 +11,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry and export dependencies to a plain requirements file
 RUN pip install --no-cache-dir poetry==1.8.3
 
 COPY pyproject.toml poetry.lock ./
-RUN poetry export --without dev --without-hashes -f requirements.txt -o requirements.txt
 
-# Install into an isolated directory so the runtime stage stays clean
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Install only main (non-dev) dependencies into an isolated prefix.
+# Using poetry install directly avoids poetry export omitting transitive
+# dependencies that are grouped under both main and dev.
+RUN poetry config virtualenvs.create false && \
+    poetry install --only main --no-interaction --no-ansi --no-root
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 — runtime image
@@ -32,8 +33,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy pre-built packages from builder
-COPY --from=builder /install /usr/local
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application source
 COPY app/ ./app/
