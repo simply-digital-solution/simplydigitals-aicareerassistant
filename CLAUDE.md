@@ -38,7 +38,7 @@ Copy `.env.example` to `api/.env`. Backend reads config from `api/.env` via `pyd
 
 **Database**: PostgreSQL is required for both local dev and production — SQLite is no longer supported.
 `make dev` starts Postgres automatically via `docker-compose.dev.yml` (named volume `aicareer-pgdata` persists data across restarts).
-Set `DATABASE_URL=postgresql+asyncpg://postgres:dev@localhost:5432/aicareer` in `api/.env`.
+Set `DATABASE_URL=postgresql+asyncpg://postgres:dev@localhost:5432/aicareer-db` in `api/.env`.
 
 ## Architecture
 

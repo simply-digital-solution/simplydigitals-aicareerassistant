@@ -13,10 +13,23 @@ Usage:
 import asyncio
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+def _parse_dt(v: str) -> datetime | str:
+    try:
+        return datetime.fromisoformat(v)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(v, fmt)
+        except ValueError:
+            continue
+    return v
 
 SQLITE_PATH = Path(__file__).parent.parent / "aicareercoach.db"
 
@@ -24,6 +37,7 @@ SQLITE_PATH = Path(__file__).parent.parent / "aicareercoach.db"
 TABLES = [
     "users",
     "profiles",
+    "job_postings",       # applications.job_posting_id → job_postings
     "applications",
     "agent_runs",
     "agent_jobs",
@@ -32,10 +46,9 @@ TABLES = [
     "budget_records",
     "daily_scoring_usage",
     "drafts",
-    "generated_resumes",
+    "generated_resumes",  # generated_resumes.job_posting_id → job_postings
     "graph_checkpoints",
     "job_feedback",
-    "job_postings",
     "llm_usage_logs",
     "notifications",
     "pending_questions",
@@ -59,12 +72,27 @@ BOOL_COLUMNS = {
 }
 
 
+_DT_HINT = frozenset({"_at", "_date", "_time", "_on"})
+
+
+def _looks_like_dt(col: str, val: str) -> bool:
+    if any(col.endswith(suffix) for suffix in _DT_HINT) or col == "date":
+        return True
+    # also catch values that look like ISO datetimes by structure
+    return len(val) >= 10 and val[4] == "-" and val[7] == "-"
+
+
 def _cast_row(table: str, row: dict) -> dict:
     bool_cols = BOOL_COLUMNS.get(table, set())
-    return {
-        k: bool(v) if k in bool_cols and v is not None else v
-        for k, v in row.items()
-    }
+    result = {}
+    for k, v in row.items():
+        if k in bool_cols and v is not None:
+            result[k] = bool(v)
+        elif isinstance(v, str) and _looks_like_dt(k, v):
+            result[k] = _parse_dt(v)
+        else:
+            result[k] = v
+    return result
 
 
 async def migrate():

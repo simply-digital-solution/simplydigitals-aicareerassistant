@@ -4,7 +4,7 @@ services:
     container_name: aicareer-pg
     environment:
       POSTGRES_PASSWORD: dev
-      POSTGRES_DB: aicareer
+      POSTGRES_DB: aicareer-db
       POSTGRES_USER: postgres
     ports:
       - "5432:5432"

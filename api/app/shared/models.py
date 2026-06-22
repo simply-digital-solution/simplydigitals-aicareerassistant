@@ -339,7 +339,7 @@ class JobFeedback(Base):
     job_title = Column(String(255), nullable=False)
     company = Column(String(255), nullable=False)
     relevance = Column(String(20), nullable=False)   # relevant | not_relevant
-    reason = Column(String(100), nullable=True)      # why not relevant — null for relevant
+    reason = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)
     updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)
 
