@@ -498,10 +498,11 @@ export default function ResearchPanel() {
 
   const saveMutation = useMutation({
     mutationFn: (job: StoredJob) => applicationsApi.create({
-      company_name: job.company,
-      role_title:   job.title,
-      source_url:   job.url,
-      status:       'selected',
+      company_name:   job.company,
+      role_title:     job.title,
+      source_url:     job.url,
+      status:         'selected',
+      job_posting_id: job.id,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })

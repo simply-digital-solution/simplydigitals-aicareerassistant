@@ -46,6 +46,7 @@ export interface Application {
   source_url?: string
   source?: string
   status: string
+  job_posting_id?: number
   fit_score?: number
   deadline?: string
   applied_at?: string

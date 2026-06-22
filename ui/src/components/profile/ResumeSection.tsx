@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import type { ProfileData } from '../../api/client'
 import api, { profileApi } from '../../api/client'
 import Section from './Section'
@@ -68,8 +68,6 @@ export default function ResumeSection({
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState('')
   const [extractDone, setExtractDone] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
-
   const wordCount = resumeText.trim() ? resumeText.trim().split(/\s+/).length : 0
   const hasResume = !!resumeText.trim()
 
@@ -168,18 +166,15 @@ export default function ResumeSection({
               Download
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="text-xs border border-gray-300 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-50 transition-colors"
+          <label
+            className="text-xs border border-gray-300 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
           >
             Upload
-          </button>
+            <input type="file" accept=".pdf,.docx,.txt,.md" className="hidden" onChange={handleFile} />
+          </label>
         </div>
       }
     >
-      <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" className="hidden" onChange={handleFile} />
-
       {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
 
       {extracting && (
