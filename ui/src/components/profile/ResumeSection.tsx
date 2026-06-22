@@ -168,6 +168,7 @@ export default function ResumeSection({
           )}
           <label
             className="text-xs border border-gray-300 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+            onClick={e => e.stopPropagation()}
           >
             Upload
             <input type="file" accept=".pdf,.docx,.txt,.md" className="hidden" onChange={handleFile} />
