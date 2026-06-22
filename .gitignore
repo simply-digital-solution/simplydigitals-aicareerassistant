@@ -20,8 +20,7 @@ build/
 *.db-wal
 
 # Logs (keep directory, not contents)
-logs/*.jsonl
-logs/*.log
+logs/
 
 # Production log volume (Docker named volume on host — never commit)
 /var/log/aicareer/
@@ -43,8 +42,8 @@ Thumbs.db
 # Claude Code — local permissions (machine-specific paths, not for sharing)
 .claude/settings.local.json
 
-# Generated HTML docs (not source)
-docs/_build/
+# Generated docs
+docs/
 
 # Playwright
 playwright/.auth/
