@@ -410,9 +410,11 @@ jobs:
               docker logs app-api-1 --tail=50
               exit 1
             fi
-            # Check socket file exists in the shared volume
-            SOCK=$(docker inspect --format='{{range .Mounts}}{{if eq .Destination "/run/app"}}{{.Source}}{{end}}{{end}}' app-api-1 2>/dev/null)
-            if [ -n "$SOCK" ] && [ -S "${SOCK}/app.sock" ]; then
+            # Check socket file exists via docker volume (avoids permission issues)
+            SOCK_EXISTS=$(docker run --rm \
+              -v app_socket:/run/app \
+              busybox test -S /run/app/app.sock 2>/dev/null && echo "yes" || echo "no")
+            if [ "$SOCK_EXISTS" = "yes" ]; then
               echo "✅ api socket is ready"
               break
             fi
