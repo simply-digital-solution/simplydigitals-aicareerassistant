@@ -286,10 +286,12 @@ jobs:
           echo "▶ Pulling image: $ECR_IMAGE"
           docker pull "$ECR_IMAGE"
 
+          echo "▶ Stopping existing containers and removing stale networks"
+          docker compose -f docker-compose.prod.yml down --remove-orphans || true
+
           echo "▶ Starting containers"
           docker compose -f docker-compose.prod.yml up -d \
-            --no-build \
-            --remove-orphans
+            --no-build
 
           echo "▶ Waiting for api container to be healthy (max 60s)"
           for i in $(seq 1 12); do
