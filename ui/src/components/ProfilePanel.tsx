@@ -14,7 +14,7 @@ export default function ProfilePanel() {
   const qc = useQueryClient()
   const [bannerDismissed, setBannerDismissed] = useState(false)
 
-  const { data, isLoading, dataUpdatedAt } = useQuery<ProfileData>({
+  const { data, isLoading } = useQuery<ProfileData>({
     queryKey: ['profile'],
     queryFn: () => api.get<ProfileData>('/profile').then(r => r.data),
   })
@@ -56,13 +56,13 @@ export default function ProfilePanel() {
           </button>
         </div>
       )}
-      <ResumeSection key={dataUpdatedAt} data={data} onSaved={invalidate} />
-      <SkillsSection key={dataUpdatedAt} data={data} onSaved={invalidate} />
-      <TargetRolesSection key={dataUpdatedAt} data={data} onSaved={invalidate} />
-      <EducationSection key={dataUpdatedAt} data={data} onSaved={invalidate} />
-      <CertificationsSection key={dataUpdatedAt} data={data} onSaved={invalidate} />
-      <ContactSection key={dataUpdatedAt} data={data} onSaved={invalidate} />
-      <PreferencesSection key={dataUpdatedAt} data={data} onSaved={invalidate} />
+      <ResumeSection data={data} onSaved={invalidate} />
+      <SkillsSection data={data} onSaved={invalidate} />
+      <TargetRolesSection data={data} onSaved={invalidate} />
+      <EducationSection data={data} onSaved={invalidate} />
+      <CertificationsSection data={data} onSaved={invalidate} />
+      <ContactSection data={data} onSaved={invalidate} />
+      <PreferencesSection data={data} onSaved={invalidate} />
     </div>
   )
 }

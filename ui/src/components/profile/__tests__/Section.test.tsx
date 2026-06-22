@@ -22,9 +22,9 @@ describe('Section', () => {
   it('toggles open when header button is clicked', () => {
     render(<Section title="Resume" defaultOpen={false}><p>Content</p></Section>)
     expect(screen.queryByText('Content')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('Resume'))
     expect(screen.getByText('Content')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('Resume'))
     expect(screen.queryByText('Content')).not.toBeInTheDocument()
   })
 

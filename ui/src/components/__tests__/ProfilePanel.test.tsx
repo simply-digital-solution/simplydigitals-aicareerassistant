@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -39,6 +39,34 @@ function wrap(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>)
 }
+
+describe('ProfilePanel section open state', () => {
+  it('section stays open after onSaved triggers a refetch', async () => {
+    const api = await import('../../api/client')
+    // First fetch returns profile with resume
+    vi.mocked(api.default.get).mockResolvedValue({
+      data: { ...baseProfile, resume_text: 'Experienced engineer...' },
+    })
+    vi.mocked(api.default.patch).mockResolvedValue({ data: {} })
+
+    const { default: ProfilePanel } = await import('../ProfilePanel')
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={qc}><ProfilePanel /></QueryClientProvider>)
+
+    // Wait for sections to render
+    await screen.findAllByText(/Skills/i)
+
+    // Open the Skills section
+    fireEvent.click(screen.getByText('Skills'))
+    expect(screen.getByText(/Master skill set/i)).toBeInTheDocument()
+
+    // Simulate a refetch (dataUpdatedAt changes) — section must stay open
+    await waitFor(() => qc.invalidateQueries({ queryKey: ['profile'] }))
+
+    // Section body must still be visible — not remounted/closed
+    expect(screen.getByText(/Master skill set/i)).toBeInTheDocument()
+  })
+})
 
 describe('ProfilePanel resume banner', () => {
   it('shows the banner when resume_text is null', async () => {
