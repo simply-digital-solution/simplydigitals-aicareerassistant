@@ -91,21 +91,21 @@ export default function ResumeSection({
       const email = localStorage.getItem('user_email')
       const form = new FormData()
       form.append('file', file)
-      const res = await fetch('/api/v1/profile/parse-resume', {
-        method: 'POST',
-        headers: email ? { 'X-User-Email': email } : {},
-        body: form,
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setUploadError((err.detail ?? 'Server could not parse the file.') + ' Try a different file or paste text instead.')
-      } else {
-        const { text, html } = await res.json()
-        handleTextChange(text)
-        setResumeHtml(html ?? '')
+      try {
+        const { data } = await api.post('/profile/parse-resume', form, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            ...(email ? { 'X-User-Email': email } : {}),
+          },
+        })
+        handleTextChange(data.text)
+        setResumeHtml(data.html ?? '')
         setDirty(false)
         onSaved()
         await runExtraction()
+      } catch (err: any) {
+        const detail = err?.response?.data?.detail
+        setUploadError((detail ?? 'Server could not parse the file.') + ' Try a different file or paste text instead.')
       }
     }
     e.target.value = ''
