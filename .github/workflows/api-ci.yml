@@ -252,7 +252,7 @@ jobs:
       - name: Write .env file
         run: |
           mkdir -p /home/ubuntu/app
-          cat > /home/ubuntu/app/.env << 'ENVEOF'
+          cat > /home/ubuntu/app/.env << ENVEOF
           APP_ENV=production
           LOG_LEVEL=INFO
           ENABLE_SCHEDULER=false
