@@ -72,22 +72,6 @@ export const applicationsApi = {
   exportCsv: () => api.get('/applications/pipeline/export', { responseType: 'blob' }),
 }
 
-// Agent output types (mirror Pydantic schemas)
-export interface JobOpportunity {
-  role: string
-  company: string
-  link: string
-  fit_score: number
-  reasons: string[]
-  risks: string[]
-  key_keywords: string[]
-  inferred_industries: string[]
-}
-
-export interface ResearchOutput {
-  opportunities: JobOpportunity[]
-}
-
 export interface ScoreRow {
   category: string
   requirement: string

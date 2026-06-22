@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Career Assistant — Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 40px 24px 80px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-bottom: 48px;
+  }
+
+  /* ── Layout ─────────────────────────────────── */
+  .diagram {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── Layer label ─────────────────────────────── */
+  .layer-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #475569;
+    padding: 0 0 8px 4px;
+    margin-top: 28px;
+  }
+
+  /* ── Row of boxes ────────────────────────────── */
+  .row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .row.center { justify-content: center; }
+  .row.spread { justify-content: space-between; }
+
+  /* ── Generic box ─────────────────────────────── */
+  .box {
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 0.78rem;
+    border: 1px solid transparent;
+    position: relative;
+    flex: 1;
+  }
+  .box .name {
+    font-weight: 700;
+    font-size: 0.82rem;
+    margin-bottom: 3px;
+    white-space: nowrap;
+  }
+  .box .detail {
+    font-size: 0.7rem;
+    opacity: 0.65;
+    line-height: 1.4;
+  }
+  .box .tag {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 1px 6px;
+    border-radius: 99px;
+    margin-top: 5px;
+  }
+
+  /* ── Colour themes ───────────────────────────── */
+  .blue   { background: #0f2744; border-color: #1e4d8c; color: #93c5fd; }
+  .blue   .tag { background: #1e4d8c; color: #93c5fd; }
+
+  .indigo { background: #141230; border-color: #3730a3; color: #a5b4fc; }
+  .indigo .tag { background: #3730a3; color: #a5b4fc; }
+
+  .violet { background: #1a1035; border-color: #5b21b6; color: #c4b5fd; }
+  .violet .tag { background: #5b21b6; color: #c4b5fd; }
+
+  .teal   { background: #0a2929; border-color: #0f766e; color: #5eead4; }
+  .teal   .tag { background: #0f766e; color: #5eead4; }
+
+  .green  { background: #0a1f15; border-color: #15803d; color: #86efac; }
+  .green  .tag { background: #15803d; color: #86efac; }
+
+  .amber  { background: #1f1505; border-color: #b45309; color: #fcd34d; }
+  .amber  .tag { background: #b45309; color: #fcd34d; }
+
+  .rose   { background: #1f0a0e; border-color: #be123c; color: #fda4af; }
+  .rose   .tag { background: #be123c; color: #fda4af; }
+
+  .slate  { background: #111827; border-color: #374151; color: #9ca3af; }
+  .slate  .tag { background: #374151; color: #9ca3af; }
+
+  .orange { background: #1f1005; border-color: #c2410c; color: #fdba74; }
+  .orange .tag { background: #c2410c; color: #fdba74; }
+
+  /* ── Connector arrows ────────────────────────── */
+  .arrow-down {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 28px;
+    color: #334155;
+    font-size: 1.1rem;
+  }
+  .arrow-down.wide {
+    justify-content: space-around;
+    padding: 0 60px;
+  }
+  .arrow-label {
+    font-size: 0.6rem;
+    color: #475569;
+    text-align: center;
+    margin-top: -6px;
+    margin-bottom: 4px;
+  }
+
+  /* ── Divider ─────────────────────────────────── */
+  hr {
+    border: none;
+    border-top: 1px dashed #1e293b;
+    margin: 24px 0 0;
+  }
+
+  /* ── Legend ──────────────────────────────────── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 48px;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.72rem;
+    color: #64748b;
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── Phase badge ─────────────────────────────── */
+  .phase {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    vertical-align: middle;
+    margin-left: 4px;
+  }
+  .ph0 { background: #1e3a5f; color: #60a5fa; }
+  .ph1 { background: #2d1a5e; color: #a78bfa; }
+
+  /* ── Gate indicator ──────────────────────────── */
+  .gate {
+    position: absolute;
+    top: -9px; right: 10px;
+    font-size: 0.58rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 99px;
+    letter-spacing: 0.06em;
+  }
+  .gate-auto  { background: #14532d; color: #86efac; border: 1px solid #166534; }
+  .gate-soft  { background: #422006; color: #fcd34d; border: 1px solid #713f12; }
+  .gate-hard  { background: #4c0519; color: #fda4af; border: 1px solid #881337; }
+
+  /* ── Narrow fixed-width boxes ────────────────── */
+  .box.narrow { flex: 0 0 140px; }
+  .box.wide   { flex: 2; }
+  .box.solo   { flex: 0 0 320px; }
+
+  /* ── Section title lines ─────────────────────── */
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 32px 0 10px;
+  }
+  .section-title span {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #334155;
+    white-space: nowrap;
+  }
+  .section-title hr {
+    flex: 1;
+    margin: 0;
+    border-color: #1e293b;
+  }
+</style>
+</head>
+<body>
+
+<h1>AI Career Assistant — System Architecture</h1>
+<p class="subtitle">Phase 0 built · Phase 1 in progress &nbsp;|&nbsp; LangGraph · Claude API · FastAPI · React</p>
+
+<div class="diagram">
+
+  <!-- ═══════════════════════════════════════════ USER LAYER -->
+  <div class="section-title"><span>User layer</span><hr/></div>
+
+  <div class="row center" style="gap:12px">
+    <div class="box teal narrow" style="flex:0 0 180px">
+      <div class="name">Browser UI</div>
+      <div class="detail">React 18 + Vite + TypeScript<br/>Tailwind CSS + tanstack-query</div>
+      <span class="tag">Port 5173</span>
+    </div>
+    <div class="box slate narrow" style="flex:0 0 180px">
+      <div class="name">profile.yaml</div>
+      <div class="detail">Target roles · skills · salary floor<br/>Hard rules (excluded companies…)</div>
+      <span class="tag">config/</span>
+    </div>
+  </div>
+
+  <div class="arrow-down">↓</div>
+  <p class="arrow-label">HTTP / SSE  ·  JWT auth</p>
+
+  <!-- ═══════════════════════════════════════════ API LAYER -->
+  <div class="section-title"><span>API layer</span><hr/></div>
+
+  <div class="row center">
+    <div class="box blue" style="flex:0 0 560px">
+      <div class="name">FastAPI  <span class="phase ph0">Phase 0</span></div>
+      <div class="detail" style="display:flex;gap:24px;margin-top:6px">
+        <span>POST /auth/register·login<br/>GET  /auth/me</span>
+        <span>GET/POST /applications/<br/>GET  /pipeline/kanban</span>
+        <span>POST /agents/research·resume<br/>POST /agents/application·outreach<br/>POST /agents/interview·negotiation</span>
+        <span>GET  /approvals/pending<br/>POST /approvals/{id}/approve·edit·reject<br/>GET  /budget/summary<br/>GET  /audit/verify</span>
+      </div>
+      <span class="tag">Port 8000</span>
+    </div>
+  </div>
+
+  <div class="arrow-down">↓</div>
+
+  <!-- ═══════════════════════════════════════════ ORCHESTRATION LAYER -->
+  <div class="section-title"><span>Orchestration layer  (LangGraph)</span><hr/></div>
+
+  <div class="row center">
+    <div class="box indigo" style="flex:0 0 680px">
+      <div class="name">graph.py — LangGraph StateGraph</div>
+      <div class="detail" style="margin-top:6px">
+        <span style="opacity:1;font-size:0.72rem">
+          load_profile &nbsp;→&nbsp; run_research &nbsp;→&nbsp; run_resume &nbsp;→&nbsp; END
+          &nbsp;&nbsp;<span class="phase ph0">Phase 0: linear</span>
+        </span><br/>
+        <span style="opacity:0.5;font-size:0.68rem;margin-top:3px;display:block">
+          Phase 1: parallel fan-out · orchestrator node · ask_user gate · graph checkpoints
+          <span class="phase ph1">Phase 1</span>
+        </span>
+      </div>
+      <span class="tag">GraphState TypedDict — single shared state object</span>
+    </div>
+  </div>
+
+  <div class="arrow-down wide">↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓</div>
+
+  <!-- ═══════════════════════════════════════════ AGENTS LAYER -->
+  <div class="section-title"><span>Specialist agents  (claude-opus-4-7)</span><hr/></div>
+
+  <div class="row spread" style="gap:8px">
+    <div class="box violet" style="position:relative">
+      <span class="gate gate-soft">soft gate</span>
+      <div class="name">Research</div>
+      <div class="detail">Scores &amp; ranks job postings<br/>against profile</div>
+      <span class="tag">ReAct <span class="phase ph1">Ph1</span></span>
+    </div>
+    <div class="box violet" style="position:relative">
+      <span class="gate gate-soft">soft gate</span>
+      <div class="name">Resume</div>
+      <div class="detail">Resume edits · LinkedIn<br/>headline &amp; about</div>
+      <span class="tag">Reflexion</span>
+    </div>
+    <div class="box violet" style="position:relative">
+      <span class="gate gate-hard">hard gate</span>
+      <div class="name">Application</div>
+      <div class="detail">Cover letter · CV tailor<br/>notes · LinkedIn note</div>
+      <span class="tag">single-call</span>
+    </div>
+    <div class="box violet" style="position:relative">
+      <span class="gate gate-hard">hard gate</span>
+      <div class="name">Outreach</div>
+      <div class="detail">Connect msg · 2 follow-ups<br/>· value offer</div>
+      <span class="tag">ReAct <span class="phase ph1">Ph1</span></span>
+    </div>
+    <div class="box violet" style="position:relative">
+      <span class="gate gate-soft">soft gate</span>
+      <div class="name">Interview</div>
+      <div class="detail">Behavioural · technical<br/>· STAR · Q to ask</div>
+      <span class="tag">Plan-Execute</span>
+    </div>
+    <div class="box violet" style="position:relative">
+      <span class="gate gate-hard">hard gate</span>
+      <div class="name">Negotiation</div>
+      <div class="detail">Market range · counter<br/>· net comp breakdown</div>
+      <span class="tag">Plan-Execute</span>
+    </div>
+  </div>
+
+  <div class="arrow-down">↓</div>
+
+  <!-- ═══════════════════════════════════════════ CLAUDE CLIENT -->
+  <div class="section-title"><span>Claude API client  (api_client.py)</span><hr/></div>
+
+  <div class="row center" style="gap:10px">
+    <div class="box blue narrow">
+      <div class="name">Secret scrub</div>
+      <div class="detail">Regex scan before<br/>every API call</div>
+    </div>
+    <div class="box blue narrow">
+      <div class="name">Prompt cache</div>
+      <div class="detail">cache_control: ephemeral<br/>on system prompts</div>
+    </div>
+    <div class="box blue narrow">
+      <div class="name">Streaming</div>
+      <div class="detail">SSE chunk-by-chunk<br/>to frontend</div>
+    </div>
+    <div class="box blue narrow">
+      <div class="name">Reflexion retry</div>
+      <div class="detail">Up to 3 self-corrections<br/>on parse failure</div>
+    </div>
+    <div class="box blue narrow">
+      <div class="name">Budget tracker</div>
+      <div class="detail">Tokens + cost per run<br/>upsert budget_records</div>
+    </div>
+    <div class="box blue narrow">
+      <div class="name">Pydantic parse</div>
+      <div class="detail">Strict JSON validation<br/>against output schema</div>
+    </div>
+  </div>
+
+  <div class="arrow-down">↓ &nbsp; claude-opus-4-7 (specialists) &nbsp;/&nbsp; claude-haiku-4-5 (coordinator) &nbsp; ↓</div>
+
+  <!-- ═══════════════════════════════════════════ EXTERNAL APIs -->
+  <div class="section-title"><span>External APIs &amp; data sources</span><hr/></div>
+
+  <div class="row spread" style="gap:8px">
+    <div class="box amber">
+      <div class="name">Anthropic API</div>
+      <div class="detail">claude-opus-4-7<br/>claude-haiku-4-5</div>
+      <span class="tag">streaming + caching</span>
+    </div>
+    <div class="box amber">
+      <div class="name">RSS feeds</div>
+      <div class="detail">RemoteOK<br/>WeWorkRemotely</div>
+      <span class="tag">feedparser</span>
+    </div>
+    <div class="box amber">
+      <div class="name">Indeed</div>
+      <div class="detail">HTTP + BeautifulSoup<br/>1.5 s polite delay</div>
+      <span class="tag">httpx</span>
+    </div>
+    <div class="box amber" style="opacity:0.5">
+      <div class="name">ATS portals</div>
+      <div class="detail">Workday · Greenhouse<br/>Lever · direct pages</div>
+      <span class="tag">Playwright <span class="phase ph1">Phase 1</span></span>
+    </div>
+  </div>
+
+  <div class="arrow-down">↓</div>
+
+  <!-- ═══════════════════════════════════════════ DATA LAYER -->
+  <div class="section-title"><span>Data &amp; persistence layer</span><hr/></div>
+
+  <div class="row spread" style="gap:8px">
+    <div class="box green wide">
+      <div class="name">SQLite + WAL mode</div>
+      <div class="detail" style="display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;margin-top:5px">
+        <span>users · profiles</span>
+        <span>agent_runs · tool_calls</span>
+        <span>applications · drafts</span>
+        <span>agent_memory</span>
+        <span>agent_jobs</span>
+        <span>pending_questions</span>
+        <span>graph_checkpoints</span>
+        <span>notifications</span>
+        <span>budget_records</span>
+        <span>audit_log (hash-chained)</span>
+      </div>
+      <span class="tag">async SQLAlchemy 2 + aiosqlite + Alembic</span>
+    </div>
+    <div class="box green" style="flex:0 0 200px">
+      <div class="name">Memory</div>
+      <div class="detail">Short-term: in-session dict<br/>Long-term: agent_memory table<br/>Keys: user_preferences.X<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;rules.X · patterns.X</div>
+      <span class="tag">observation masking w=10 <span class="phase ph1">Ph1</span></span>
+    </div>
+    <div class="box green" style="flex:0 0 180px">
+      <div class="name">Audit log</div>
+      <div class="detail">Hash-chained tamper-evident<br/>Dual-write: SQLite + JSONL<br/>chain_hash = sha256(<br/>prev + sha256(payload))</div>
+      <span class="tag">logs/audit.jsonl</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ BACKGROUND LAYER -->
+  <div class="section-title"><span>Background services</span><hr/></div>
+
+  <div class="row spread" style="gap:8px">
+    <div class="box rose" style="opacity:0.6">
+      <div class="name">Monitor <span class="phase ph1">Phase 1</span></div>
+      <div class="detail">Runs every 15 min — no LLM<br/>· Deadlines ≤ 48 h<br/>· Stale apps (14 d)<br/>· New job matches ≥ 0.75<br/>· Company news</div>
+      <span class="tag">asyncio.Task</span>
+    </div>
+    <div class="box rose" style="opacity:0.6">
+      <div class="name">Agent runner <span class="phase ph1">Phase 1</span></div>
+      <div class="detail">Parallel job queue<br/>asyncio.Semaphore(5)<br/>SSE broadcast to UI</div>
+      <span class="tag">agent_runner.py</span>
+    </div>
+    <div class="box rose" style="opacity:0.6">
+      <div class="name">Orchestrator <span class="phase ph1">Phase 1</span></div>
+      <div class="detail">Plan-and-Execute<br/>claude-haiku-4-5<br/>Routes to specialist agents</div>
+      <span class="tag">orchestrator.py</span>
+    </div>
+    <div class="box rose" style="opacity:0.6">
+      <div class="name">APScheduler <span class="phase ph1">Phase 1</span></div>
+      <div class="detail">Orchestrator every 6 h<br/>Signals sweep weekly<br/>FastAPI lifespan task</div>
+      <span class="tag">apscheduler</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ TOOL LAYER -->
+  <div class="section-title"><span>MCP-compatible tool registry  <span class="phase ph1">Phase 1</span></span><hr/></div>
+
+  <div class="row spread" style="gap:8px;opacity:0.55">
+    <div class="box orange">
+      <div class="name">research_tools</div>
+      <div class="detail">search_jobs<br/>get_company_profile<br/>score_fit</div>
+    </div>
+    <div class="box orange">
+      <div class="name">resume_tools</div>
+      <div class="detail">analyze_jd<br/>generate_bullets<br/>critique_bullets</div>
+    </div>
+    <div class="box orange">
+      <div class="name">common_tools</div>
+      <div class="detail">ask_user (3-tier gate)<br/>notify_user<br/>get/update_memory</div>
+    </div>
+    <div class="box orange">
+      <div class="name">orchestrator_tools</div>
+      <div class="detail">get_pipeline_state<br/>run_research_agent<br/>run_resume_agent…</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ HUMAN GATES -->
+  <div class="section-title"><span>Human-in-the-loop gates</span><hr/></div>
+
+  <div class="row center" style="gap:12px">
+    <div class="box" style="background:#0a1a0a;border-color:#166534;color:#86efac;flex:0 0 220px">
+      <div class="name" style="color:#4ade80">Auto gate</div>
+      <div class="detail">Fit ≥ 85% + reversible action<br/>Proceeds without prompt<br/>Shows as green banner in UI</div>
+      <span class="tag" style="background:#166534;color:#86efac">no human needed</span>
+    </div>
+    <div class="box" style="background:#1c1500;border-color:#854d0e;color:#fcd34d;flex:0 0 220px">
+      <div class="name" style="color:#fbbf24">Soft gate</div>
+      <div class="detail">Fit 60–85% or mildly irreversible<br/>24 h to review, auto-proceeds<br/>Shows with countdown in UI</div>
+      <span class="tag" style="background:#854d0e;color:#fcd34d">24 h timeout</span>
+    </div>
+    <div class="box" style="background:#1a0508;border-color:#881337;color:#fda4af;flex:0 0 220px">
+      <div class="name" style="color:#f87171">Hard gate</div>
+      <div class="detail">Any external send, offer decision<br/>Fit &lt; 60% · Blocks graph<br/>Checkpoint saved, resumes on answer</div>
+      <span class="tag" style="background:#881337;color:#fda4af">explicit approval required</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ LEGEND -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#1e4d8c"></div> FastAPI / client layer</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3730a3"></div> LangGraph orchestration</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#5b21b6"></div> Claude specialist agents</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#0f766e"></div> SQLite persistence</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#b45309"></div> External APIs &amp; scrapers</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#be123c"></div> Background services</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c2410c"></div> MCP tools</div>
+  <div class="legend-item">
+    <span class="phase ph0" style="font-size:0.65rem">Phase 0</span>&nbsp;Built
+  </div>
+  <div class="legend-item">
+    <span class="phase ph1" style="font-size:0.65rem">Phase 1</span>&nbsp;Planned
+  </div>
+</div>
+
+</body>
+</html>

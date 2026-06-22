@@ -200,6 +200,55 @@ async def upload_or_update_file(
         return data["id"], data["webViewLink"], new_token_data
 
 
+async def convert_docx_to_pdf_bytes(
+    access_token: str,
+    refresh_token: str,
+    expiry_iso: Optional[str],
+    docx_bytes: bytes,
+    filename: str,
+) -> tuple[bytes, Optional[dict]]:
+    """Convert a .docx file to PDF bytes using the Drive API.
+
+    Uploads docx as a Google Doc (Drive converts it), exports as PDF,
+    then deletes the temporary Google Doc. Returns (pdf_bytes, new_token_data).
+    """
+    token, new_token_data = await _get_valid_access_token(access_token, refresh_token, expiry_iso)
+    docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    gdoc_mime = "application/vnd.google-apps.document"
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        headers_auth = {"Authorization": f"Bearer {token}"}
+
+        # 1. Upload .docx and ask Drive to convert it to a Google Doc
+        metadata = {"name": filename, "mimeType": gdoc_mime}
+        upload_resp = await client.post(
+            _UPLOAD_URL,
+            params={"uploadType": "multipart", "fields": "id"},
+            content=_build_multipart(filename, docx_mime, docx_bytes, metadata),
+            headers={**headers_auth, "Content-Type": _multipart_content_type()},
+        )
+        upload_resp.raise_for_status()
+        gdoc_id = upload_resp.json()["id"]
+
+        try:
+            # 2. Export the Google Doc as PDF
+            export_resp = await client.get(
+                f"{_DRIVE_FILES}/{gdoc_id}/export",
+                params={"mimeType": "application/pdf"},
+                headers=headers_auth,
+            )
+            export_resp.raise_for_status()
+            pdf_bytes = export_resp.content
+        finally:
+            # 3. Always delete the temporary Google Doc
+            await client.delete(
+                f"{_DRIVE_FILES}/{gdoc_id}",
+                headers=headers_auth,
+            )
+
+    return pdf_bytes, new_token_data
+
+
 # ---------------------------------------------------------------------------
 # Multipart MIME helpers (avoids needing the Google SDK)
 # ---------------------------------------------------------------------------
