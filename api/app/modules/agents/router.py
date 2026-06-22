@@ -924,8 +924,8 @@ async def get_stored_jobs(
 
     where_clauses = [
         "user_id = :uid",
-        "archived = 0",
-        "(scored = 1 OR rescoring = 1)",
+        "archived = false",
+        "(scored = true OR rescoring = true)",
         "id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND job_posting_id IS NOT NULL)",
     ]
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
@@ -1052,7 +1052,7 @@ async def bulk_archive_jobs(
     for i, jid in enumerate(body.job_ids):
         params[f"id{i}"] = jid
     await db.execute(
-        text(f"UPDATE job_postings SET archived = 1 WHERE user_id = :uid AND id IN ({placeholders})"),
+        text(f"UPDATE job_postings SET archived = true WHERE user_id = :uid AND id IN ({placeholders})"),
         params,
     )
     await db.commit()
@@ -1122,7 +1122,7 @@ async def archive_job(
     if not result.fetchone():
         raise HTTPException(404, "Job not found")
     await db.execute(
-        text("UPDATE job_postings SET archived = 1 WHERE id = :id AND user_id = :uid"),
+        text("UPDATE job_postings SET archived = true WHERE id = :id AND user_id = :uid"),
         {"id": job_id, "uid": current_user.id},
     )
     await db.commit()
@@ -1494,7 +1494,7 @@ async def rescore_all_jobs(
     from app.shared.config import get_settings
 
     rows = await db.execute(
-        text("SELECT id FROM job_postings WHERE user_id = :uid AND archived = 0"),
+        text("SELECT id FROM job_postings WHERE user_id = :uid AND archived = false"),
         {"uid": current_user.id},
     )
     all_ids = [r[0] for r in rows.fetchall()]

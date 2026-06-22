@@ -36,6 +36,17 @@ cd ui && npm run test:watch  # vitest watch mode
 
 Copy `.env.example` to `api/.env`. Backend reads config from `api/.env` via `pydantic-settings`.
 
+**Database**: PostgreSQL is required for both local dev and production — SQLite is no longer supported.
+Start a local Postgres instance before running the backend:
+```bash
+docker run -d --name pg \
+  -e POSTGRES_PASSWORD=dev \
+  -e POSTGRES_DB=aicareer \
+  -p 5432:5432 \
+  postgres:15-alpine
+```
+Then set `DATABASE_URL=postgresql+asyncpg://postgres:dev@localhost:5432/aicareer` in `api/.env`.
+
 ## Architecture
 
 ### LLM backend

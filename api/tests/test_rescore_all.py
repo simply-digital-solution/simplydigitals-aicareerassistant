@@ -73,7 +73,7 @@ async def test_only_unarchived_queried():
         await _call_rescore_all(db)
 
     select_sql = db.execute.call_args_list[0].args[0].text
-    assert "archived = 0" in select_sql
+    assert "archived = false" in select_sql
 
 
 # ---------------------------------------------------------------------------

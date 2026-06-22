@@ -293,8 +293,7 @@ class BaseLLMClient(ABC):
                 "completed": datetime.now(timezone.utc).isoformat(),
             },
         )
-        from app.shared.sql_compat import last_insert_id
-        return last_insert_id(insert_result)
+        return insert_result.lastrowid
 
 
 # ------------------------------------------------------------------

@@ -101,12 +101,12 @@ async def score_next_batch(db: AsyncSession) -> bool:
                    jp.description, jp.inferred_industries
             FROM job_postings jp
             JOIN users u ON u.id = jp.user_id
-            WHERE jp.scored = 0
-              AND jp.rescoring = 0
-              AND u.scoring_suspended = 0
+            WHERE jp.scored = false
+              AND jp.rescoring = false
+              AND u.scoring_suspended = false
               AND (
                 jp.score_error IS NULL
-                OR jp.scored_at < datetime('now', '-30 minutes')
+                OR jp.scored_at < NOW() - INTERVAL '30 minutes'
                 OR jp.scored_at IS NULL
               )
               AND NOT EXISTS (
@@ -173,7 +173,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         for jid in job_ids:
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
+                text("UPDATE job_postings SET scored=false, score_error=:err, scored_at=:now WHERE id=:id"),
                 {"err": error_msg, "now": now, "id": jid},
             )
         await db.commit()
@@ -185,7 +185,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         for jid in job_ids:
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
+                text("UPDATE job_postings SET scored=false, score_error=:err, scored_at=:now WHERE id=:id"),
                 {"err": error_msg, "now": now, "id": jid},
             )
         await db.commit()
@@ -201,7 +201,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         if opp is None:
             logger.warning("llm_scorer: job_id=%d missing from batch response", jid)
             await db.execute(
-                text("UPDATE job_postings SET scored=0, score_error=:err, scored_at=:now WHERE id=:id"),
+                text("UPDATE job_postings SET scored=false, score_error=:err, scored_at=:now WHERE id=:id"),
                 {"err": "Missing from LLM batch response", "now": now, "id": jid},
             )
             continue
@@ -219,8 +219,8 @@ async def _write_score(db: AsyncSession, job_id: int, opp, model: str | None = N
     await db.execute(
         text("""
             UPDATE job_postings SET
-                scored               = 1,
-                rescoring            = 0,
+                scored               = true,
+                rescoring            = false,
                 fit_score            = :fit_score,
                 reasons              = :reasons,
                 risks                = :risks,
@@ -295,7 +295,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
 
     # Mark in-progress — old score stays visible until new one arrives
     await db.execute(
-        text("UPDATE job_postings SET rescoring=1, score_error=NULL WHERE id=:id"),
+        text("UPDATE job_postings SET rescoring=true, score_error=NULL WHERE id=:id"),
         {"id": job_id},
     )
     await db.commit()
@@ -330,7 +330,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: single job_id=%d failed: %s", job_id, error_msg)
         await db.execute(
-            text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
+            text("UPDATE job_postings SET rescoring=false, score_error=:err WHERE id=:id"),
             {"err": error_msg, "id": job_id},
         )
         await db.commit()
@@ -339,7 +339,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
     if isinstance(result, AgentError):
         logger.warning("llm_scorer: single job_id=%d agent error: %s", job_id, result.error)
         await db.execute(
-            text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
+            text("UPDATE job_postings SET rescoring=false, score_error=:err WHERE id=:id"),
             {"err": result.error, "id": job_id},
         )
         await db.commit()
@@ -351,7 +351,7 @@ async def score_single_job(db: AsyncSession, job_id: int) -> bool:
     if opp is None:
         logger.warning("llm_scorer: job_id=%d missing from single response", job_id)
         await db.execute(
-            text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
+            text("UPDATE job_postings SET rescoring=false, score_error=:err WHERE id=:id"),
             {"err": "Missing from LLM response", "id": job_id},
         )
         await db.commit()
@@ -426,7 +426,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
     # Mark as in-progress — old score fields untouched so jobs stay visible
     for jid in found_ids:
         await db.execute(
-            text("UPDATE job_postings SET rescoring=1, score_error=NULL WHERE id=:id"),
+            text("UPDATE job_postings SET rescoring=true, score_error=NULL WHERE id=:id"),
             {"id": jid},
         )
     await db.commit()
@@ -467,7 +467,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         logger.error("llm_scorer: bulk rescore failed: %s", error_msg)
         for jid in found_ids:
             await db.execute(
-                text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
+                text("UPDATE job_postings SET rescoring=false, score_error=:err WHERE id=:id"),
                 {"err": error_msg, "id": jid},
             )
         await db.commit()
@@ -477,7 +477,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         logger.warning("llm_scorer: bulk rescore agent error: %s", result.error)
         for jid in found_ids:
             await db.execute(
-                text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
+                text("UPDATE job_postings SET rescoring=false, score_error=:err WHERE id=:id"),
                 {"err": result.error, "id": jid},
             )
         await db.commit()
@@ -491,7 +491,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int]) -> dict[int, b
         if opp is None:
             logger.warning("llm_scorer: job_id=%d missing from bulk response", jid)
             await db.execute(
-                text("UPDATE job_postings SET rescoring=0, score_error=:err WHERE id=:id"),
+                text("UPDATE job_postings SET rescoring=false, score_error=:err WHERE id=:id"),
                 {"err": "Missing from LLM bulk response", "id": jid},
             )
         else:

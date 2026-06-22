@@ -47,7 +47,7 @@ def test_bulk_archive_calls_update_with_all_ids(client):
     assert resp.status_code == 204
     db.execute.assert_called_once()
     sql = db.execute.call_args.args[0].text
-    assert "archived = 1" in sql
+    assert "archived = true" in sql
     params = db.execute.call_args.args[1]
     assert set(params[k] for k in params if k.startswith("id")) == {1, 2, 3}
 

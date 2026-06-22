@@ -50,8 +50,7 @@ async def purge_stale_research_jobs(
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     statuses = ",".join(f"'{s}'" for s in _PROTECTED_STATUSES)
 
-    # Find IDs to delete in a single query — this avoids a slow correlated subquery
-    # inside DELETE, which SQLite handles poorly.
+    # Find IDs to delete in a single query to avoid a slow correlated subquery inside DELETE.
     candidate_rows = await db.execute(text(f"""
         SELECT jp.id
         FROM job_postings jp
@@ -74,8 +73,6 @@ async def purge_stale_research_jobs(
         logger.info("job_cleanup: no stale research jobs to delete")
         return 0
 
-    # SQLite does not support DELETE … WHERE id IN (subquery) efficiently,
-    # so we delete in a single statement with explicit placeholders.
     placeholders = ",".join(str(i) for i in ids)
     await db.execute(text(f"DELETE FROM job_postings WHERE id IN ({placeholders})"))
     await db.commit()

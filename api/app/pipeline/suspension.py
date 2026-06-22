@@ -39,7 +39,7 @@ async def suspend_inactive_users(db: AsyncSession) -> list[int]:
     # Users who are not already suspended and not in the active set
     all_result = await db.execute(text("""
         SELECT id FROM users
-        WHERE scoring_suspended = 0
+        WHERE scoring_suspended = false
     """))
     all_ids = [row[0] for row in all_result.fetchall()]
 
@@ -58,10 +58,9 @@ async def suspend_inactive_users(db: AsyncSession) -> list[int]:
         to_suspend.append(uid)
 
     if to_suspend:
-        # SQLite doesn't support tuple binding for IN — use explicit placeholders
         placeholders = ",".join(str(uid) for uid in to_suspend)
         await db.execute(
-            text(f"UPDATE users SET scoring_suspended = 1 WHERE id IN ({placeholders})")
+            text(f"UPDATE users SET scoring_suspended = true WHERE id IN ({placeholders})")
         )
         await db.commit()
         logger.info("suspension: suspended %d user(s): %s", len(to_suspend), to_suspend)
@@ -79,7 +78,7 @@ async def reactivate_user(db: AsyncSession, user_id: int) -> bool:
     if not result.first():
         return False
     await db.execute(
-        text("UPDATE users SET scoring_suspended = 0 WHERE id = :uid"),
+        text("UPDATE users SET scoring_suspended = false WHERE id = :uid"),
         {"uid": user_id},
     )
     await db.commit()

@@ -255,7 +255,7 @@ async def test_agent_exception_marks_all_jobs_failed():
     for call in error_calls:
         params = call.args[1]
         assert "RuntimeError" in params["err"]
-        assert "scored=0" in call.args[0].text
+        assert "scored=false" in call.args[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -734,18 +734,18 @@ async def test_loop_query_includes_errored_jobs_with_old_scored_at():
     assert "score_error IS NULL" in select_sql
     # Also retries errored jobs after cooldown
     assert "scored_at" in select_sql
-    assert "-30 minutes" in select_sql
+    assert "30 minutes" in select_sql
 
 
 @pytest.mark.asyncio
 async def test_loop_query_excludes_jobs_currently_rescoring():
-    """Jobs with rescoring=1 must not be picked up by the loop."""
+    """Jobs with rescoring=true must not be picked up by the loop."""
     db = _db_with_batch(job_rows=[])
 
     await score_next_batch(db)
 
     select_sql = db.execute.call_args_list[0].args[0].text
-    assert "rescoring = 0" in select_sql
+    assert "rescoring = false" in select_sql
 
 
 @pytest.mark.asyncio

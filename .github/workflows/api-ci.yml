@@ -38,7 +38,7 @@ permissions:
 env:
   PYTHON_VERSION: "3.11"
   # Safe CI-only values — never used in production
-  DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+  DATABASE_URL: "postgresql+asyncpg://postgres:ci@localhost:5432/cidb"
   JWT_SECRET_KEY: "ci-secret-key-at-least-32-chars-long!!"
   APP_ENV: "testing"
   ENABLE_SCHEDULER: "false"
@@ -76,6 +76,20 @@ jobs:
     runs-on: ubuntu-latest
     if: inputs.run_tests
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: cidb
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -256,7 +270,7 @@ jobs:
         run: |
           docker run --rm \
             -e APP_ENV=testing \
-            -e DATABASE_URL="sqlite+aiosqlite:///:memory:" \
+            -e DATABASE_URL="postgresql+asyncpg://smokeuser:smoketest@localhost:5432/smokedb" \
             -e JWT_SECRET_KEY="smoke-test-key-at-least-32-chars!!" \
             "$ECR_IMAGE" \
             python -c "from app.main import app; print('✅ All imports OK')"
@@ -265,7 +279,7 @@ jobs:
         run: |
           docker run --rm \
             -e APP_ENV=testing \
-            -e DATABASE_URL="sqlite+aiosqlite:///:memory:" \
+            -e DATABASE_URL="postgresql+asyncpg://smokeuser:smoketest@localhost:5432/smokedb" \
             -e JWT_SECRET_KEY="smoke-test-key-at-least-32-chars!!" \
             "$ECR_IMAGE" \
             gunicorn app.main:app \

@@ -4,11 +4,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.database import get_db
-from app.shared.sql_compat import days_ago, nulls_last, get_dialect
-from app.shared.config import get_settings
+from app.shared.sql_compat import days_ago
 from app.pipeline.suspension import suspend_inactive_users, reactivate_user
-
-_dialect = get_dialect(get_settings().database_url)
 
 ADMIN_EMAIL = "pandiri.vasu@simplydigitals.com.sg"
 
@@ -252,7 +249,7 @@ async def list_users(
         LEFT JOIN agent_runs ar ON ar.user_id = u.id
         LEFT JOIN job_postings jp ON jp.user_id = u.id
         GROUP BY u.id
-        ORDER BY {nulls_last("last_active DESC", _dialect)}
+        ORDER BY last_active DESC NULLS LAST
     """))
     result = []
     for r in rows.fetchall():
@@ -291,7 +288,7 @@ async def suspend_user(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        text("UPDATE users SET scoring_suspended = 1 WHERE id = :uid"),
+        text("UPDATE users SET scoring_suspended = true WHERE id = :uid"),
         {"uid": user_id},
     )
     if result.rowcount == 0:

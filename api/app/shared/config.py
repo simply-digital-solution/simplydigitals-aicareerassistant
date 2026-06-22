@@ -1,10 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 from functools import lru_cache
-from pathlib import Path
-
-# Always resolve DB path relative to this file (api/app/shared/config.py → api/)
-_API_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -20,8 +16,8 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
 
-    # Database — absolute path so it never moves regardless of cwd
-    database_url: str = f"sqlite+aiosqlite:///{_API_DIR}/aicareercoach.db"
+    # Database — must be set in .env (PostgreSQL for both dev and prod)
+    database_url: str = ""
 
     # Auth
     jwt_secret_key: str = "change-me"
@@ -76,21 +72,13 @@ class Settings(BaseSettings):
         if self.app_env != "production":
             return self
         if not self.database_url:
-            raise RuntimeError(
-                "DATABASE_URL is not set in production."
-            )
-        if "sqlite" in self.database_url:
-            raise RuntimeError(
-                "DATABASE_URL is SQLite in production — must be PostgreSQL."
-            )
+            raise RuntimeError("DATABASE_URL is not set in production.")
         if self.database_url.startswith("${{"):
             raise RuntimeError(
                 "DATABASE_URL contains an unexpanded GitHub Actions secret — check the deploy workflow heredoc."
             )
         if self.jwt_secret_key in ("change-me", ""):
-            raise RuntimeError(
-                "JWT_SECRET_KEY is not set in production."
-            )
+            raise RuntimeError("JWT_SECRET_KEY is not set in production.")
         return self
 
 

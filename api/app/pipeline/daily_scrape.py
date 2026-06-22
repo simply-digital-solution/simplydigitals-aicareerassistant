@@ -153,7 +153,7 @@ async def scrape_for_all_users(db: AsyncSession) -> None:
     rows = await db.execute(text("""
         SELECT p.user_id FROM profiles p
         JOIN users u ON u.id = p.user_id
-        WHERE u.scoring_suspended = 0
+        WHERE u.scoring_suspended = false
     """))
     user_ids = [r[0] for r in rows.fetchall()]
     logger.info("scrape_for_all_users: starting — found %d users: %s", len(user_ids), user_ids)

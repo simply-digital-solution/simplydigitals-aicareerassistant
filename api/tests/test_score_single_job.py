@@ -33,7 +33,7 @@ def _make_db(job_row=None, advanced_status=False):
     # [2] daily scoring usage SELECT (0 = under limit)
     usage_result = MagicMock()
     usage_result.fetchone.return_value = (0,)
-    # [3] rescoring=1 UPDATE
+    # [3] rescoring=true UPDATE
     rescoring_update = MagicMock()
     # [4] feedback SELECT
     feedback_result = MagicMock()
@@ -85,7 +85,7 @@ async def test_job_not_found_returns_false():
 
 
 # ---------------------------------------------------------------------------
-# Happy path — rescoring=1 set before call, score written on success
+# Happy path — rescoring=true set before call, score written on success
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -101,9 +101,9 @@ async def test_successful_single_score():
 
     assert ok is True
     db.commit.assert_called()
-    # [3] is the rescoring=1 UPDATE
+    # [3] is the rescoring=true UPDATE
     rescoring_sql = db.execute.call_args_list[3].args[0].text
-    assert "rescoring=1" in rescoring_sql
+    assert "rescoring=true" in rescoring_sql
     # [5] is the score write (_write_score)
     update_params = db.execute.call_args_list[5].args[1]
     assert update_params["fit_score"] == 0.82
@@ -111,7 +111,7 @@ async def test_successful_single_score():
 
 
 # ---------------------------------------------------------------------------
-# Agent returns AgentError → rescoring=0, error written, old score preserved
+# Agent returns AgentError → rescoring=false, error written, old score preserved
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -129,15 +129,15 @@ async def test_agent_error_returns_false():
     assert ok is False
     update_params = db.execute.call_args_list[5].args[1]
     assert "parse failed" in update_params["err"]
-    # Must NOT reset scored/fit_score — only rescoring=0 and score_error
+    # Must NOT reset scored/fit_score — only rescoring=false and score_error
     update_sql = db.execute.call_args_list[5].args[0].text
-    assert "rescoring=0" in update_sql
-    assert "scored=0" not in update_sql
+    assert "rescoring=false" in update_sql
+    assert "scored=false" not in update_sql
     assert "fit_score = NULL" not in update_sql
 
 
 # ---------------------------------------------------------------------------
-# Agent raises exception → rescoring=0, error written, old score preserved
+# Agent raises exception → rescoring=false, error written, old score preserved
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -155,12 +155,12 @@ async def test_agent_exception_returns_false():
     update_params = db.execute.call_args_list[5].args[1]
     assert "RuntimeError" in update_params["err"]
     update_sql = db.execute.call_args_list[5].args[0].text
-    assert "rescoring=0" in update_sql
-    assert "scored=0" not in update_sql
+    assert "rescoring=false" in update_sql
+    assert "scored=false" not in update_sql
 
 
 # ---------------------------------------------------------------------------
-# Missing job_id in response → rescoring=0, error written
+# Missing job_id in response → rescoring=false, error written
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -237,7 +237,7 @@ async def test_skips_scoring_when_application_in_advanced_status():
 
     assert ok is False
     db.commit.assert_not_called()
-    # No rescoring=1 UPDATE, no LLM call — only 2 execute calls (job SELECT + app check)
+    # No rescoring=true UPDATE, no LLM call — only 2 execute calls (job SELECT + app check)
     # Daily usage check is skipped because we return early on advanced status
     assert db.execute.call_count == 2
 

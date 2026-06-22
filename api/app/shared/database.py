@@ -10,13 +10,11 @@ class Base(DeclarativeBase):
 
 def _make_engine():
     settings = get_settings()
-    connect_args = {}
-    if "sqlite" in settings.database_url:
-        connect_args = {"check_same_thread": False}
     return create_async_engine(
         settings.database_url,
-        connect_args=connect_args,
         echo=settings.app_env == "development",
+        pool_size=5,
+        max_overflow=10,
     )
 
 
@@ -51,11 +49,3 @@ async def get_db_context():
         except Exception:
             await session.rollback()
             raise
-
-
-async def init_db():
-    """Enable WAL mode for SQLite — allows concurrent reads + one writer."""
-    async with engine.begin() as conn:
-        if "sqlite" in get_settings().database_url:
-            await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))
-            await conn.execute(__import__("sqlalchemy").text("PRAGMA foreign_keys=ON"))

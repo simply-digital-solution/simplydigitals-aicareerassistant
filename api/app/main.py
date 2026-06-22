@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.shared.database import init_db, get_db_context
+from app.shared.database import get_db_context
 from app.shared.config import get_settings
 from app.modules.applications.router import router as applications_router
 from app.modules.agents.router import router as agents_router
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import os
-    await init_db()
     if os.getenv("ENABLE_SCHEDULER", "true").lower() == "true":
         from app.pipeline.scheduler import start, stop
         start(get_db_context)
