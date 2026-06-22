@@ -241,6 +241,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate required secrets
+        run: |
+          MISSING=""
+          [ -z "${{ secrets.DATABASE_URL }}"          ] && MISSING="$MISSING DATABASE_URL"
+          [ -z "${{ secrets.JWT_SECRET_KEY }}"        ] && MISSING="$MISSING JWT_SECRET_KEY"
+          [ -z "${{ secrets.GEMINI_API_KEY }}"        ] && MISSING="$MISSING GEMINI_API_KEY"
+          [ -z "${{ secrets.AWS_ACCOUNT_ID }}"        ] && MISSING="$MISSING AWS_ACCOUNT_ID"
+          [ -z "${{ secrets.AWS_REGION }}"            ] && MISSING="$MISSING AWS_REGION"
+          [ -z "${{ secrets.ECR_REPOSITORY }}"        ] && MISSING="$MISSING ECR_REPOSITORY"
+          if [ -n "$MISSING" ]; then
+            echo "❌ Missing required secrets:$MISSING"
+            exit 1
+          fi
+          DB="${{ secrets.DATABASE_URL }}"
+          if echo "$DB" | grep -q "sqlite"; then
+            echo "❌ DATABASE_URL points to SQLite — must be PostgreSQL in production"
+            exit 1
+          fi
+          echo "✅ All required secrets present and DATABASE_URL is non-SQLite"
+
       - name: Detect migration changes
         id: migration_check
         uses: dorny/paths-filter@v3

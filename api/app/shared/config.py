@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 from functools import lru_cache
 from pathlib import Path
 
@@ -67,6 +68,24 @@ class Settings(BaseSettings):
     # Adzuna (free tier: https://developer.adzuna.com)
     adzuna_app_id: str = ""
     adzuna_app_key: str = ""
+
+    @model_validator(mode="after")
+    def _validate_production(self) -> "Settings":
+        if self.app_env != "production":
+            return self
+        if "sqlite" in self.database_url:
+            raise RuntimeError(
+                "DATABASE_URL is SQLite in production — secret was not injected correctly."
+            )
+        if self.database_url.startswith("${{"):
+            raise RuntimeError(
+                "DATABASE_URL contains an unexpanded GitHub Actions secret — check the deploy workflow heredoc."
+            )
+        if self.jwt_secret_key in ("change-me", ""):
+            raise RuntimeError(
+                "JWT_SECRET_KEY is not set in production."
+            )
+        return self
 
 
 @lru_cache
