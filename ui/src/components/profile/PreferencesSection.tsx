@@ -94,8 +94,8 @@ export default function PreferencesSection({
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">Minimum Salary</label>
-            <input type="number" value={salaryFloor} onChange={e => { setSalaryFloor(e.target.value); mark() }} className={inputCls} placeholder="e.g. 80000" />
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Minimum Salary (per month)</label>
+            <input type="number" value={salaryFloor} onChange={e => { setSalaryFloor(e.target.value); mark() }} className={inputCls} placeholder="e.g. 5000" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">Currency</label>
