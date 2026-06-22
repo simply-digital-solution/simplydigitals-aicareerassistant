@@ -2,9 +2,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import ResumeSection from '../ResumeSection'
 import type { ProfileData } from '../../../api/client'
+import api, { profileApi } from '../../../api/client'
 
 vi.mock('../../../api/client', () => ({
-  default: { patch: vi.fn().mockResolvedValue({}) },
+  default: { patch: vi.fn().mockResolvedValue({}), post: vi.fn() },
   profileApi: { extractAndSave: vi.fn().mockResolvedValue({}) },
 }))
 
@@ -18,7 +19,13 @@ const base: ProfileData = {
 }
 
 describe('ResumeSection', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.defineProperty(window, 'localStorage', {
+      value: { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn(), removeItem: vi.fn() },
+      writable: true,
+    })
+  })
 
   it('shows Download button when resume text is present', () => {
     const data = { ...base, resume_text: 'Some resume content here' }
@@ -48,7 +55,6 @@ describe('ResumeSection', () => {
   })
 
   it('Analyse Resume calls extractAndSave and shows success message', async () => {
-    const { profileApi } = await import('../../../api/client')
     const onSaved = vi.fn()
     const data = { ...base, resume_text: 'Some resume content here' }
     render(<ResumeSection data={data} onSaved={onSaved} />)
@@ -60,12 +66,62 @@ describe('ResumeSection', () => {
   })
 
   it('shows error message when extractAndSave fails', async () => {
-    const { profileApi } = await import('../../../api/client')
     vi.mocked(profileApi.extractAndSave).mockRejectedValueOnce(new Error('LLM error'))
     const data = { ...base, resume_text: 'Some resume content here' }
     render(<ResumeSection data={data} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Resume'))
     fireEvent.click(screen.getByText('Analyse Resume'))
     await screen.findByText(/Could not extract details/i)
+  })
+
+  it('does not show Plain text button when resume_html exists but resume_text is empty', () => {
+    const data = { ...base, resume_html: '<p>old html</p>', resume_text: null }
+    render(<ResumeSection data={data} onSaved={vi.fn()} />)
+    expect(screen.queryByText('Plain text')).toBeNull()
+  })
+
+  it('shows Plain text button only when both resume_html and resume_text are present', () => {
+    const data = { ...base, resume_html: '<p>html</p>', resume_text: 'Some text' }
+    render(<ResumeSection data={data} onSaved={vi.fn()} />)
+    expect(screen.getByText('Plain text')).toBeTruthy()
+  })
+
+  it('PDF upload: saves to server before calling extractAndSave', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { text: 'Parsed resume text', html: '<p>html</p>' } } as any)
+
+    render(<ResumeSection data={base} onSaved={vi.fn()} />)
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    const file = new File(['pdf content'], 'resume.pdf', { type: 'application/pdf' })
+    fireEvent.change(input, { target: { files: [file] } })
+
+    // PATCH must be called with the parsed text before extractAndSave
+    await waitFor(() => expect(vi.mocked(api.patch)).toHaveBeenCalledWith(
+      '/profile',
+      { resume_text: 'Parsed resume text', resume_html: '<p>html</p>' }
+    ))
+    await waitFor(() => expect(vi.mocked(profileApi.extractAndSave)).toHaveBeenCalled())
+
+    // PATCH must come before extractAndSave
+    const patchOrder = vi.mocked(api.patch).mock.invocationCallOrder[0]
+    const extractOrder = vi.mocked(profileApi.extractAndSave).mock.invocationCallOrder[0]
+    expect(patchOrder).toBeLessThan(extractOrder)
+  })
+
+  it('PDF upload: section stays open after file is selected', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { text: 'Parsed resume text', html: '' } } as any)
+
+    render(<ResumeSection data={base} onSaved={vi.fn()} />)
+
+    // Open the section first
+    fireEvent.click(screen.getByText('Resume'))
+    expect(screen.getByText('Analyse Resume')).toBeTruthy()
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    const file = new File(['pdf content'], 'resume.pdf', { type: 'application/pdf' })
+    fireEvent.change(input, { target: { files: [file] } })
+
+    // Section body should still be visible (not collapsed)
+    await waitFor(() => expect(screen.getByText('Analyse Resume')).toBeTruthy())
   })
 })
