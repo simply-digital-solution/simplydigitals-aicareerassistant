@@ -99,8 +99,12 @@ export default function ResumeSection({
             ...(email ? { 'X-User-Email': email } : {}),
           },
         })
-        handleTextChange(data.text)
-        setResumeHtml(data.html ?? '')
+        const text = data.text
+        const html = data.html ?? ''
+        handleTextChange(text)
+        setResumeHtml(html)
+        // Save to server before extraction — extract-and-save reads resume_text from DB
+        await api.patch('/profile', { resume_text: text || null, resume_html: html || null })
         setDirty(false)
         onSaved()
         await runExtraction()
