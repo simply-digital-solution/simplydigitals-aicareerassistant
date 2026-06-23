@@ -129,34 +129,34 @@ function InterviewJobCard({ job }: { job: InterviewingJob }) {
             onRescore={() => {}}
           />
         </div>
-        <div className="pt-2 shrink-0 text-right space-y-1.5">
-          <span
-            className={`text-xs border px-2.5 py-1 rounded-md font-medium ${STATUS_BADGE[job.application_status]}`}
-          >
-            {STATUS_LABEL[job.application_status]}
-          </span>
-          {!isTerminal && (
-            <div className="flex flex-col gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleMove('offered')}
-                disabled={!!movingTo}
-                className="text-xs bg-green-600 text-white px-2.5 py-1 rounded-md font-medium hover:bg-green-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-              >
-                {movingTo === 'offered' ? 'Moving…' : 'Offered'}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMove('rejected')}
-                disabled={!!movingTo}
-                className="text-xs bg-red-600 text-white px-2.5 py-1 rounded-md font-medium hover:bg-red-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-              >
-                {movingTo === 'rejected' ? 'Moving…' : 'Rejected'}
-              </button>
-            </div>
-          )}
-        </div>
+        <span
+          className={`mt-2 shrink-0 text-xs border px-2.5 py-1 rounded-md font-medium ${STATUS_BADGE[job.application_status]}`}
+        >
+          {STATUS_LABEL[job.application_status]}
+        </span>
       </div>
+
+      {!isTerminal && (
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-xs text-gray-400">Move to:</span>
+          <button
+            type="button"
+            onClick={() => handleMove('offered')}
+            disabled={!!movingTo}
+            className="text-xs border border-green-600 text-green-700 px-2.5 py-0.5 rounded font-medium hover:bg-green-50 disabled:opacity-50 transition-colors"
+          >
+            {movingTo === 'offered' ? 'Moving…' : 'Offered'}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleMove('rejected')}
+            disabled={!!movingTo}
+            className="text-xs border border-red-400 text-red-500 px-2.5 py-0.5 rounded font-medium hover:bg-red-50 disabled:opacity-50 transition-colors"
+          >
+            {movingTo === 'rejected' ? 'Moving…' : 'Rejected'}
+          </button>
+        </div>
+      )}
 
       <TailoredResumePanel jobId={job.id} company={job.company} readOnly />
 
