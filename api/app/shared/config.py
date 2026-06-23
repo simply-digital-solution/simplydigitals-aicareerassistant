@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     frontend_url: str = "http://localhost:5173"
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+    enable_scheduler: bool = True
 
     # Database — must be set in .env (PostgreSQL for both dev and prod)
     database_url: str = ""
