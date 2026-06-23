@@ -9,7 +9,7 @@ import PipelineBoard from './components/PipelineBoard'
 import ResearchPanel from './components/ResearchPanel'
 import SelectedJobsPanel from './components/SelectedJobsPanel'
 import AppliedJobsPanel from './components/AppliedJobsPanel'
-import InterviewPanel from './components/InterviewPanel'
+import InterviewJobsPanel from './components/InterviewJobsPanel'
 import ProfilePanel from './components/ProfilePanel'
 import StatsPanel from './components/StatsPanel'
 import GoogleDriveButton from './components/GoogleDriveButton'
@@ -31,7 +31,7 @@ function TabContent({ tab, onTabChange }: { tab: Tab; onTabChange: (t: Tab) => v
     case 'Research':  return <ResearchPanel />
     case 'Selected':  return <SelectedJobsPanel />
     case 'Applied':   return <AppliedJobsPanel />
-    case 'Interview': return <InterviewPanel />
+    case 'Interview': return <InterviewJobsPanel />
     case 'Profile':   return <ProfilePanel />
     case 'Stats':     return <StatsPanel />
   }

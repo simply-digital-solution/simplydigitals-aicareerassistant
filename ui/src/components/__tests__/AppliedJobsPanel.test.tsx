@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AppliedJobsPanel from '../AppliedJobsPanel'
@@ -10,6 +10,9 @@ vi.mock('../../api/client', () => ({
   researchApi: {
     getAppliedJobs: vi.fn(),
     getGeneratedResume: vi.fn(),
+  },
+  applicationsApi: {
+    move: vi.fn(),
   },
   authApi: {
     googleStatus: vi.fn().mockResolvedValue({ data: { connected: false } }),
@@ -58,6 +61,7 @@ beforeEach(() => {
   vi.mocked(clientModule.researchApi.getGeneratedResume).mockRejectedValue(
     Object.assign(new Error('Not Found'), { response: { status: 404 } })
   )
+  vi.mocked(clientModule.applicationsApi.move).mockResolvedValue({ data: {} } as never)
 })
 
 describe('AppliedJobsPanel', () => {
@@ -105,6 +109,26 @@ describe('AppliedJobsPanel', () => {
     expect(screen.queryByTitle('Not relevant')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /archive job/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /re-score/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Interview Scheduled button for each applied job', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob()] } } as never
+    )
+    wrap()
+    expect(await screen.findByRole('button', { name: /interview scheduled/i })).toBeInTheDocument()
+  })
+
+  it('calls applications move to interviewing when Interview Scheduled clicked', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob()] } } as never
+    )
+    wrap()
+    const btn = await screen.findByRole('button', { name: /interview scheduled/i })
+    fireEvent.click(btn)
+    await waitFor(() =>
+      expect(clientModule.applicationsApi.move).toHaveBeenCalledWith(10, 'interviewing')
+    )
   })
 
   it('does not show Regenerate or Upload buttons in the resume section', async () => {

@@ -9,6 +9,9 @@ Endpoints:
   POST /api/v1/agents/run               — trigger full LangGraph session
   GET  /api/v1/agents/sessions/{id}     — session status
   GET  /api/v1/agents/runs/{id}         — single agent run detail
+  GET  /api/v1/research/jobs/interviewing — jobs with status interviewing/offered/rejected
+  POST /api/v1/agents/interview-from-job  — generate & save interview pack for an application
+  GET  /api/v1/agents/interview-pack/{application_id} — fetch cached interview pack
 
   GET  /api/v1/approvals/pending        — drafts awaiting review
   POST /api/v1/approvals/{id}/approve   — approve a draft
@@ -40,6 +43,7 @@ from app.modules.agents.research_agent import run_research_agent
 from app.modules.agents.resume_agent import run_resume_agent
 from app.modules.agents.application_agent import run_application_agent
 from app.modules.agents.interview_agent import run_interview_agent
+from app.modules.agents.interview_pack_agent import run_interview_pack_agent
 from app.pipeline.graph import run_session
 from app.shared.schemas import AgentError
 
@@ -84,6 +88,10 @@ class InterviewRequest(BaseModel):
     company_name: str = ""
     jd_summary: Optional[str] = None
     application_id: Optional[int] = None
+
+
+class InterviewFromJobRequest(BaseModel):
+    application_id: int
 
 
 class RunSessionRequest(BaseModel):
@@ -559,6 +567,83 @@ async def interview(
     )
 
 
+@router.post("/agents/interview-from-job")
+async def interview_from_job(
+    request: InterviewFromJobRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate (or regenerate) an interview pack for an existing application. Stores result in DB."""
+    row = await db.execute(
+        text("""
+            SELECT a.id, a.job_description, a.jd_summary, jp.company
+            FROM applications a
+            LEFT JOIN job_postings jp ON jp.id = a.job_posting_id
+            WHERE a.id = :app_id AND a.user_id = :uid
+        """),
+        {"app_id": request.application_id, "uid": current_user.id},
+    )
+    app_row = row.first()
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found.")
+
+    jd_text = app_row[1] or ""
+    jd_summary = app_row[2]
+    company_name = app_row[3] or ""
+
+    if not jd_text:
+        raise HTTPException(status_code=422, detail="Application has no job description.")
+
+    profile = await _load_profile(db, current_user.id)
+    result, _meta = await run_interview_pack_agent(
+        profile=profile,
+        jd_text=jd_text,
+        db=db,
+        user_id=current_user.id,
+        application_id=request.application_id,
+        company_name=company_name,
+        jd_summary=jd_summary,
+    )
+
+    if isinstance(result, dict) and result.get("error"):
+        raise HTTPException(status_code=500, detail=result.get("message", "Agent failed."))
+
+    from app.shared.schemas import AgentError
+    if isinstance(result, AgentError):
+        raise HTTPException(status_code=500, detail=result.message)
+
+    return result
+
+
+@router.get("/agents/interview-pack/{application_id}")
+async def get_interview_pack(
+    application_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch a cached interview pack for an application. 404 if not yet generated."""
+    row = await db.execute(
+        text("""
+            SELECT ip.pitch, ip.star_questions, ip.updated_at
+            FROM interview_packs ip
+            JOIN applications a ON a.id = ip.application_id
+            WHERE ip.application_id = :app_id AND a.user_id = :uid
+        """),
+        {"app_id": application_id, "uid": current_user.id},
+    )
+    pack = row.first()
+    if not pack:
+        raise HTTPException(status_code=404, detail="Interview pack not found.")
+
+    import json as _json
+    return {
+        "application_id": application_id,
+        "pitch": pack[0],
+        "star_questions": _json.loads(pack[1]),
+        "updated_at": pack[2].isoformat() if pack[2] else None,
+    }
+
+
 @router.post("/agents/run")
 async def run_agent_session(
     request: RunSessionRequest,
@@ -1025,6 +1110,35 @@ async def get_applied_jobs(
               ON a.job_posting_id = jp.id
              AND a.user_id = :uid
              AND a.status = 'applied'
+            WHERE jp.user_id = :uid
+            ORDER BY a.updated_at DESC
+        """),
+        {"uid": current_user.id},
+    )
+    jobs = [dict(r) for r in rows.mappings()]
+    return {"total": len(jobs), "jobs": jobs}
+
+
+@router.get("/research/jobs/interviewing")
+async def get_interviewing_jobs(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return jobs the user has moved to interviewing, offered, or rejected."""
+    rows = await db.execute(
+        text("""
+            SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
+                   jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.scored_by_model, jp.archived,
+                   a.id AS application_id, a.status AS application_status, a.applied_at,
+                   ip.pitch IS NOT NULL AS has_interview_pack
+            FROM job_postings jp
+            JOIN applications a
+              ON a.job_posting_id = jp.id
+             AND a.user_id = :uid
+             AND a.status IN ('interviewing', 'offered', 'rejected')
+            LEFT JOIN interview_packs ip ON ip.application_id = a.id
             WHERE jp.user_id = :uid
             ORDER BY a.updated_at DESC
         """),

@@ -1,12 +1,33 @@
-import { useQuery } from '@tanstack/react-query'
-import { researchApi } from '../api/client'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { researchApi, applicationsApi } from '../api/client'
 import { StoredJobCard } from './ResearchPanel'
 import TailoredResumePanel from './TailoredResumePanel'
 
 export default function AppliedJobsPanel() {
+  const qc = useQueryClient()
+  const [movingIds, setMovingIds] = useState<Set<number>>(new Set())
+
   const { data, isLoading } = useQuery({
     queryKey: ['applied-jobs'],
     queryFn: () => researchApi.getAppliedJobs().then(r => r.data),
+  })
+
+  const moveToInterview = useMutation({
+    mutationFn: (application_id: number) =>
+      applicationsApi.move(application_id, 'interviewing'),
+    onMutate: (application_id) => {
+      setMovingIds(prev => new Set([...prev, application_id]))
+    },
+    onSuccess: (_data, application_id) => {
+      setMovingIds(prev => { const n = new Set(prev); n.delete(application_id); return n })
+      qc.invalidateQueries({ queryKey: ['applied-jobs'] })
+      qc.invalidateQueries({ queryKey: ['interviewing-jobs'] })
+      qc.invalidateQueries({ queryKey: ['pipeline'] })
+    },
+    onError: (_err, application_id) => {
+      setMovingIds(prev => { const n = new Set(prev); n.delete(application_id); return n })
+    },
   })
 
   const jobs = data?.jobs ?? []
@@ -48,18 +69,29 @@ export default function AppliedJobsPanel() {
                       onRescore={() => {}}
                     />
                   </div>
-                  <div className="pt-2 shrink-0 text-right">
-                    <span
-                      className="text-xs text-gray-400 border border-gray-200 px-2.5 py-1 rounded-md font-medium"
-                      aria-label="Job marked as applied"
-                    >
-                      ✓ Applied
-                    </span>
+                  <div className="pt-2 shrink-0 text-right space-y-1.5">
+                    <div>
+                      <span
+                        className="text-xs text-gray-400 border border-gray-200 px-2.5 py-1 rounded-md font-medium"
+                        aria-label="Job marked as applied"
+                      >
+                        ✓ Applied
+                      </span>
+                    </div>
                     {job.applied_at && (
-                      <p className="text-xs text-gray-400 mt-1">
+                      <p className="text-xs text-gray-400">
                         {new Date(job.applied_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => moveToInterview.mutate(job.application_id)}
+                      disabled={movingIds.has(job.application_id)}
+                      className="text-xs bg-indigo-600 text-white px-2.5 py-1 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                      aria-label={`Mark ${job.title} as interview scheduled`}
+                    >
+                      {movingIds.has(job.application_id) ? 'Moving…' : 'Interview Scheduled'}
+                    </button>
                   </div>
                 </div>
                 <TailoredResumePanel jobId={job.id} company={job.company} readOnly />

@@ -425,6 +425,22 @@ class BudgetRecord(Base):
 
 
 # ---------------------------------------------------------------------------
+# Interview packs — pitch + STAR questions generated per application
+# ---------------------------------------------------------------------------
+
+class InterviewPack(Base):
+    __tablename__ = "interview_packs"
+
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    user_id        = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False, unique=True)
+    pitch          = Column(Text, nullable=False)     # 2-minute pitch string
+    star_questions = Column(Text, nullable=False)     # JSON array of {q, situation, task, action, result}
+    created_at     = Column(DateTime(timezone=True), default=_now)
+    updated_at     = Column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+# ---------------------------------------------------------------------------
 # LLM usage logs — one row per LLM call
 # ---------------------------------------------------------------------------
 

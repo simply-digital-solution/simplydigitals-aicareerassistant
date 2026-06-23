@@ -134,6 +134,23 @@ class InterviewOutput(AgentBaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Interview pack (job-linked: pitch + STAR questions)
+# ---------------------------------------------------------------------------
+
+class StarQuestion(AgentBaseModel):
+    q: str
+    situation: str
+    task: str
+    action: str
+    result: str
+
+
+class InterviewPackOutput(AgentBaseModel):
+    pitch: str                          # 2-minute spoken pitch
+    star_questions: list[StarQuestion]  # 10 STAR questions with full answers
+
+
+# ---------------------------------------------------------------------------
 # Agent 5 — Role Fit Advisor
 # ---------------------------------------------------------------------------
 

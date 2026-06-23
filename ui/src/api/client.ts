@@ -146,6 +146,28 @@ export interface InterviewOutput {
   interviewer_questions: string[]
 }
 
+export interface StarQuestion {
+  q: string
+  situation: string
+  task: string
+  action: string
+  result: string
+}
+
+export interface InterviewPack {
+  application_id: number
+  pitch: string
+  star_questions: StarQuestion[]
+  updated_at: string | null
+}
+
+export interface InterviewingJob extends StoredJob {
+  application_id: number
+  application_status: 'interviewing' | 'offered' | 'rejected'
+  applied_at: string | null
+  has_interview_pack: boolean
+}
+
 export interface RoleSuggestion {
   title: string
   tier: 'strong' | 'stretch' | 'adjacent'
@@ -193,6 +215,10 @@ export const agentsApi = {
     api.get<{ session_id: string; status: string; result_json?: string; error_message?: string }>(
       `/agents/sessions/${sessionId}`,
     ),
+  generateInterviewPack: (application_id: number) =>
+    api.post<InterviewPack>('/agents/interview-from-job', { application_id }),
+  getInterviewPack: (application_id: number) =>
+    api.get<InterviewPack>(`/agents/interview-pack/${application_id}`),
 }
 
 // Approvals API
@@ -261,6 +287,7 @@ export const researchApi = {
     api.get<StoredJobsResponse>('/research/jobs', { params }),
   getSelectedJobs: () => api.get<SelectedJobsResponse>('/research/jobs/selected'),
   getAppliedJobs: () => api.get<AppliedJobsResponse>('/research/jobs/applied'),
+  getInterviewingJobs: () => api.get<{ total: number; jobs: InterviewingJob[] }>('/research/jobs/interviewing'),
   archiveJob: (id: number) => api.post(`/research/jobs/${id}/archive`),
   bulkArchiveJobs: (jobIds: number[]) => api.post('/research/jobs/bulk-archive', { job_ids: jobIds }),
   rescoreJob: (id: number) => api.post<StoredJob>(`/research/jobs/${id}/rescore`),

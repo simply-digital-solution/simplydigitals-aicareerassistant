@@ -7,7 +7,10 @@ from app.shared.database import get_db
 from app.shared.sql_compat import days_ago
 from app.pipeline.suspension import suspend_inactive_users, reactivate_user
 
-ADMIN_EMAIL = "pandiri.vasu@simplydigitals.com.sg"
+ADMIN_EMAILS: frozenset[str] = frozenset({
+    "pandiri.vasu@simplydigitals.com.sg",
+    "pandiri.vasu@gmail.com",
+})
 
 router = APIRouter(prefix="/api/v1", tags=["admin"])
 
@@ -17,7 +20,7 @@ router = APIRouter(prefix="/api/v1", tags=["admin"])
 # ---------------------------------------------------------------------------
 
 async def require_admin(x_user_email: str = Header(..., alias="X-User-Email")) -> str:
-    if x_user_email.strip().lower() != ADMIN_EMAIL:
+    if x_user_email.strip().lower() not in ADMIN_EMAILS:
         raise HTTPException(status_code=403, detail="Admin access only.")
     return x_user_email
 
