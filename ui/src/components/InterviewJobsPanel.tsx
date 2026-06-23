@@ -135,9 +135,22 @@ function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; drive
     setDriveError(null)
     try {
       const res = await agentsApi.generateInterviewPack(job.application_id)
-      if (res.data.drive_error) setDriveError(res.data.drive_error)
-      qc.invalidateQueries({ queryKey: ['interview-pack', job.application_id] })
-      qc.invalidateQueries({ queryKey: ['interviewing-jobs'] })
+      if (res.data.drive_error) {
+        setDriveError(res.data.drive_error)
+      } else if (res.data.drive_file_id) {
+        // Update Drive links in the jobs cache directly — avoids refetch flicker
+        qc.setQueryData(['interviewing-jobs'], (old: { total: number; jobs: InterviewingJob[] } | undefined) => {
+          if (!old) return old
+          return {
+            ...old,
+            jobs: old.jobs.map(j =>
+              j.application_id === job.application_id
+                ? { ...j, pack_drive_file_id: res.data.drive_file_id, pack_drive_link: res.data.drive_link }
+                : j
+            ),
+          }
+        })
+      }
     } finally {
       setGenerating(false)
     }
