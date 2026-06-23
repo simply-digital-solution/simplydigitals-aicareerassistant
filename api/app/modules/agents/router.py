@@ -601,7 +601,8 @@ async def interview_from_job(
     """Generate (or regenerate) an interview pack for an existing application. Stores result in DB."""
     row = await db.execute(
         text("""
-            SELECT a.id, a.job_description, a.jd_summary, jp.company, a.job_posting_id
+            SELECT a.id, a.job_description, a.jd_summary, jp.company, a.job_posting_id,
+                   jp.description AS posting_description
             FROM applications a
             LEFT JOIN job_postings jp ON jp.id = a.job_posting_id
             WHERE a.id = :app_id AND a.user_id = :uid
@@ -612,7 +613,8 @@ async def interview_from_job(
     if not app_row:
         raise HTTPException(status_code=404, detail="Application not found.")
 
-    jd_text = app_row[1] or ""
+    # Prefer application-level JD (manually entered); fall back to scraped job posting description
+    jd_text = app_row[1] or app_row[5] or ""
     jd_summary = app_row[2]
     company_name = app_row[3] or ""
     job_posting_id = app_row[4]

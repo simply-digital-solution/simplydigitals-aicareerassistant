@@ -178,9 +178,9 @@ async def test_interview_from_job_not_found(app):
 
 @pytest.mark.asyncio
 async def test_interview_from_job_no_jd_returns_422(app):
-    # Row now has 5 elements: id, job_description, jd_summary, company, job_posting_id
+    # Row has 6 elements: id, job_description, jd_summary, company, job_posting_id, posting_description
     row = MagicMock()
-    row.__getitem__ = lambda self, i: [1, "", None, "Corp", None][i]
+    row.__getitem__ = lambda self, i: [1, "", None, "Corp", None, ""][i]
 
     mock_result = MagicMock()
     mock_result.first.return_value = row
@@ -408,9 +408,9 @@ def test_build_interview_pack_docx_is_valid_docx():
 # POST /agents/interview-from-job — Drive upload paths
 # ---------------------------------------------------------------------------
 
-def _make_app_row(jd="Some JD text", company="Corp", job_posting_id=42):
+def _make_app_row(jd="Some JD text", company="Corp", job_posting_id=42, posting_description=""):
     row = MagicMock()
-    row.first.return_value = MagicMock(__getitem__=lambda self, i: [1, jd, None, company, job_posting_id][i])
+    row.first.return_value = MagicMock(__getitem__=lambda self, i: [1, jd, None, company, job_posting_id, posting_description][i])
     return row
 
 
@@ -622,6 +622,80 @@ async def test_interview_from_job_agent_error_returns_500(app):
                     headers={"X-User-Email": "test@example.com"},
                 )
         assert r.status_code == 500
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_interview_from_job_falls_back_to_posting_description_when_app_jd_null(app):
+    """When applications.job_description is NULL, use job_postings.description instead."""
+    user = _mock_user()
+
+    prof_result = MagicMock()
+    prof_result.mappings.return_value.first.return_value = _make_prof_row(connected=False)
+
+    gr_result = MagicMock()
+    gr_result.first.return_value = None
+
+    profile_result = MagicMock()
+    profile_result.scalar_one_or_none.return_value = None
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(side_effect=[
+        # app_jd=None but posting_description has content
+        _make_app_row(jd=None, posting_description="Scraped JD from job board"),
+        gr_result,
+        profile_result,
+        prof_result,
+    ])
+    mock_db.commit = AsyncMock()
+
+    async def _db_override():
+        yield mock_db
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = _db_override
+    try:
+        with patch(_PACK_AGENT_PATCH, new=AsyncMock(return_value=(_make_pack_result(), {}))):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                r = await client.post(
+                    "/api/v1/agents/interview-from-job",
+                    json={"application_id": 1},
+                    headers={"X-User-Email": "test@example.com"},
+                )
+        assert r.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_interview_from_job_422_when_both_jd_sources_empty(app):
+    """Returns 422 when both applications.job_description and job_postings.description are empty."""
+    user = _mock_user()
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=_make_app_row(jd=None, posting_description="").first.return_value and
+                                _make_app_row(jd=None, posting_description=""))
+    mock_db.commit = AsyncMock()
+
+    # Use the simpler approach — single execute returns the no-jd row
+    row = MagicMock()
+    row.first.return_value = MagicMock(__getitem__=lambda self, i: [1, None, None, "Corp", None, ""][i])
+    mock_db.execute = AsyncMock(return_value=row)
+
+    async def _db_override():
+        yield mock_db
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_db] = _db_override
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                "/api/v1/agents/interview-from-job",
+                json={"application_id": 1},
+                headers={"X-User-Email": "test@example.com"},
+            )
+        assert r.status_code == 422
+        assert "job description" in r.json()["detail"].lower()
     finally:
         app.dependency_overrides.clear()
 
