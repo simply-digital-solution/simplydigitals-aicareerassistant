@@ -421,6 +421,31 @@ async def _load_profile(db: AsyncSession | None = None, user_id: int | None = No
     }
 
 
+def _flatten_resume_json(resume_json: str) -> str:
+    """Convert stored resume_json into plain text for use in LLM prompts."""
+    import json as _json
+    try:
+        data = _json.loads(resume_json)
+    except Exception:
+        return ""
+    lines: list[str] = []
+    if data.get("name"):
+        lines.append(data["name"])
+    if data.get("headline"):
+        lines.append(data["headline"])
+    for section in data.get("sections", []):
+        lines.append(f"\n{section.get('title', '').upper()}")
+        for para in section.get("content", []):
+            lines.append(para)
+        for exp in section.get("experience", []):
+            lines.append(f"{exp.get('title', '')} at {exp.get('company', '')} ({exp.get('dates', '')})")
+            if exp.get("summary"):
+                lines.append(exp["summary"])
+            for bullet in exp.get("bullets", []):
+                lines.append(f"• {bullet}")
+    return "\n".join(lines)
+
+
 async def _load_resume_from_db(db: AsyncSession, user_id: int) -> str:
     """Return stored resume text for a user, or empty string if none saved."""
     from sqlalchemy import select
@@ -576,7 +601,7 @@ async def interview_from_job(
     """Generate (or regenerate) an interview pack for an existing application. Stores result in DB."""
     row = await db.execute(
         text("""
-            SELECT a.id, a.job_description, a.jd_summary, jp.company
+            SELECT a.id, a.job_description, a.jd_summary, jp.company, a.job_posting_id
             FROM applications a
             LEFT JOIN job_postings jp ON jp.id = a.job_posting_id
             WHERE a.id = :app_id AND a.user_id = :uid
@@ -590,9 +615,21 @@ async def interview_from_job(
     jd_text = app_row[1] or ""
     jd_summary = app_row[2]
     company_name = app_row[3] or ""
+    job_posting_id = app_row[4]
 
     if not jd_text:
         raise HTTPException(status_code=422, detail="Application has no job description.")
+
+    # Fetch the tailored resume stored for this job posting (if any)
+    tailored_resume_text = ""
+    if job_posting_id:
+        gr_row = await db.execute(
+            text("SELECT resume_json FROM generated_resumes WHERE user_id = :uid AND job_posting_id = :jid"),
+            {"uid": current_user.id, "jid": job_posting_id},
+        )
+        gr = gr_row.first()
+        if gr and gr[0]:
+            tailored_resume_text = _flatten_resume_json(gr[0])
 
     profile = await _load_profile(db, current_user.id)
     result, _meta = await run_interview_pack_agent(
@@ -603,6 +640,7 @@ async def interview_from_job(
         application_id=request.application_id,
         company_name=company_name,
         jd_summary=jd_summary,
+        tailored_resume_text=tailored_resume_text,
     )
 
     if isinstance(result, dict) and result.get("error"):

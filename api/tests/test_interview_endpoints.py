@@ -178,8 +178,9 @@ async def test_interview_from_job_not_found(app):
 
 @pytest.mark.asyncio
 async def test_interview_from_job_no_jd_returns_422(app):
+    # Row now has 5 elements: id, job_description, jd_summary, company, job_posting_id
     row = MagicMock()
-    row.__getitem__ = lambda self, i: [1, "", None, "Corp"][i]
+    row.__getitem__ = lambda self, i: [1, "", None, "Corp", None][i]
 
     mock_result = MagicMock()
     mock_result.first.return_value = row
@@ -204,6 +205,66 @@ async def test_interview_from_job_no_jd_returns_422(app):
         assert r.status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# _flatten_resume_json helper
+# ---------------------------------------------------------------------------
+
+def test_flatten_resume_json_returns_plain_text():
+    import json
+    from app.modules.agents.router import _flatten_resume_json
+
+    resume = {
+        "name": "Jane Doe",
+        "headline": "Senior Data Engineer",
+        "sections": [
+            {
+                "section_type": "summary",
+                "title": "Professional Summary",
+                "content": ["Experienced data engineer with 8 years in fintech."],
+                "experience": [],
+            },
+            {
+                "section_type": "experience",
+                "title": "Work Experience",
+                "content": [],
+                "experience": [
+                    {
+                        "title": "Data Engineer",
+                        "company": "ACME Corp",
+                        "dates": "Jan 2020 – Present",
+                        "summary": "Led data platform delivery.",
+                        "bullets": ["Built pipelines", "Reduced latency by 40%"],
+                    }
+                ],
+            },
+        ],
+    }
+    text = _flatten_resume_json(json.dumps(resume))
+    assert "Jane Doe" in text
+    assert "Senior Data Engineer" in text
+    assert "Experienced data engineer" in text
+    assert "ACME Corp" in text
+    assert "• Built pipelines" in text
+    assert "• Reduced latency by 40%" in text
+
+
+def test_flatten_resume_json_handles_invalid_json():
+    from app.modules.agents.router import _flatten_resume_json
+
+    assert _flatten_resume_json("not-json") == ""
+    assert _flatten_resume_json("") == ""
+
+
+def test_flatten_resume_json_handles_empty_sections():
+    import json
+    from app.modules.agents.router import _flatten_resume_json
+
+    resume = {"name": "John", "headline": "Engineer", "sections": []}
+    text = _flatten_resume_json(json.dumps(resume))
+    assert "John" in text
+    assert "Engineer" in text
 
 
 # ---------------------------------------------------------------------------

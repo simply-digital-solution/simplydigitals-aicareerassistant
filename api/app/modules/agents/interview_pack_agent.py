@@ -22,7 +22,13 @@ def _load_system_prompt() -> str:
     return PROMPT_FILE.read_text(encoding="utf-8")
 
 
-def _build_user_message(profile: dict[str, Any], jd_text: str, company_name: str, jd_summary: Optional[str]) -> str:
+def _build_user_message(
+    profile: dict[str, Any],
+    jd_text: str,
+    company_name: str,
+    jd_summary: Optional[str],
+    tailored_resume_text: str = "",
+) -> str:
     background = profile.get("background", {})
     targets = profile.get("targets", {})
     jd_section = jd_summary if jd_summary else jd_text[:JD_MAX_CHARS]
@@ -38,9 +44,16 @@ def _build_user_message(profile: dict[str, Any], jd_text: str, company_name: str
     )
     company_line = f"Target company: {company_name}\n" if company_name else ""
 
+    resume_block = (
+        f"--- TAILORED RESUME SENT TO THIS EMPLOYER ---\n{tailored_resume_text}\n--- END RESUME ---\n\n"
+        if tailored_resume_text.strip()
+        else ""
+    )
+
     return (
         f"{profile_block}\n"
         f"{company_line}"
+        f"{resume_block}"
         f"--- TARGET JOB DESCRIPTION ---\n{jd_section}\n--- END JD ---\n\n"
         f"Generate the interview prep pack for this role. Return JSON only."
     )
@@ -54,10 +67,11 @@ async def run_interview_pack_agent(
     application_id: int,
     company_name: str = "",
     jd_summary: Optional[str] = None,
+    tailored_resume_text: str = "",
 ) -> tuple[InterviewPackOutput | AgentError, dict]:
     client = get_llm_client()
     system_prompt = _load_system_prompt()
-    user_message = _build_user_message(profile, jd_text, company_name, jd_summary)
+    user_message = _build_user_message(profile, jd_text, company_name, jd_summary, tailored_resume_text)
 
     result, meta = await client.run_agent(
         agent_name=AGENT_NAME,
