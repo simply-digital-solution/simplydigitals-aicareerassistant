@@ -372,7 +372,7 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
                     className="text-xs text-green-600 hover:text-green-800 font-medium"
                     aria-label="Download resume from Google Drive"
                   >
-                    ↓ Download
+                    ↓ Resume
                   </a>
                 )}
 
@@ -385,7 +385,7 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
                     className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
                     aria-label="Open resume in Google Drive"
                   >
-                    ↗ Open in Drive
+                    ↗ Resume in Drive
                   </a>
                 )}
 
@@ -407,7 +407,7 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
                     className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
                     aria-label="Toggle resume preview"
                   >
-                    {showPreview ? '▴ Hide Preview' : '▾ Preview'}
+                    {showPreview ? '▴ Hide Resume' : '▾ Resume Preview'}
                   </button>
                 )}
 
