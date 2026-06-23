@@ -648,7 +648,7 @@ async def interview_from_job(
 
     from app.shared.schemas import AgentError
     if isinstance(result, AgentError):
-        raise HTTPException(status_code=500, detail=result.message)
+        raise HTTPException(status_code=500, detail=result.error)
 
     # Attempt Drive upload if user has OAuth tokens
     prof_result = await db.execute(

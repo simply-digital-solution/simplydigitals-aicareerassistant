@@ -239,6 +239,60 @@ describe('InterviewJobsPanel', () => {
     expect(screen.queryByRole('link', { name: /open interview pack in google drive/i })).not.toBeInTheDocument()
   })
 
+  it('shows pack Drive links without generate button when pack already uploaded (packFileId set)', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({
+        has_interview_pack: false,
+        pack_drive_file_id: 'fid999',
+        pack_drive_link: 'https://drive.google.com/file/fid999',
+      })] } } as never
+    )
+    wrap()
+    await screen.findByText('Software Engineer')
+    expect(await screen.findByRole('link', { name: /download interview pack/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /interview questions/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Drive upload error message when generateInterviewPack returns drive_error', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ has_interview_pack: false })] } } as never
+    )
+    vi.mocked(clientModule.agentsApi.generateInterviewPack).mockResolvedValue({
+      data: { pitch: 'p', star_questions: [], drive_file_id: null, drive_link: null, drive_error: 'Drive quota exceeded' },
+    } as never)
+    wrap()
+    const btn = await screen.findByRole('button', { name: /interview questions/i })
+    fireEvent.click(btn)
+    expect(await screen.findByText(/drive quota exceeded/i)).toBeInTheDocument()
+  })
+
+  it('disables generate button while generating', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ has_interview_pack: false })] } } as never
+    )
+    // Never resolves — keeps the button in loading state
+    vi.mocked(clientModule.agentsApi.generateInterviewPack).mockReturnValue(new Promise(() => {}) as never)
+    wrap()
+    const btn = await screen.findByRole('button', { name: /interview questions/i })
+    fireEvent.click(btn)
+    await waitFor(() => expect(screen.getByRole('button', { name: /generating pack/i })).toBeDisabled())
+  })
+
+  it('calls move to rejected when Rejected button clicked', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ application_status: 'interviewing' })] } } as never
+    )
+    wrap()
+    await screen.findByText('Software Engineer')
+    const allBtns = screen.getAllByRole('button')
+    const rejectedBtn = allBtns.find(b => b.textContent?.trim() === 'Rejected')
+    expect(rejectedBtn).toBeDefined()
+    fireEvent.click(rejectedBtn!)
+    await waitFor(() =>
+      expect(clientModule.applicationsApi.move).toHaveBeenCalledWith(20, 'rejected')
+    )
+  })
+
   it('calls move to offered when Offered button clicked', async () => {
     vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob({ application_status: 'interviewing' })] } } as never
