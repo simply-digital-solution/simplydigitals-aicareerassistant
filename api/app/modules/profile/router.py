@@ -100,12 +100,30 @@ def _escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+import re as _re
+
+_PARA_START_RE = _re.compile(
+    r'^[A-Z][A-Za-z ,&/\+\-]{2,40}:'  # "Word(s):" label at start of line
+)
+
+
+def _starts_new_para(line: str) -> bool:
+    """
+    Return True if this body line starts a new logical paragraph rather than
+    continuing the previous one.  Catches category-label lines like:
+      "Delivery & Project Management: ..."
+      "Agile Delivery & Team Leadership: ..."
+    These have no blank line separator in PDFs but are visually distinct entries.
+    """
+    return bool(_PARA_START_RE.match(line))
+
+
 def _pdf_to_html(content: bytes) -> tuple[str, str]:
     """Extract text + basic HTML from a PDF using pdfplumber.
 
     pdfplumber returns one line per PDF layout row. Paragraphs and bullet
     points that wrap across multiple rows are reassembled into single elements:
-    - consecutive body lines → one <p>
+    - consecutive body lines → one <p> (lines starting "Word: ..." flush previous)
     - a bullet line plus its continuation lines → one <li>
     - ALL-CAPS short lines → <h2 class="resume-heading">
     - blank lines → <br> (section spacer)
@@ -156,7 +174,9 @@ def _pdf_to_html(content: bytes) -> tuple[str, str]:
                         # Continuation of the current bullet point
                         bullet_buf.append(stripped)
                     else:
-                        # Continuation of a body paragraph
+                        # Flush and start a new <p> if this line begins a new entry
+                        if _starts_new_para(stripped) and para_buf:
+                            _flush_para()
                         para_buf.append(stripped)
 
     _flush_all()

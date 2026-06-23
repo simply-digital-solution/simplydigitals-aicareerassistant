@@ -112,6 +112,33 @@ def test_section_heading_detected():
     assert "<p>" not in html
 
 
+# --- category-label paragraph breaks ---
+
+def test_competency_label_lines_each_get_own_p():
+    """Lines starting with 'Word(s): ...' flush the previous paragraph buffer."""
+    text = (
+        "Delivery & Project Management: Delivery Roadmaps, Project Planning,\n"
+        "Requirements Gathering, Release Management\n"
+        "Agile Delivery & Team Leadership: Agile and Scrum Facilitation,\n"
+        "Sprint Planning, Backlog Refinement"
+    )
+    html = _run(text)
+    assert html.count("<p>") == 2
+    assert "Delivery Roadmaps" in html
+    assert "Sprint Planning" in html
+
+
+def test_continuation_of_same_competency_stays_merged():
+    """Continuation line of a label paragraph (no new label) stays in the same <p>."""
+    text = (
+        "Delivery & Project Management: Delivery Roadmaps, Project Planning,\n"
+        "Requirements Gathering, Solution Design, Release Management"
+    )
+    html = _run(text)
+    assert html.count("<p>") == 1
+    assert "Release Management" in html
+
+
 # --- edge cases ---
 
 def test_empty_page_skipped():
