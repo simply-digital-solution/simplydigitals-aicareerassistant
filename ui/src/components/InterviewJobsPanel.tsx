@@ -211,40 +211,47 @@ function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; drive
       <TailoredResumePanel jobId={job.id} company={job.company} readOnly />
 
       {/* Interview Pack */}
-      {pack ? (
-        <>
-          <StarQuestionsView pack={pack} />
-          <PackDriveLinks fileId={packFileId} link={packLink} />
-        </>
-      ) : (
-        <div className="mt-3 space-y-1">
-          {!driveConnected ? (
-            <p className="text-xs text-amber-600" role="status">
-              Connect Drive to save interview questionnaire — connect Google Drive first.
-            </p>
-          ) : packFileId ? (
-            // Pack already uploaded to Drive (content cleared from DB)
-            <PackDriveLinks fileId={packFileId} link={packLink} />
-          ) : (
+      {(() => {
+        const packHasContent = pack && (pack.pitch || pack.star_questions.length > 0)
+        if (packHasContent) {
+          return (
             <>
-              <button
-                type="button"
-                onClick={handleGeneratePack}
-                disabled={generating}
-                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                {generating ? 'Generating pack…' : '✦ Interview Questions'}
-              </button>
-              {generating && (
-                <p className="text-xs text-gray-400">This takes ~15 seconds…</p>
-              )}
-              {driveError && (
-                <p className="text-xs text-red-500">Drive upload failed: {driveError}</p>
-              )}
+              <StarQuestionsView pack={pack!} />
+              <PackDriveLinks fileId={packFileId} link={packLink} />
             </>
-          )}
-        </div>
-      )}
+          )
+        }
+        if (packFileId) {
+          // Content cleared after Drive upload — show Drive links only
+          return <PackDriveLinks fileId={packFileId} link={packLink} />
+        }
+        return (
+          <div className="mt-3 space-y-1">
+            {!driveConnected ? (
+              <p className="text-xs text-amber-600" role="status">
+                Connect Drive to save interview questionnaire — connect Google Drive first.
+              </p>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleGeneratePack}
+                  disabled={generating}
+                  className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  {generating ? 'Generating pack…' : '✦ Interview Questions'}
+                </button>
+                {generating && (
+                  <p className="text-xs text-gray-400">This takes ~15 seconds…</p>
+                )}
+                {driveError && (
+                  <p className="text-xs text-red-500">Drive upload failed: {driveError}</p>
+                )}
+              </>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -239,7 +239,7 @@ describe('InterviewJobsPanel', () => {
     expect(screen.queryByRole('link', { name: /open interview pack in google drive/i })).not.toBeInTheDocument()
   })
 
-  it('shows pack Drive links without generate button when pack already uploaded (packFileId set)', async () => {
+  it('shows pack Drive links without generate button when pack already uploaded (packFileId set, has_interview_pack false)', async () => {
     vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob({
         has_interview_pack: false,
@@ -251,6 +251,28 @@ describe('InterviewJobsPanel', () => {
     await screen.findByText('Software Engineer')
     expect(await screen.findByRole('link', { name: /download interview pack/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /interview questions/i })).not.toBeInTheDocument()
+  })
+
+  it('shows only Drive links when has_interview_pack is true but DB content is empty (post-upload cleared row)', async () => {
+    // This is the real production case: after Drive upload, pitch/star_questions are cleared
+    // but has_interview_pack=true because the row exists with drive_file_id set
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({
+        has_interview_pack: true,
+        pack_drive_file_id: 'fid999',
+        pack_drive_link: 'https://drive.google.com/file/fid999',
+      })] } } as never
+    )
+    // getInterviewPack returns the cleared row
+    vi.mocked(clientModule.agentsApi.getInterviewPack).mockResolvedValue({
+      data: { application_id: 20, pitch: '', star_questions: [], updated_at: null },
+    } as never)
+    wrap()
+    await screen.findByText('Software Engineer')
+    expect(await screen.findByRole('link', { name: /download interview pack/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /interview questions/i })).not.toBeInTheDocument()
+    // Interview Pack accordion should not render (no content to show)
+    expect(screen.queryByRole('button', { name: /interview pack/i })).not.toBeInTheDocument()
   })
 
   it('shows Drive upload error message when generateInterviewPack returns drive_error', async () => {
