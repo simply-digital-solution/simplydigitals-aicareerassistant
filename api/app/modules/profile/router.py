@@ -100,32 +100,37 @@ def _escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _is_structural_line(line: str) -> bool:
-    """Return True if the line starts a new structural element (heading, bullet, blank)."""
-    s = line.strip()
-    if not s:
-        return True
-    if s.isupper() and len(s) <= 60:
-        return True
-    if s.startswith(("●", "•", "-", "–")):
-        return True
-    return False
-
-
 def _pdf_to_html(content: bytes) -> tuple[str, str]:
     """Extract text + basic HTML from a PDF using pdfplumber.
 
-    Lines that are soft-wrapped continuations of the same paragraph are joined
-    into a single <p> so the preview doesn't show each PDF line-break as a
-    separate paragraph.
+    pdfplumber returns one line per PDF layout row. Paragraphs and bullet
+    points that wrap across multiple rows are reassembled into single elements:
+    - consecutive body lines → one <p>
+    - a bullet line plus its continuation lines → one <li>
+    - ALL-CAPS short lines → <h2 class="resume-heading">
+    - blank lines → <br> (section spacer)
     """
     text_parts: list[str] = []
     html_parts: list[str] = []
 
-    def _flush_para(buf: list[str]) -> None:
-        if buf:
-            html_parts.append(f'<p>{_escape(" ".join(buf))}</p>')
-            buf.clear()
+    # para_buf  — accumulates body-paragraph continuation lines
+    # bullet_buf — accumulates the current bullet + its continuation lines
+    para_buf: list[str] = []
+    bullet_buf: list[str] = []
+
+    def _flush_para() -> None:
+        if para_buf:
+            html_parts.append(f'<p>{_escape(" ".join(para_buf))}</p>')
+            para_buf.clear()
+
+    def _flush_bullet() -> None:
+        if bullet_buf:
+            html_parts.append(f'<li>{_escape(" ".join(bullet_buf))}</li>')
+            bullet_buf.clear()
+
+    def _flush_all() -> None:
+        _flush_para()
+        _flush_bullet()
 
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         for page in pdf.pages:
@@ -133,23 +138,28 @@ def _pdf_to_html(content: bytes) -> tuple[str, str]:
             if not page_text:
                 continue
             text_parts.append(page_text)
-            para_buf: list[str] = []
             for line in page_text.splitlines():
                 stripped = line.strip()
                 if not stripped:
-                    _flush_para(para_buf)
+                    _flush_all()
                     html_parts.append("<br>")
                 elif stripped.isupper() and len(stripped) <= 60:
-                    _flush_para(para_buf)
+                    _flush_all()
                     html_parts.append(f'<h2 class="resume-heading">{_escape(stripped)}</h2>')
                 elif stripped.startswith(("●", "•", "-", "–")):
-                    _flush_para(para_buf)
-                    bullet = _escape(stripped.lstrip("●•–- ").strip())
-                    html_parts.append(f'<li>{bullet}</li>')
+                    # New bullet — flush whatever came before, start fresh bullet buffer
+                    _flush_para()
+                    _flush_bullet()
+                    bullet_buf.append(stripped.lstrip("●•–- ").strip())
                 else:
-                    para_buf.append(stripped)
-            _flush_para(para_buf)
+                    if bullet_buf:
+                        # Continuation of the current bullet point
+                        bullet_buf.append(stripped)
+                    else:
+                        # Continuation of a body paragraph
+                        para_buf.append(stripped)
 
+    _flush_all()
     return "\n\n".join(text_parts), "\n".join(html_parts)
 
 

@@ -1,47 +1,16 @@
 """
-Tests for _pdf_to_html paragraph-merging logic.
+Tests for _pdf_to_html line-reassembly logic.
 
-pdfplumber splits text at PDF line boundaries, so a single paragraph that
-wraps across 3 lines in the PDF would previously produce 3 separate <p> tags.
-The fix buffers consecutive body lines and flushes them as one <p>.
+pdfplumber returns one line per PDF layout row. Both paragraphs and bullet
+points can wrap across multiple rows. The parser must reassemble them:
+- consecutive body lines → one <p>
+- a bullet line + its continuation lines → one <li>
+- ALL-CAPS short lines → <h2 class="resume-heading">
+- blank lines → <br>
 """
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.modules.profile.router import _pdf_to_html
-
-
-def _make_pdf_mock(pages_text: list[str]):
-    """Build a fake pdfplumber PDF whose pages return the given text strings."""
-    pages = []
-    for text in pages_text:
-        page = MagicMock()
-        page.extract_text.return_value = text
-        pages.append(page)
-    pdf_mock = MagicMock()
-    pdf_mock.__enter__ = MagicMock(return_value=pdf_mock)
-    pdf_mock.__exit__ = MagicMock(return_value=False)
-    pdf_mock.pages = pages
-    return pdf_mock
-
-
-@pytest.fixture(autouse=True)
-def patch_pdfplumber(monkeypatch):
-    """Intercept pdfplumber.open so tests don't need real PDF bytes."""
-    _registry: dict[bytes, object] = {}
-
-    original = _pdf_to_html.__globals__["pdfplumber"]
-
-    class FakePdfplumber:
-        def __init__(self, pdf_mock):
-            self._mock = pdf_mock
-
-        def open(self, _stream):
-            return self._mock
-
-    # We patch per-test via the _make_pdf_mock fixture returning a context mgr
-    yield
 
 
 def _run(page_text: str) -> str:
@@ -58,32 +27,23 @@ def _run(page_text: str) -> str:
     return html
 
 
+# --- paragraph merging ---
+
 def test_wrapped_paragraph_merged_into_single_p():
     """Three consecutive body lines → one <p>, not three."""
-    text = "Delivery Manager with 20+ years of experience\nleading end-to-end delivery of complex\ndigital platforms and solutions."
+    text = (
+        "Delivery Manager with 20+ years of experience\n"
+        "leading end-to-end delivery of complex\n"
+        "digital platforms and solutions."
+    )
     html = _run(text)
     assert html.count("<p>") == 1
     assert "20+ years" in html
     assert "digital platforms" in html
 
 
-def test_section_heading_detected():
-    text = "PROFILE"
-    html = _run(text)
-    assert '<h2 class="resume-heading">PROFILE</h2>' in html
-    assert "<p>" not in html
-
-
-def test_bullet_line_emitted_as_li():
-    text = "- Led requirements gathering and stakeholder workshops"
-    html = _run(text)
-    assert "<li>" in html
-    assert "Led requirements" in html
-    assert "<p>" not in html
-
-
 def test_blank_line_flushes_paragraph_and_adds_br():
-    """Two paragraphs separated by a blank line → two <p> tags."""
+    """Two wrapped paragraphs separated by a blank line → two <p> tags."""
     text = "First paragraph line one\nfirst paragraph line two\n\nSecond paragraph."
     html = _run(text)
     assert html.count("<p>") == 2
@@ -94,18 +54,65 @@ def test_heading_flushes_accumulated_body_lines():
     """Body lines accumulated before a heading must be flushed as <p> first."""
     text = "Some intro text\nspanning two lines\nCORE COMPETENCIES\nA body line after heading"
     html = _run(text)
-    # intro becomes one <p>
     assert html.count("<p>") == 2
     assert '<h2 class="resume-heading">CORE COMPETENCIES</h2>' in html
 
 
+# --- bullet merging ---
+
+def test_bullet_single_line():
+    text = "- Led requirements gathering and stakeholder workshops"
+    html = _run(text)
+    assert html.count("<li>") == 1
+    assert "Led requirements" in html
+    assert "<p>" not in html
+
+
+def test_bullet_continuation_merged_into_single_li():
+    """A bullet that wraps across two PDF lines → one <li>, not <li> + <p>."""
+    text = (
+        "- Led requirements gathering and stakeholder workshops across business, risk, finance, operations,\n"
+        "and compliance functions — translating complex workflows and controls into clear functional\n"
+        "specifications and acceptance criteria."
+    )
+    html = _run(text)
+    assert html.count("<li>") == 1
+    assert html.count("<p>") == 0
+    assert "compliance functions" in html
+    assert "acceptance criteria" in html
+
+
+def test_two_bullets_each_wrapped():
+    """Two wrapped bullets → two <li> elements."""
+    text = (
+        "- Led requirements gathering across business, risk,\n"
+        "finance, operations, and compliance.\n"
+        "- Managed a major platform migration affecting core\n"
+        "production infrastructure — developed impact assessments."
+    )
+    html = _run(text)
+    assert html.count("<li>") == 2
+    assert html.count("<p>") == 0
+
+
 def test_bullet_flushes_accumulated_body_lines():
-    """Body lines before a bullet must be flushed first."""
+    """Body lines before a bullet must be flushed as <p> first."""
     text = "Job title line\ncompany and date\n- Led a major delivery programme"
     html = _run(text)
-    assert "<p>" in html
-    assert "<li>" in html
+    assert html.count("<p>") == 1
+    assert html.count("<li>") == 1
 
+
+# --- headings ---
+
+def test_section_heading_detected():
+    text = "PROFILE"
+    html = _run(text)
+    assert '<h2 class="resume-heading">PROFILE</h2>' in html
+    assert "<p>" not in html
+
+
+# --- edge cases ---
 
 def test_empty_page_skipped():
     with patch("app.modules.profile.router.pdfplumber") as mock_pp:
