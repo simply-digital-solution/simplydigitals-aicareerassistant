@@ -82,32 +82,116 @@ function StarQuestionCard({ index, q }: { index: number; q: InterviewPack['star_
   )
 }
 
-function PackDriveLinks({ fileId, link }: { fileId: string | null; link: string | null }) {
-  if (!fileId && !link) return null
+function InterviewPackSection({
+  pack,
+  packFileId,
+  packLink,
+  generating,
+  driveError,
+  driveConnected,
+  onGenerate,
+}: {
+  pack: import('../api/client').InterviewPack | undefined
+  packFileId: string | null
+  packLink: string | null
+  generating: boolean
+  driveError: string | null
+  driveConnected: boolean
+  onGenerate: () => void
+}) {
+  const [showPreview, setShowPreview] = useState(false)
+  const packHasContent = pack && (pack.pitch || pack.star_questions.length > 0)
+  const hasDriveLinks = !!(packFileId || packLink)
+
+  if (!packHasContent && !hasDriveLinks) {
+    // Not yet generated
+    return (
+      <div className="mt-3 space-y-1">
+        {!driveConnected ? (
+          <p className="text-xs text-amber-600" role="status">
+            Connect Drive to save interview questionnaire — connect Google Drive first.
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={generating}
+              className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {generating ? 'Generating pack…' : '✦ Interview Questions'}
+            </button>
+            {generating && <p className="text-xs text-gray-400">This takes ~15 seconds…</p>}
+            {driveError && <p className="text-xs text-red-500">Drive upload failed: {driveError}</p>}
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex items-center gap-3 mt-1">
-      {fileId && (
-        <a
-          href={`https://drive.google.com/uc?export=download&id=${fileId}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-green-600 hover:text-green-800 font-medium"
-          aria-label="Download interview pack from Google Drive"
-        >
-          ↓ Interview Pack
-        </a>
+    <div className="mt-3 border-t border-gray-100 pt-3 space-y-3">
+      {/* Action row — mirrors resume section */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <span className="text-xs text-gray-400">
+          {pack?.updated_at
+            ? `Last generated ${new Date(pack.updated_at).toLocaleDateString()}`
+            : 'Interview pack ready'}
+        </span>
+        <div className="flex items-center gap-3 flex-wrap">
+          {packFileId && (
+            <a
+              href={`https://drive.google.com/uc?export=download&id=${packFileId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-green-600 hover:text-green-800 font-medium"
+              aria-label="Download interview pack from Google Drive"
+            >
+              ↓ Interview Pack
+            </a>
+          )}
+          {packLink && (
+            <a
+              href={packLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              aria-label="Open interview pack in Google Drive"
+            >
+              ↗ Interview Pack in Drive
+            </a>
+          )}
+          {packLink && (
+            <button
+              type="button"
+              onClick={() => setShowPreview(v => !v)}
+              className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+              aria-label="Toggle interview pack preview"
+            >
+              {showPreview ? '▴ Hide Preview' : '▾ Interview Pack Preview'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Drive PDF preview — same iframe pattern as resume */}
+      {showPreview && packLink && (
+        <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ height: '700px' }}>
+          <iframe
+            src={packLink.replace(/\/(edit|view)(\?.*)?$/, '/preview')}
+            width="100%"
+            height="100%"
+            allow="autoplay"
+            title="Interview pack preview"
+            className="block"
+          />
+        </div>
       )}
-      {link && (
-        <a
-          href={link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-          aria-label="Open interview pack in Google Drive"
-        >
-          ↗ Interview Pack in Drive
-        </a>
-      )}
+
+      {/* In-page content — only when content exists in DB (before Drive upload) */}
+      {packHasContent && <StarQuestionsView pack={pack!} />}
+
+      {driveError && <p className="text-xs text-red-500">Drive upload failed: {driveError}</p>}
     </div>
   )
 }
@@ -210,48 +294,15 @@ function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; drive
 
       <TailoredResumePanel jobId={job.id} company={job.company} readOnly />
 
-      {/* Interview Pack */}
-      {(() => {
-        const packHasContent = pack && (pack.pitch || pack.star_questions.length > 0)
-        if (packHasContent) {
-          return (
-            <>
-              <StarQuestionsView pack={pack!} />
-              <PackDriveLinks fileId={packFileId} link={packLink} />
-            </>
-          )
-        }
-        if (packFileId) {
-          // Content cleared after Drive upload — show Drive links only
-          return <PackDriveLinks fileId={packFileId} link={packLink} />
-        }
-        return (
-          <div className="mt-3 space-y-1">
-            {!driveConnected ? (
-              <p className="text-xs text-amber-600" role="status">
-                Connect Drive to save interview questionnaire — connect Google Drive first.
-              </p>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={handleGeneratePack}
-                  disabled={generating}
-                  className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                >
-                  {generating ? 'Generating pack…' : '✦ Interview Questions'}
-                </button>
-                {generating && (
-                  <p className="text-xs text-gray-400">This takes ~15 seconds…</p>
-                )}
-                {driveError && (
-                  <p className="text-xs text-red-500">Drive upload failed: {driveError}</p>
-                )}
-              </>
-            )}
-          </div>
-        )
-      })()}
+      <InterviewPackSection
+        pack={pack}
+        packFileId={packFileId}
+        packLink={packLink}
+        generating={generating}
+        driveError={driveError}
+        driveConnected={driveConnected}
+        onGenerate={handleGeneratePack}
+      />
     </div>
   )
 }

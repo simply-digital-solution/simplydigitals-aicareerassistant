@@ -229,6 +229,31 @@ describe('InterviewJobsPanel', () => {
     expect(await screen.findByRole('link', { name: /open interview pack in google drive/i })).toBeInTheDocument()
   })
 
+  it('shows Interview Pack Preview toggle when pack_drive_link is set', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({
+        pack_drive_file_id: 'fid123',
+        pack_drive_link: 'https://drive.google.com/file/fid123',
+      })] } } as never
+    )
+    wrap()
+    await screen.findByText('Software Engineer')
+    expect(await screen.findByRole('button', { name: /toggle interview pack preview/i })).toBeInTheDocument()
+  })
+
+  it('shows iframe when Interview Pack Preview toggle is clicked', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({
+        pack_drive_file_id: 'fid123',
+        pack_drive_link: 'https://drive.google.com/file/fid123/view',
+      })] } } as never
+    )
+    wrap()
+    const toggle = await screen.findByRole('button', { name: /toggle interview pack preview/i })
+    fireEvent.click(toggle)
+    expect(await screen.findByTitle('Interview pack preview')).toBeInTheDocument()
+  })
+
   it('does not show pack Drive links when pack_drive_file_id is null', async () => {
     vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob({ pack_drive_file_id: null, pack_drive_link: null })] } } as never
@@ -239,7 +264,16 @@ describe('InterviewJobsPanel', () => {
     expect(screen.queryByRole('link', { name: /open interview pack in google drive/i })).not.toBeInTheDocument()
   })
 
-  it('shows pack Drive links without generate button when pack already uploaded (packFileId set, has_interview_pack false)', async () => {
+  it('does not show Interview Pack Preview toggle when pack_drive_link is null', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ pack_drive_file_id: null, pack_drive_link: null })] } } as never
+    )
+    wrap()
+    await screen.findByText('Software Engineer')
+    expect(screen.queryByRole('button', { name: /toggle interview pack preview/i })).not.toBeInTheDocument()
+  })
+
+  it('shows pack Drive links and preview toggle without generate button when pack already uploaded (has_interview_pack false)', async () => {
     vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob({
         has_interview_pack: false,
@@ -250,12 +284,11 @@ describe('InterviewJobsPanel', () => {
     wrap()
     await screen.findByText('Software Engineer')
     expect(await screen.findByRole('link', { name: /download interview pack/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /toggle interview pack preview/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /interview questions/i })).not.toBeInTheDocument()
   })
 
-  it('shows only Drive links when has_interview_pack is true but DB content is empty (post-upload cleared row)', async () => {
-    // This is the real production case: after Drive upload, pitch/star_questions are cleared
-    // but has_interview_pack=true because the row exists with drive_file_id set
+  it('shows only Drive links and preview toggle when has_interview_pack is true but DB content is empty (post-upload cleared row)', async () => {
     vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob({
         has_interview_pack: true,
@@ -263,16 +296,16 @@ describe('InterviewJobsPanel', () => {
         pack_drive_link: 'https://drive.google.com/file/fid999',
       })] } } as never
     )
-    // getInterviewPack returns the cleared row
     vi.mocked(clientModule.agentsApi.getInterviewPack).mockResolvedValue({
       data: { application_id: 20, pitch: '', star_questions: [], updated_at: null },
     } as never)
     wrap()
     await screen.findByText('Software Engineer')
     expect(await screen.findByRole('link', { name: /download interview pack/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /toggle interview pack preview/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /interview questions/i })).not.toBeInTheDocument()
-    // Interview Pack accordion should not render (no content to show)
-    expect(screen.queryByRole('button', { name: /interview pack/i })).not.toBeInTheDocument()
+    // StarQuestionsView accordion should not render (no content)
+    expect(screen.queryByRole('button', { name: /^interview pack$/i })).not.toBeInTheDocument()
   })
 
   it('shows Drive upload error message when generateInterviewPack returns drive_error', async () => {
