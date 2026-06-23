@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { researchApi, applicationsApi } from '../api/client'
+import { researchApi, applicationsApi, authApi } from '../api/client'
 import { StoredJobCard } from './ResearchPanel'
 import TailoredResumePanel from './TailoredResumePanel'
 
@@ -12,6 +12,13 @@ export default function AppliedJobsPanel() {
     queryKey: ['applied-jobs'],
     queryFn: () => researchApi.getAppliedJobs().then(r => r.data),
   })
+
+  const { data: driveStatus } = useQuery({
+    queryKey: ['drive-status'],
+    queryFn: () => authApi.googleStatus().then(r => r.data),
+    staleTime: 60_000,
+  })
+  const driveConnected = driveStatus?.connected ?? false
 
   const moveToInterview = useMutation({
     mutationFn: (application_id: number) =>
@@ -95,6 +102,11 @@ export default function AppliedJobsPanel() {
                   </div>
                 </div>
                 <TailoredResumePanel jobId={job.id} company={job.company} readOnly />
+                {!driveConnected && (
+                  <p className="mt-1 text-xs text-amber-600 px-1" role="status">
+                    Google Drive not connected — connect Drive for tailored resume
+                  </p>
+                )}
               </div>
             ))}
           </div>

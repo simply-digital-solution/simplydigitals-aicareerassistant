@@ -120,13 +120,13 @@ describe('AppliedJobsPanel', () => {
     expect(screen.queryByText(/scoring…/i)).not.toBeInTheDocument()
   })
 
-  it('shows fit score badge when job is scored', async () => {
+  it('does not show fit score badge even when job is scored', async () => {
     vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob({ scored: true, fit_score: 0.82 })] } } as never
     )
     wrap()
     await screen.findByText('Data Engineer')
-    expect(screen.getByText(/82/)).toBeInTheDocument()
+    expect(screen.queryByText(/82%/)).not.toBeInTheDocument()
   })
 
   it('shows Interview Scheduled button for each applied job', async () => {
@@ -147,6 +147,27 @@ describe('AppliedJobsPanel', () => {
     await waitFor(() =>
       expect(clientModule.applicationsApi.move).toHaveBeenCalledWith(10, 'interviewing')
     )
+  })
+
+  it('shows Drive not connected notice per job when Drive is not connected', async () => {
+    vi.mocked(clientModule.authApi.googleStatus).mockResolvedValue({ data: { connected: false } } as never)
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 2, jobs: [makeJob(), makeJob({ id: 2, title: 'ML Engineer' })] } } as never
+    )
+    wrap()
+    await screen.findByText('Data Engineer')
+    const notices = await screen.findAllByText(/google drive not connected — connect drive for tailored resume/i)
+    expect(notices).toHaveLength(2)
+  })
+
+  it('does not show Drive not connected notice when Drive is connected', async () => {
+    vi.mocked(clientModule.authApi.googleStatus).mockResolvedValue({ data: { connected: true } } as never)
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob()] } } as never
+    )
+    wrap()
+    await screen.findByText('Data Engineer')
+    expect(screen.queryByText(/google drive not connected/i)).not.toBeInTheDocument()
   })
 
   it('does not show Regenerate or Upload buttons in the resume section', async () => {
