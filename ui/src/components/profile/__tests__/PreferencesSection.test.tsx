@@ -11,7 +11,7 @@ vi.mock('../../../api/client', () => ({
 
 const baseData: ProfileData = {
   resume_text: null,
-  resume_html: null,
+  resume_obj: null,
   linkedin_url: 'https://linkedin.com/in/vasu',
   full_name: 'Vasu Pandiri',
   target_locations: JSON.stringify(['Singapore']),

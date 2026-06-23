@@ -1,7 +1,8 @@
+import base64
 import io
 import json
-import pdfplumber
 import docx
+import pdfplumber
 
 from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, HTTPException
 from pydantic import BaseModel
@@ -37,7 +38,7 @@ def _dedupe_json_array(value: str | None) -> str | None:
 
 class ProfileUpdate(BaseModel):
     resume_text: str | None = None
-    resume_html: str | None = None
+    resume_obj: str | None = None
     linkedin_url: str | None = None
     full_name: str | None = None
     target_locations: str | None = None      # JSON array string
@@ -58,7 +59,7 @@ class ProfileUpdate(BaseModel):
 
 class ProfileResponse(BaseModel):
     resume_text: str | None
-    resume_html: str | None
+    resume_obj: str | None
     linkedin_url: str | None
     full_name: str | None
     target_locations: str | None
@@ -93,141 +94,25 @@ async def _get_or_create(db: AsyncSession, user_id: int) -> Profile:
 
 class ParsedResumeResponse(BaseModel):
     text: str
-    html: str
+    obj: str | None = None       # base64-encoded original file (PDF or DOCX); None for TXT/MD
+    mime: str | None = None      # MIME type matching obj
 
 
-def _escape(s: str) -> str:
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
-import re as _re
-
-_PARA_START_RE = _re.compile(
-    r'^[A-Z][A-Za-z ,&/\+\-]{2,40}:'  # "Word(s):" label at start of line
-)
-
-
-def _starts_new_para(line: str) -> bool:
-    """
-    Return True if this body line starts a new logical paragraph rather than
-    continuing the previous one.  Catches category-label lines like:
-      "Delivery & Project Management: ..."
-      "Agile Delivery & Team Leadership: ..."
-    These have no blank line separator in PDFs but are visually distinct entries.
-    """
-    return bool(_PARA_START_RE.match(line))
-
-
-def _pdf_to_html(content: bytes) -> tuple[str, str]:
-    """Extract text + basic HTML from a PDF using pdfplumber.
-
-    pdfplumber returns one line per PDF layout row. Paragraphs and bullet
-    points that wrap across multiple rows are reassembled into single elements:
-    - consecutive body lines → one <p> (lines starting "Word: ..." flush previous)
-    - a bullet line plus its continuation lines → one <li>
-    - ALL-CAPS short lines → <h2 class="resume-heading">
-    - blank lines → <br> (section spacer)
-    """
-    text_parts: list[str] = []
-    html_parts: list[str] = []
-
-    # para_buf  — accumulates body-paragraph continuation lines
-    # bullet_buf — accumulates the current bullet + its continuation lines
-    para_buf: list[str] = []
-    bullet_buf: list[str] = []
-
-    def _flush_para() -> None:
-        if para_buf:
-            html_parts.append(f'<p>{_escape(" ".join(para_buf))}</p>')
-            para_buf.clear()
-
-    def _flush_bullet() -> None:
-        if bullet_buf:
-            html_parts.append(f'<li>{_escape(" ".join(bullet_buf))}</li>')
-            bullet_buf.clear()
-
-    def _flush_all() -> None:
-        _flush_para()
-        _flush_bullet()
-
+def _extract_text_from_pdf(content: bytes) -> str:
+    """Extract plain text from a PDF using pdfplumber."""
+    parts: list[str] = []
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
-            if not page_text:
-                continue
-            text_parts.append(page_text)
-            for line in page_text.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    _flush_all()
-                    html_parts.append("<br>")
-                elif stripped.isupper() and len(stripped) <= 60:
-                    _flush_all()
-                    html_parts.append(f'<h2 class="resume-heading">{_escape(stripped)}</h2>')
-                elif stripped.startswith(("●", "•", "-", "–")):
-                    # New bullet — flush whatever came before, start fresh bullet buffer
-                    _flush_para()
-                    _flush_bullet()
-                    bullet_buf.append(stripped.lstrip("●•–- ").strip())
-                else:
-                    if bullet_buf:
-                        # Continuation of the current bullet point
-                        bullet_buf.append(stripped)
-                    else:
-                        # Flush and start a new <p> if this line begins a new entry
-                        if _starts_new_para(stripped) and para_buf:
-                            _flush_para()
-                        para_buf.append(stripped)
-
-    _flush_all()
-    return "\n\n".join(text_parts), "\n".join(html_parts)
+            if page_text:
+                parts.append(page_text)
+    return "\n\n".join(parts)
 
 
-def _docx_to_html(content: bytes) -> tuple[str, str]:
-    """Extract text + styled HTML from a DOCX preserving bold/italic/bullets/headings."""
+def _extract_text_from_docx(content: bytes) -> str:
+    """Extract plain text from a DOCX."""
     doc = docx.Document(io.BytesIO(content))
-    text_lines: list[str] = []
-    html_parts: list[str] = []
-
-    for para in doc.paragraphs:
-        raw = para.text.strip()
-        if not raw:
-            html_parts.append("<br>")
-            continue
-
-        text_lines.append(raw)
-        style_name = (getattr(para.style, "name", None) or "").lower()
-
-        # Build inline HTML for runs (preserving bold/italic per run)
-        inner = ""
-        for run in para.runs:
-            chunk = _escape(run.text)
-            if not chunk:
-                continue
-            if run.bold and run.italic:
-                chunk = f"<strong><em>{chunk}</em></strong>"
-            elif run.bold:
-                chunk = f"<strong>{chunk}</strong>"
-            elif run.italic:
-                chunk = f"<em>{chunk}</em>"
-            inner += chunk
-        if not inner:
-            inner = _escape(raw)
-
-        # Map Word styles to HTML elements
-        if "heading 1" in style_name or "title" in style_name:
-            html_parts.append(f'<h1 class="resume-name">{inner}</h1>')
-        elif "heading 2" in style_name or "heading 3" in style_name:
-            html_parts.append(f'<h2 class="resume-heading">{inner}</h2>')
-        elif style_name and "list" in style_name:
-            html_parts.append(f'<li>{inner}</li>')
-        # Heuristic fallback: short ALL-CAPS = section heading
-        elif raw.isupper() and len(raw) <= 60:
-            html_parts.append(f'<h2 class="resume-heading">{inner}</h2>')
-        else:
-            html_parts.append(f'<p>{inner}</p>')
-
-    return "\n".join(text_lines), "\n".join(html_parts)
+    return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
 
 @router.post("/parse-resume", response_model=ParsedResumeResponse)
@@ -238,22 +123,27 @@ async def parse_resume_file(
 ):
     content = await file.read()
     filename = (file.filename or "").lower()
+    obj: str | None = None
+    mime: str | None = None
 
     if filename.endswith(".pdf"):
         try:
-            text, html = _pdf_to_html(content)
+            text = _extract_text_from_pdf(content)
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Could not parse PDF: {e}")
+        obj = base64.b64encode(content).decode("ascii")
+        mime = "application/pdf"
 
     elif filename.endswith(".docx"):
         try:
-            text, html = _docx_to_html(content)
+            text = _extract_text_from_docx(content)
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Could not parse DOCX: {e}")
+        obj = base64.b64encode(content).decode("ascii")
+        mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     elif filename.endswith((".txt", ".md")):
         text = content.decode("utf-8", errors="replace")
-        html = "".join(f"<p>{_escape(l)}</p>" for l in text.splitlines() if l.strip())
 
     else:
         raise HTTPException(status_code=415, detail="Unsupported file type. Upload PDF, DOCX, TXT, or MD.")
@@ -261,12 +151,12 @@ async def parse_resume_file(
     if not text.strip():
         raise HTTPException(status_code=422, detail="No text could be extracted from the file.")
 
-    # Persist both text and HTML to the profile immediately on upload
     profile = await _get_or_create(db, current_user.id)
-    profile.resume_html = html
+    if obj is not None:
+        profile.resume_obj = obj
     await db.commit()
 
-    return ParsedResumeResponse(text=text, html=html)
+    return ParsedResumeResponse(text=text, obj=obj, mime=mime)
 
 
 @router.post("/extract-and-save", response_model=ProfileResponse)

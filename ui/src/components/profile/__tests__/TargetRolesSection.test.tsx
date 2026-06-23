@@ -12,7 +12,7 @@ vi.mock('../../../api/client', () => ({
 
 const baseData: ProfileData = {
   resume_text: null,
-  resume_html: null,
+  resume_obj: null,
   linkedin_url: null,
   full_name: null,
   target_locations: null,

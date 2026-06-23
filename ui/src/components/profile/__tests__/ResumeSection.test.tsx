@@ -10,13 +10,16 @@ vi.mock('../../../api/client', () => ({
 }))
 
 const base: ProfileData = {
-  resume_text: null, resume_html: null, linkedin_url: null, full_name: null,
+  resume_text: null, resume_obj: null, linkedin_url: null, full_name: null,
   target_locations: null, years_experience: null, skills: null,
   remote_preference: null, employment_type: null, salary_floor: null,
   salary_currency: null, excluded_companies: null, role_fit_json: null,
   seniority_level: null, target_industries: null, target_titles: null,
   education: null, certifications: null, phone_number: null,
 }
+
+// Minimal valid PDF base64 magic bytes prefix
+const FAKE_PDF_B64 = 'JVBERi0xLjQKdGVzdA=='
 
 describe('ResumeSection', () => {
   beforeEach(() => {
@@ -27,21 +30,65 @@ describe('ResumeSection', () => {
     })
   })
 
-  it('shows Download button when resume text is present', () => {
-    const data = { ...base, resume_text: 'Some resume content here' }
+  it('shows Download button when resume_obj is present', () => {
+    const data = { ...base, resume_text: 'Some resume content', resume_obj: FAKE_PDF_B64 }
     render(<ResumeSection data={data} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Resume'))
     expect(screen.getByText('Download')).toBeTruthy()
   })
 
-  it('does not show Download button when no resume', () => {
-    render(<ResumeSection data={base} onSaved={vi.fn()} />)
+  it('does not show Download button when no resume_obj', () => {
+    const data = { ...base, resume_text: 'Some text' }
+    render(<ResumeSection data={data} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Resume'))
     expect(screen.queryByText('Download')).toBeNull()
   })
 
-  it('shows Analyse Resume button when resume is present', () => {
-    const data = { ...base, resume_text: 'Some resume content here' }
+  it('shows Plain text toggle when resume_obj is present', () => {
+    const data = { ...base, resume_text: 'Some resume content', resume_obj: FAKE_PDF_B64 }
+    render(<ResumeSection data={data} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByText('Resume'))
+    expect(screen.getByText('Plain text')).toBeTruthy()
+  })
+
+  it('does not show Plain text toggle when no resume_obj', () => {
+    const data = { ...base, resume_text: 'Some text' }
+    render(<ResumeSection data={data} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByText('Resume'))
+    expect(screen.queryByText('Plain text')).toBeNull()
+  })
+
+  it('renders iframe preview when resume_obj is present', () => {
+    const data = { ...base, resume_text: 'Some resume content', resume_obj: FAKE_PDF_B64 }
+    render(<ResumeSection data={data} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByText('Resume'))
+    const iframe = document.querySelector('iframe')
+    expect(iframe).toBeTruthy()
+    expect(iframe?.src).toContain('data:application/pdf;base64,')
+  })
+
+  it('shows textarea when no resume_obj', () => {
+    const data = { ...base, resume_text: 'Some text' }
+    render(<ResumeSection data={data} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByText('Resume'))
+    expect(document.querySelector('textarea')).toBeTruthy()
+    expect(document.querySelector('iframe')).toBeNull()
+  })
+
+  it('Plain text toggle switches iframe to textarea', () => {
+    const data = { ...base, resume_text: 'Some resume content', resume_obj: FAKE_PDF_B64 }
+    render(<ResumeSection data={data} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByText('Resume'))
+    expect(document.querySelector('iframe')).toBeTruthy()
+    fireEvent.click(screen.getByText('Plain text'))
+    expect(document.querySelector('iframe')).toBeNull()
+    expect(document.querySelector('textarea')).toBeTruthy()
+    fireEvent.click(screen.getByText('Preview'))
+    expect(document.querySelector('iframe')).toBeTruthy()
+  })
+
+  it('shows Analyse Resume button when resume text is present', () => {
+    const data = { ...base, resume_text: 'Some resume content' }
     render(<ResumeSection data={data} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Resume'))
     expect(screen.getByText('Analyse Resume')).toBeTruthy()
@@ -56,7 +103,7 @@ describe('ResumeSection', () => {
 
   it('Analyse Resume calls extractAndSave and shows success message', async () => {
     const onSaved = vi.fn()
-    const data = { ...base, resume_text: 'Some resume content here' }
+    const data = { ...base, resume_text: 'Some resume content' }
     render(<ResumeSection data={data} onSaved={onSaved} />)
     fireEvent.click(screen.getByText('Resume'))
     fireEvent.click(screen.getByText('Analyse Resume'))
@@ -67,27 +114,17 @@ describe('ResumeSection', () => {
 
   it('shows error message when extractAndSave fails', async () => {
     vi.mocked(profileApi.extractAndSave).mockRejectedValueOnce(new Error('LLM error'))
-    const data = { ...base, resume_text: 'Some resume content here' }
+    const data = { ...base, resume_text: 'Some resume content' }
     render(<ResumeSection data={data} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Resume'))
     fireEvent.click(screen.getByText('Analyse Resume'))
     await screen.findByText(/Could not extract details/i)
   })
 
-  it('does not show Plain text button when resume_html exists but resume_text is empty', () => {
-    const data = { ...base, resume_html: '<p>old html</p>', resume_text: null }
-    render(<ResumeSection data={data} onSaved={vi.fn()} />)
-    expect(screen.queryByText('Plain text')).toBeNull()
-  })
-
-  it('shows Plain text button only when both resume_html and resume_text are present', () => {
-    const data = { ...base, resume_html: '<p>html</p>', resume_text: 'Some text' }
-    render(<ResumeSection data={data} onSaved={vi.fn()} />)
-    expect(screen.getByText('Plain text')).toBeTruthy()
-  })
-
-  it('PDF upload: saves to server before calling extractAndSave', async () => {
-    vi.mocked(api.post).mockResolvedValueOnce({ data: { text: 'Parsed resume text', html: '<p>html</p>' } } as any)
+  it('PDF upload: saves resume_text then calls extractAndSave', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { text: 'Parsed resume text', obj: FAKE_PDF_B64, mime: 'application/pdf' }
+    } as any)
 
     render(<ResumeSection data={base} onSaved={vi.fn()} />)
 
@@ -95,33 +132,29 @@ describe('ResumeSection', () => {
     const file = new File(['pdf content'], 'resume.pdf', { type: 'application/pdf' })
     fireEvent.change(input, { target: { files: [file] } })
 
-    // PATCH must be called with the parsed text before extractAndSave
     await waitFor(() => expect(vi.mocked(api.patch)).toHaveBeenCalledWith(
       '/profile',
-      { resume_text: 'Parsed resume text', resume_html: '<p>html</p>' }
+      { resume_text: 'Parsed resume text' }
     ))
     await waitFor(() => expect(vi.mocked(profileApi.extractAndSave)).toHaveBeenCalled())
 
-    // PATCH must come before extractAndSave
     const patchOrder = vi.mocked(api.patch).mock.invocationCallOrder[0]
     const extractOrder = vi.mocked(profileApi.extractAndSave).mock.invocationCallOrder[0]
     expect(patchOrder).toBeLessThan(extractOrder)
   })
 
-  it('PDF upload: section stays open after file is selected', async () => {
-    vi.mocked(api.post).mockResolvedValueOnce({ data: { text: 'Parsed resume text', html: '' } } as any)
+  it('PDF upload: renders iframe after successful upload', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({
+      data: { text: 'Parsed resume text', obj: FAKE_PDF_B64, mime: 'application/pdf' }
+    } as any)
 
     render(<ResumeSection data={base} onSaved={vi.fn()} />)
-
-    // Open the section first
     fireEvent.click(screen.getByText('Resume'))
-    expect(screen.getByText('Analyse Resume')).toBeTruthy()
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     const file = new File(['pdf content'], 'resume.pdf', { type: 'application/pdf' })
     fireEvent.change(input, { target: { files: [file] } })
 
-    // Section body should still be visible (not collapsed)
-    await waitFor(() => expect(screen.getByText('Analyse Resume')).toBeTruthy())
+    await waitFor(() => expect(document.querySelector('iframe')).toBeTruthy())
   })
 })

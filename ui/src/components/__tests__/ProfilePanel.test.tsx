@@ -15,7 +15,7 @@ Object.defineProperty(window, 'localStorage', {
 
 const baseProfile = {
   resume_text: null,
-  resume_html: null,
+  resume_obj: null,
   linkedin_url: null,
   full_name: null,
   target_locations: null,

@@ -3,53 +3,10 @@ import type { ProfileData } from '../../api/client'
 import api, { profileApi } from '../../api/client'
 import Section from './Section'
 
-// Scoped styles injected once — mirrors the PDF template colours/spacing
-const RESUME_PREVIEW_CSS = `
-  .resume-preview { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #222; line-height: 1.5; }
-  .resume-preview h1.resume-name { font-size: 22pt; font-weight: bold; text-align: center; margin: 0 0 4px; }
-  .resume-preview p.resume-headline { font-style: italic; text-align: center; color: #555; margin: 0 0 16px; font-size: 10pt; }
-  .resume-preview h2.resume-heading {
-    font-size: 11pt; font-weight: normal; text-transform: uppercase;
-    color: #1F5C9E; border-bottom: 1.5px solid #1F5C9E;
-    margin: 18px 0 6px; padding-bottom: 2px; letter-spacing: 0.04em;
-  }
-  .resume-preview p { margin: 3px 0; }
-  .resume-preview li { margin: 2px 0 2px 20px; list-style-type: disc; }
-  .resume-preview strong { font-weight: bold; }
-  .resume-preview em { font-style: italic; color: #444; }
-  .resume-preview br { display: block; margin: 4px 0; content: ""; }
-`
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
-const PRINT_CSS = `
-  body { margin: 0; padding: 0; }
-  @page { margin: 20mm; }
-`
-
-function downloadAsPdf(html: string, text: string) {
-  const content = html
-    ? `<style>${RESUME_PREVIEW_CSS}${PRINT_CSS}</style><div class="resume-preview">${html}</div>`
-    : `<style>${PRINT_CSS}pre { white-space: pre-wrap; font-family: Calibri, Arial, sans-serif; font-size: 11pt; }</style><pre>${text}</pre>`
-
-  const iframe = document.createElement('iframe')
-  iframe.style.position = 'fixed'
-  iframe.style.right = '0'
-  iframe.style.bottom = '0'
-  iframe.style.width = '0'
-  iframe.style.height = '0'
-  iframe.style.border = '0'
-  document.body.appendChild(iframe)
-
-  const doc = iframe.contentWindow?.document
-  if (!doc) return
-  doc.open()
-  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${content}</body></html>`)
-  doc.close()
-
-  iframe.contentWindow?.focus()
-  setTimeout(() => {
-    iframe.contentWindow?.print()
-    setTimeout(() => document.body.removeChild(iframe), 1000)
-  }, 300)
+function buildDataUrl(obj: string, mime: string): string {
+  return `data:${mime};base64,${obj}`
 }
 
 export default function ResumeSection({
@@ -60,7 +17,12 @@ export default function ResumeSection({
   onSaved: () => void
 }) {
   const [resumeText, setResumeText] = useState<string>(data.resume_text ?? '')
-  const [resumeHtml, setResumeHtml] = useState<string>(data.resume_html ?? '')
+  const [resumeObj, setResumeObj] = useState<string>(data.resume_obj ?? '')
+  const [resumeMime, setResumeMime] = useState<string>(
+    data.resume_obj
+      ? (data.resume_obj.startsWith('JVBERi') ? 'application/pdf' : DOCX_MIME)
+      : ''
+  )
   const [showRaw, setShowRaw] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -71,6 +33,7 @@ export default function ResumeSection({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const wordCount = resumeText.trim() ? resumeText.trim().split(/\s+/).length : 0
   const hasResume = !!resumeText.trim()
+  const hasObj = !!resumeObj
 
   const handleTextChange = (val: string) => {
     setResumeText(val)
@@ -87,24 +50,27 @@ export default function ResumeSection({
     if (name.endsWith('.txt') || name.endsWith('.md')) {
       const text = await file.text()
       handleTextChange(text)
-      setResumeHtml('')
+      setResumeObj('')
+      setResumeMime('')
     } else {
       const email = localStorage.getItem('user_email')
       const form = new FormData()
       form.append('file', file)
       try {
-        const { data } = await api.post('/profile/parse-resume', form, {
+        const { data: parsed } = await api.post('/profile/parse-resume', form, {
           headers: {
             'Content-Type': 'multipart/form-data',
             ...(email ? { 'X-User-Email': email } : {}),
           },
         })
-        const text = data.text
-        const html = data.html ?? ''
+        const text: string = parsed.text
+        const obj: string = parsed.obj ?? ''
+        const mime: string = parsed.mime ?? ''
         handleTextChange(text)
-        setResumeHtml(html)
-        // Save to server before extraction — extract-and-save reads resume_text from DB
-        await api.patch('/profile', { resume_text: text || null, resume_html: html || null })
+        setResumeObj(obj)
+        setResumeMime(mime)
+        // Save resume_text to DB so extract-and-save can read it
+        await api.patch('/profile', { resume_text: text || null })
         setDirty(false)
         onSaved()
         await runExtraction()
@@ -134,12 +100,21 @@ export default function ResumeSection({
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.patch('/profile', { resume_text: resumeText || null, resume_html: resumeHtml || null })
+      await api.patch('/profile', { resume_text: resumeText || null })
       setDirty(false)
       onSaved()
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleDownload = () => {
+    if (!resumeObj || !resumeMime) return
+    const ext = resumeMime === 'application/pdf' ? 'pdf' : 'docx'
+    const a = document.createElement('a')
+    a.href = buildDataUrl(resumeObj, resumeMime)
+    a.download = `resume.${ext}`
+    a.click()
   }
 
   return (
@@ -151,7 +126,7 @@ export default function ResumeSection({
         : <span className="text-xs text-amber-500 font-normal">Not uploaded</span>}
       actions={
         <div className="flex gap-1.5">
-          {resumeHtml && hasResume && (
+          {hasObj && (
             <button
               type="button"
               onClick={() => setShowRaw(v => !v)}
@@ -160,10 +135,10 @@ export default function ResumeSection({
               {showRaw ? 'Preview' : 'Plain text'}
             </button>
           )}
-          {hasResume && (
+          {hasObj && (
             <button
               type="button"
-              onClick={() => downloadAsPdf(resumeHtml, resumeText)}
+              onClick={handleDownload}
               className="text-xs border border-gray-300 text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -198,15 +173,14 @@ export default function ResumeSection({
       )}
       {extractError && <p className="text-sm text-amber-600">{extractError}</p>}
 
-      {/* Resume display — HTML preview or plain text textarea */}
-      {resumeHtml && !showRaw ? (
-        <div className="border border-gray-200 rounded-lg bg-white overflow-auto max-h-[520px] p-6">
-          <style>{RESUME_PREVIEW_CSS}</style>
-          <div
-            className="resume-preview"
-            dangerouslySetInnerHTML={{ __html: resumeHtml }}
-          />
-        </div>
+      {/* Resume display — iframe preview or plain text textarea */}
+      {hasObj && !showRaw ? (
+        <iframe
+          src={buildDataUrl(resumeObj, resumeMime)}
+          className="w-full border border-gray-200 rounded-lg"
+          style={{ height: '520px' }}
+          title="Resume preview"
+        />
       ) : (
         <>
           <textarea

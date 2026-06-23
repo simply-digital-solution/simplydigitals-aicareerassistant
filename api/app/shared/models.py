@@ -42,7 +42,7 @@ class Profile(Base):
     years_experience = Column(Integer)
     skills = Column(Text)                 # JSON array
     resume_text = Column(Text)
-    resume_html = Column(Text)
+    resume_obj = Column(Text)
     linkedin_url = Column(String(500))
     # Search preferences
     remote_preference = Column(String(20), default="any")   # remote | hybrid | onsite | any

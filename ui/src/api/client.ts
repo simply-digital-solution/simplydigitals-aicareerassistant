@@ -8,7 +8,7 @@ const api = axios.create({
 
 export interface ProfileData {
   resume_text: string | null
-  resume_html: string | null
+  resume_obj: string | null
   linkedin_url: string | null
   full_name: string | null
   target_locations: string | null
