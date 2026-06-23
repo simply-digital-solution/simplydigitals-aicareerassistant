@@ -252,6 +252,29 @@ describe('TailoredResumePanel', () => {
     )
   })
 
+  it('hides Download and Open in Drive when drive_file_id is null (Drive not connected)', async () => {
+    const resumeNoDrive = { ...makeResume(), drive_file_id: null, drive_link: null }
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeNoDrive } as never)
+    renderPanel()
+    await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
+    expect(screen.queryByRole('link', { name: /download resume from google drive/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /open resume in google drive/i })).not.toBeInTheDocument()
+  })
+
+  it('hides Download and Open in Drive in readOnly mode when drive fields are null', async () => {
+    const resumeNoDrive = { ...makeResume(), drive_file_id: null, drive_link: null }
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resumeNoDrive } as never)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <TailoredResumePanel jobId={1} company="ACME Corp" readOnly />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
+    expect(screen.queryByRole('link', { name: /download resume from google drive/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /open resume in google drive/i })).not.toBeInTheDocument()
+  })
+
   it('shows drive error message and Retry button when generation returns 207', async () => {
     mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
     const resumeWith207 = { ...makeResume(), drive_error: 'Connection timed out' }

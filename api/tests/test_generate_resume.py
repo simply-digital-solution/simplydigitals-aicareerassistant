@@ -161,14 +161,18 @@ def _make_db(
     return db
 
 
-def _db_for_get_resume(has_resume: bool = True):
+def _db_for_get_resume(has_resume: bool = True, drive_connected: bool = False):
     db = AsyncMock()
     result = MagicMock()
     row = MagicMock()
     resume_json = json.dumps(_make_resume_output().model_dump())
+    access_token = "ya29.fake_token" if drive_connected else None
     row.__getitem__ = lambda self, k: (
         resume_json if k == "resume_json"
-        else (None if k in ("drive_file_id", "drive_link") else "2026-06-15T00:00:00Z")
+        else ("fid123" if k == "drive_file_id" and drive_connected else
+              "https://drive.google.com/file/fid123" if k == "drive_link" and drive_connected else
+              access_token if k == "google_access_token" else
+              None if k in ("drive_file_id", "drive_link") else "2026-06-15T00:00:00Z")
     )
     result.mappings.return_value.first.return_value = row if has_resume else None
     db.execute.return_value = result
@@ -355,3 +359,27 @@ async def test_get_generated_resume_query_filters_by_user():
     params = db.execute.call_args.args[1]
     assert params["uid"] == 99
     assert params["jid"] == 5
+
+
+@pytest.mark.asyncio
+async def test_get_generated_resume_hides_drive_fields_when_not_connected():
+    """Drive file_id and link must be null when Google Drive is not connected."""
+    from app.modules.agents.router import get_generated_resume
+
+    db = _db_for_get_resume(has_resume=True, drive_connected=False)
+    result = await get_generated_resume(job_id=1, current_user=_make_user(), db=db)
+
+    assert result["drive_file_id"] is None
+    assert result["drive_link"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_generated_resume_exposes_drive_fields_when_connected():
+    """Drive file_id and link are returned when Google Drive is connected."""
+    from app.modules.agents.router import get_generated_resume
+
+    db = _db_for_get_resume(has_resume=True, drive_connected=True)
+    result = await get_generated_resume(job_id=1, current_user=_make_user(), db=db)
+
+    assert result["drive_file_id"] == "fid123"
+    assert result["drive_link"] == "https://drive.google.com/file/fid123"

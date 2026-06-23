@@ -1666,14 +1666,17 @@ async def get_generated_resume(
 ):
     """Return the previously generated resume for a job, or 404 if not yet generated.
 
-    When Drive upload succeeded, resume_json is NULL — the response will have
-    resume=null but drive_file_id/drive_link will be populated.
+    Drive fields (drive_file_id, drive_link) are only returned when the user has
+    an active Drive OAuth connection. If Drive is not connected, those fields are
+    null — preventing exposure of Drive-linked data to unauthenticated sessions.
     """
     row = await db.execute(
         text("""
-            SELECT resume_json, drive_file_id, drive_link, created_at, updated_at
-            FROM generated_resumes
-            WHERE user_id = :uid AND job_posting_id = :jid
+            SELECT gr.resume_json, gr.drive_file_id, gr.drive_link, gr.created_at, gr.updated_at,
+                   p.google_access_token
+            FROM generated_resumes gr
+            JOIN profiles p ON p.user_id = gr.user_id
+            WHERE gr.user_id = :uid AND gr.job_posting_id = :jid
         """),
         {"uid": current_user.id, "jid": job_id},
     )
@@ -1681,14 +1684,16 @@ async def get_generated_resume(
     if not resume:
         raise HTTPException(404, "No generated resume found for this job")
 
+    drive_connected = bool(resume["google_access_token"])
+
     import json as _json
     raw = resume["resume_json"]
     resume_data = _json.loads(raw) if raw and raw != '{}' else None
     return {
         "job_posting_id": job_id,
         "resume": resume_data,
-        "drive_file_id": resume["drive_file_id"],
-        "drive_link": resume["drive_link"],
+        "drive_file_id": resume["drive_file_id"] if drive_connected else None,
+        "drive_link": resume["drive_link"] if drive_connected else None,
         "created_at": resume["created_at"],
         "updated_at": resume["updated_at"],
     }
