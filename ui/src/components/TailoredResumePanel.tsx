@@ -401,13 +401,15 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
                   </button>
                 )}
 
-                <button
-                  onClick={() => setShowPreview(v => !v)}
-                  className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
-                  aria-label="Toggle resume preview"
-                >
-                  {showPreview ? '▴ Hide Preview' : '▾ Preview'}
-                </button>
+                {(!readOnly || driveConnected) && (
+                  <button
+                    onClick={() => setShowPreview(v => !v)}
+                    className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+                    aria-label="Toggle resume preview"
+                  >
+                    {showPreview ? '▴ Hide Preview' : '▾ Preview'}
+                  </button>
+                )}
 
                 {!readOnly && (
                   <button
