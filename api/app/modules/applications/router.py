@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.models import Application
@@ -40,6 +40,15 @@ async def create_application(
     app = Application(user_id=current_user.id, **body.model_dump())
     db.add(app)
     await db.flush()
+    if app.job_posting_id and not app.job_description:
+        row = await db.execute(
+            text("SELECT description FROM job_postings WHERE id = :jid"),
+            {"jid": app.job_posting_id},
+        )
+        desc = row.scalar_one_or_none()
+        if desc:
+            app.job_description = desc
+            await db.flush()
     await db.refresh(app)
     return app
 
@@ -118,6 +127,14 @@ async def move_pipeline(
     app.status_updated_at = datetime.now(timezone.utc)
     if body.new_status == 'applied' and not app.applied_at:
         app.applied_at = date.today()
+    if app.job_posting_id and not app.job_description:
+        row = await db.execute(
+            text("SELECT description FROM job_postings WHERE id = :jid"),
+            {"jid": app.job_posting_id},
+        )
+        desc = row.scalar_one_or_none()
+        if desc:
+            app.job_description = desc
     await db.flush()
     await db.refresh(app)
     return app

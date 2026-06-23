@@ -1,5 +1,5 @@
 """
-Unit tests for move_pipeline and kanban endpoints in applications/router.py
+Unit tests for move_pipeline, create_application, and kanban endpoints in applications/router.py
 """
 import pytest
 from datetime import datetime, timezone
@@ -128,6 +128,202 @@ async def test_kanban_orders_by_status_updated_at_desc():
     assert selected[0].id == 2  # newer first
     assert selected[1].id == 1
 
+
+# ---------------------------------------------------------------------------
+# move_pipeline — job_description backfill from job_postings
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_move_backfills_job_description_when_null():
+    """Backfills job_description from job_postings when it is NULL and job_posting_id is set."""
+    from app.modules.applications.router import move_pipeline
+    from app.modules.applications.schemas import PipelineMoveRequest
+
+    app = _make_app(status="selected")
+    app.job_posting_id = 42
+    app.job_description = None
+
+    db = AsyncMock()
+    desc_row = MagicMock()
+    desc_row.scalar_one_or_none.return_value = "Full JD text from posting"
+    db.execute.return_value = desc_row
+
+    with patch("app.modules.applications.router._get_or_404", AsyncMock(return_value=app)):
+        body = PipelineMoveRequest(application_id=1, new_status="applied")
+        await move_pipeline(body=body, current_user=_make_user(), db=db)
+
+    assert app.job_description == "Full JD text from posting"
+
+
+@pytest.mark.asyncio
+async def test_move_does_not_overwrite_existing_job_description():
+    """Does not overwrite job_description when it is already set."""
+    from app.modules.applications.router import move_pipeline
+    from app.modules.applications.schemas import PipelineMoveRequest
+
+    app = _make_app(status="selected")
+    app.job_posting_id = 42
+    app.job_description = "Existing JD"
+
+    db = AsyncMock()
+
+    with patch("app.modules.applications.router._get_or_404", AsyncMock(return_value=app)):
+        body = PipelineMoveRequest(application_id=1, new_status="applied")
+        await move_pipeline(body=body, current_user=_make_user(), db=db)
+
+    # db.execute should not be called to fetch the posting description
+    db.execute.assert_not_called()
+    assert app.job_description == "Existing JD"
+
+
+@pytest.mark.asyncio
+async def test_move_skips_backfill_when_no_job_posting_id():
+    """Does not attempt backfill when job_posting_id is None (manual application)."""
+    from app.modules.applications.router import move_pipeline
+    from app.modules.applications.schemas import PipelineMoveRequest
+
+    app = _make_app(status="selected")
+    app.job_posting_id = None
+    app.job_description = None
+
+    db = AsyncMock()
+
+    with patch("app.modules.applications.router._get_or_404", AsyncMock(return_value=app)):
+        body = PipelineMoveRequest(application_id=1, new_status="applied")
+        await move_pipeline(body=body, current_user=_make_user(), db=db)
+
+    db.execute.assert_not_called()
+    assert app.job_description is None
+
+
+@pytest.mark.asyncio
+async def test_move_handles_missing_posting_description_gracefully():
+    """Leaves job_description as None when job_postings row has no description."""
+    from app.modules.applications.router import move_pipeline
+    from app.modules.applications.schemas import PipelineMoveRequest
+
+    app = _make_app(status="selected")
+    app.job_posting_id = 99
+    app.job_description = None
+
+    db = AsyncMock()
+    desc_row = MagicMock()
+    desc_row.scalar_one_or_none.return_value = None
+    db.execute.return_value = desc_row
+
+    with patch("app.modules.applications.router._get_or_404", AsyncMock(return_value=app)):
+        body = PipelineMoveRequest(application_id=1, new_status="applied")
+        await move_pipeline(body=body, current_user=_make_user(), db=db)
+
+    assert app.job_description is None
+
+
+# ---------------------------------------------------------------------------
+# create_application — job_description backfill from job_postings
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_create_backfills_job_description_from_posting():
+    """Backfills job_description from job_postings on create when not provided."""
+    from app.modules.applications.router import create_application
+    from app.modules.applications.schemas import ApplicationCreate
+
+    db = AsyncMock()
+
+    # First execute call is for the backfill SELECT; second comes from refresh
+    desc_row = MagicMock()
+    desc_row.scalar_one_or_none.return_value = "JD from posting"
+    db.execute.return_value = desc_row
+
+    created_app = MagicMock()
+    created_app.job_posting_id = 7
+    created_app.job_description = None
+
+    # Capture the Application instance added to the session
+    captured = {}
+
+    def fake_add(obj):
+        captured["app"] = obj
+        obj.job_posting_id = 7
+        obj.job_description = None
+
+    db.add.side_effect = fake_add
+
+    async def fake_flush():
+        pass
+
+    db.flush = AsyncMock(side_effect=fake_flush)
+
+    async def fake_refresh(obj):
+        pass
+
+    db.refresh = AsyncMock(side_effect=fake_refresh)
+
+    with patch("app.modules.applications.router.Application") as MockApp:
+        MockApp.return_value = created_app
+        body = ApplicationCreate(
+            company_name="Acme", role_title="Engineer",
+            job_posting_id=7, status="selected",
+        )
+        result = await create_application(body=body, current_user=_make_user(), db=db)
+
+    assert created_app.job_description == "JD from posting"
+
+
+@pytest.mark.asyncio
+async def test_create_does_not_overwrite_provided_job_description():
+    """Does not overwrite job_description when caller already provides it."""
+    from app.modules.applications.router import create_application
+    from app.modules.applications.schemas import ApplicationCreate
+
+    db = AsyncMock()
+
+    created_app = MagicMock()
+    created_app.job_posting_id = 7
+    created_app.job_description = "Caller-provided JD"
+
+    db.add.return_value = None
+
+    with patch("app.modules.applications.router.Application") as MockApp:
+        MockApp.return_value = created_app
+        body = ApplicationCreate(
+            company_name="Acme", role_title="Engineer",
+            job_posting_id=7, job_description="Caller-provided JD", status="selected",
+        )
+        await create_application(body=body, current_user=_make_user(), db=db)
+
+    # execute should not be called for backfill
+    db.execute.assert_not_called()
+    assert created_app.job_description == "Caller-provided JD"
+
+
+@pytest.mark.asyncio
+async def test_create_skips_backfill_when_no_job_posting_id():
+    """Does not query job_postings when job_posting_id is None."""
+    from app.modules.applications.router import create_application
+    from app.modules.applications.schemas import ApplicationCreate
+
+    db = AsyncMock()
+
+    created_app = MagicMock()
+    created_app.job_posting_id = None
+    created_app.job_description = None
+
+    db.add.return_value = None
+
+    with patch("app.modules.applications.router.Application") as MockApp:
+        MockApp.return_value = created_app
+        body = ApplicationCreate(
+            company_name="Acme", role_title="Engineer", status="selected",
+        )
+        await create_application(body=body, current_user=_make_user(), db=db)
+
+    db.execute.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# kanban — grouped by status
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_kanban_groups_by_status():
