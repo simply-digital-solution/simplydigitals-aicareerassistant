@@ -236,8 +236,8 @@ class BaseLLMClient(ABC):
                         "model": self._model,
                         "input_tokens": input_tokens,
                         "output_tokens": output_tokens,
-                        "requested_at": requested_at.isoformat(),
-                        "responded_at": responded_at.isoformat(),
+                        "requested_at": requested_at,
+                        "responded_at": responded_at,
                     },
                 )
                 await db.commit()
@@ -274,6 +274,7 @@ class BaseLLMClient(ABC):
                      :attempt, :prompt, :output,
                      :it, :ot, :crt, :cct,
                      :cost, :started, :completed)
+                RETURNING id
             """),
             {
                 "uid": user_id,
@@ -289,11 +290,11 @@ class BaseLLMClient(ABC):
                 "crt": 0,
                 "cct": 0,
                 "cost": 0.0,
-                "started": started_at.isoformat(),
-                "completed": datetime.now(timezone.utc).isoformat(),
+                "started": started_at,
+                "completed": datetime.now(timezone.utc),
             },
         )
-        return insert_result.lastrowid
+        return insert_result.scalar_one_or_none()
 
 
 # ------------------------------------------------------------------
@@ -470,7 +471,7 @@ def _merge_usage(a: dict, b: dict) -> dict:
 
 
 async def _update_budget(db: AsyncSession, agent_name: str, usage: dict):
-    today = date.today().isoformat()
+    today = date.today()
     await db.execute(
         text("""
             INSERT INTO budget_records
@@ -479,9 +480,9 @@ async def _update_budget(db: AsyncSession, agent_name: str, usage: dict):
             VALUES
                 (:date, :name, :it, :ot, 0, 0, 0.0, 1)
             ON CONFLICT(date, agent_name) DO UPDATE SET
-                total_input_tokens = total_input_tokens + excluded.total_input_tokens,
-                total_output_tokens = total_output_tokens + excluded.total_output_tokens,
-                call_count = call_count + 1
+                total_input_tokens = budget_records.total_input_tokens + excluded.total_input_tokens,
+                total_output_tokens = budget_records.total_output_tokens + excluded.total_output_tokens,
+                call_count = budget_records.call_count + 1
         """),
         {
             "date": today,
