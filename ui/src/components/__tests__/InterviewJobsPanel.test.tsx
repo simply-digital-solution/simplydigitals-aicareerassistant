@@ -65,7 +65,8 @@ function wrap() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(clientModule.authApi.googleStatus).mockResolvedValue({ data: { connected: false } } as never)
+  // Default: Drive connected so Interview Questions button shows
+  vi.mocked(clientModule.authApi.googleStatus).mockResolvedValue({ data: { connected: true } } as never)
   vi.mocked(clientModule.researchApi.getGeneratedResume).mockRejectedValue(
     Object.assign(new Error('Not Found'), { response: { status: 404 } })
   )
@@ -73,7 +74,9 @@ beforeEach(() => {
     Object.assign(new Error('Not Found'), { response: { status: 404 } })
   )
   vi.mocked(clientModule.applicationsApi.move).mockResolvedValue({ data: {} } as never)
-  vi.mocked(clientModule.agentsApi.generateInterviewPack).mockResolvedValue({ data: {} } as never)
+  vi.mocked(clientModule.agentsApi.generateInterviewPack).mockResolvedValue({
+    data: { pitch: 'pitch', star_questions: [], drive_file_id: 'fid', drive_link: 'https://drive.google.com/file/fid', drive_error: null },
+  } as never)
 })
 
 describe('InterviewJobsPanel', () => {
@@ -188,6 +191,27 @@ describe('InterviewJobsPanel', () => {
     // The Offered/Rejected action buttons should not appear for terminal-status jobs
     expect(screen.queryByRole('button', { name: /^offered$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^rejected$/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Drive not connected notice instead of Interview Questions when Drive is off', async () => {
+    vi.mocked(clientModule.authApi.googleStatus).mockResolvedValue({ data: { connected: false } } as never)
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ has_interview_pack: false })] } } as never
+    )
+    wrap()
+    await screen.findByText('Software Engineer')
+    expect(await screen.findByText(/connect drive to save interview questionnaire/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /interview questions/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Interview Questions button when Drive is connected', async () => {
+    vi.mocked(clientModule.authApi.googleStatus).mockResolvedValue({ data: { connected: true } } as never)
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ has_interview_pack: false })] } } as never
+    )
+    wrap()
+    expect(await screen.findByRole('button', { name: /interview questions/i })).toBeInTheDocument()
+    expect(screen.queryByText(/connect drive/i)).not.toBeInTheDocument()
   })
 
   it('calls move to offered when Offered button clicked', async () => {

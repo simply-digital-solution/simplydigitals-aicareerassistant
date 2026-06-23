@@ -650,7 +650,101 @@ async def interview_from_job(
     if isinstance(result, AgentError):
         raise HTTPException(status_code=500, detail=result.message)
 
-    return result
+    # Attempt Drive upload if user has OAuth tokens
+    prof_result = await db.execute(
+        text("SELECT google_access_token, google_refresh_token, google_token_expiry FROM profiles WHERE user_id = :uid"),
+        {"uid": current_user.id},
+    )
+    prof = prof_result.mappings().first()
+    drive_connected = bool(prof and prof["google_refresh_token"])
+
+    if drive_connected:
+        from app.shared.interview_pack_docx import build_interview_pack_docx
+        from app.shared.google_drive import upload_or_update_file, convert_docx_to_pdf_bytes
+        from app.shared.schemas import InterviewPackOutput as _IPO
+
+        job_title = app_row[1][:60] if app_row[1] else "Role"  # use JD start as fallback
+        # prefer company name from DB row
+        folder_name = f"{company_name} - Interview Pack" if company_name else "Interview Pack"
+        company_slug = (company_name or "Company").replace(".", "").replace(" ", "_")
+        pdf_filename = f"InterviewPack_{company_slug}.pdf"
+        docx_filename = f"InterviewPack_{company_slug}.docx"
+
+        # Fetch the actual job title from job_postings for a better label
+        if job_posting_id:
+            jp_row = await db.execute(
+                text("SELECT title FROM job_postings WHERE id = :jid"),
+                {"jid": job_posting_id},
+            )
+            jp = jp_row.first()
+            if jp and jp[0]:
+                job_title = jp[0]
+
+        drive_file_id: str | None = None
+        drive_link: str | None = None
+        drive_error: str | None = None
+        try:
+            docx_bytes = build_interview_pack_docx(result, company_name, job_title)
+            pdf_bytes, conv_token_data = await convert_docx_to_pdf_bytes(
+                access_token=prof["google_access_token"],
+                refresh_token=prof["google_refresh_token"],
+                expiry_iso=prof["google_token_expiry"],
+                docx_bytes=docx_bytes,
+                filename=docx_filename,
+            )
+            upload_access_token = prof["google_access_token"]
+            upload_expiry = prof["google_token_expiry"]
+            if conv_token_data:
+                upload_access_token = conv_token_data["access_token"]
+                upload_expiry = conv_token_data["expiry_iso"]
+                await db.execute(
+                    text("UPDATE profiles SET google_access_token=:at, google_token_expiry=:exp WHERE user_id=:uid"),
+                    {"at": upload_access_token, "exp": upload_expiry, "uid": current_user.id},
+                )
+
+            file_id, web_link, new_token_data = await upload_or_update_file(
+                access_token=upload_access_token,
+                refresh_token=prof["google_refresh_token"],
+                expiry_iso=upload_expiry,
+                folder_name=folder_name,
+                filename=pdf_filename,
+                file_bytes=pdf_bytes,
+            )
+            if new_token_data:
+                await db.execute(
+                    text("UPDATE profiles SET google_access_token=:at, google_token_expiry=:exp WHERE user_id=:uid"),
+                    {"at": new_token_data["access_token"], "exp": new_token_data["expiry_iso"], "uid": current_user.id},
+                )
+
+            drive_file_id = file_id
+            drive_link = web_link
+
+            # Delete DB row — Drive is now the only copy
+            await db.execute(
+                text("DELETE FROM interview_packs WHERE application_id = :app_id AND user_id = :uid"),
+                {"app_id": request.application_id, "uid": current_user.id},
+            )
+            await db.commit()
+        except Exception as exc:
+            logger.error("interview_from_job: Drive upload failed — %s", exc, exc_info=True)
+            drive_error = str(exc)
+
+        return {
+            "pitch": result.pitch,
+            "star_questions": [q.model_dump() for q in result.star_questions],
+            "drive_file_id": drive_file_id,
+            "drive_link": drive_link,
+            "drive_error": drive_error,
+        }
+
+    # Drive not connected — pack already saved to DB by the agent
+    return {
+        "pitch": result.pitch,
+        "star_questions": [q.model_dump() for q in result.star_questions],
+        "drive_file_id": None,
+        "drive_link": None,
+        "drive_error": None,
+    }
 
 
 @router.get("/agents/interview-pack/{application_id}")

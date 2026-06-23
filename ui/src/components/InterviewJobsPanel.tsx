@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { researchApi, agentsApi, applicationsApi } from '../api/client'
-import type { InterviewingJob, InterviewPack } from '../api/client'
+import { researchApi, agentsApi, applicationsApi, authApi } from '../api/client'
+import type { InterviewingJob, InterviewPack, InterviewPackResult } from '../api/client'
 import { StoredJobCard } from './ResearchPanel'
 import TailoredResumePanel from './TailoredResumePanel'
 
@@ -82,9 +82,10 @@ function StarQuestionCard({ index, q }: { index: number; q: InterviewPack['star_
   )
 }
 
-function InterviewJobCard({ job }: { job: InterviewingJob }) {
+function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; driveConnected: boolean }) {
   const qc = useQueryClient()
   const [generating, setGenerating] = useState(false)
+  const [driveResult, setDriveResult] = useState<Pick<InterviewPackResult, 'drive_link' | 'drive_error'> | null>(null)
   const [movingTo, setMovingTo] = useState<string | null>(null)
   const isTerminal = job.application_status === 'offered' || job.application_status === 'rejected'
 
@@ -97,8 +98,10 @@ function InterviewJobCard({ job }: { job: InterviewingJob }) {
 
   const handleGeneratePack = async () => {
     setGenerating(true)
+    setDriveResult(null)
     try {
-      await agentsApi.generateInterviewPack(job.application_id)
+      const res = await agentsApi.generateInterviewPack(job.application_id)
+      setDriveResult({ drive_link: res.data.drive_link, drive_error: res.data.drive_error })
       qc.invalidateQueries({ queryKey: ['interview-pack', job.application_id] })
       qc.invalidateQueries({ queryKey: ['interviewing-jobs'] })
     } finally {
@@ -162,19 +165,52 @@ function InterviewJobCard({ job }: { job: InterviewingJob }) {
 
       {/* Interview Pack */}
       {pack ? (
-        <StarQuestionsView pack={pack} />
+        <>
+          <StarQuestionsView pack={pack} />
+          {driveResult?.drive_link && (
+            <a
+              href={driveResult.drive_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+            >
+              ↗ Open Interview Pack in Drive
+            </a>
+          )}
+        </>
       ) : (
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={handleGeneratePack}
-            disabled={generating}
-            className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {generating ? 'Generating pack…' : '✦ Interview Questions'}
-          </button>
-          {generating && (
-            <p className="text-xs text-gray-400 mt-1">This takes ~15 seconds…</p>
+        <div className="mt-3 space-y-1">
+          {!driveConnected ? (
+            <p className="text-xs text-amber-600" role="status">
+              Connect Drive to save interview questionnaire — connect Google Drive first.
+            </p>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleGeneratePack}
+                disabled={generating}
+                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {generating ? 'Generating pack…' : '✦ Interview Questions'}
+              </button>
+              {generating && (
+                <p className="text-xs text-gray-400">This takes ~15 seconds…</p>
+              )}
+              {driveResult?.drive_error && (
+                <p className="text-xs text-red-500">Drive upload failed: {driveResult.drive_error}</p>
+              )}
+              {driveResult?.drive_link && (
+                <a
+                  href={driveResult.drive_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  ↗ Open Interview Pack in Drive
+                </a>
+              )}
+            </>
           )}
         </div>
       )}
@@ -196,6 +232,13 @@ export default function InterviewJobsPanel() {
     queryKey: ['interviewing-jobs'],
     queryFn: () => researchApi.getInterviewingJobs().then(r => r.data),
   })
+
+  const { data: driveStatus } = useQuery({
+    queryKey: ['drive-status'],
+    queryFn: () => authApi.googleStatus().then(r => r.data),
+    staleTime: 60_000,
+  })
+  const driveConnected = driveStatus?.connected ?? false
 
   const allJobs = data?.jobs ?? []
   const jobs = filter === 'all' ? allJobs : allJobs.filter(j => j.application_status === filter)
@@ -250,7 +293,7 @@ export default function InterviewJobsPanel() {
           <div className="space-y-6 divide-y divide-gray-100">
             {jobs.map(job => (
               <div key={job.id} className="pt-4 first:pt-0">
-                <InterviewJobCard job={job} />
+                <InterviewJobCard job={job} driveConnected={driveConnected} />
               </div>
             ))}
           </div>

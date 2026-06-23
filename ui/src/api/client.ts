@@ -161,6 +161,14 @@ export interface InterviewPack {
   updated_at: string | null
 }
 
+export interface InterviewPackResult {
+  pitch: string
+  star_questions: StarQuestion[]
+  drive_file_id: string | null
+  drive_link: string | null
+  drive_error: string | null
+}
+
 export interface InterviewingJob extends StoredJob {
   application_id: number
   application_status: 'interviewing' | 'offered' | 'rejected'
@@ -216,7 +224,7 @@ export const agentsApi = {
       `/agents/sessions/${sessionId}`,
     ),
   generateInterviewPack: (application_id: number) =>
-    api.post<InterviewPack>('/agents/interview-from-job', { application_id }),
+    api.post<InterviewPackResult>('/agents/interview-from-job', { application_id }),
   getInterviewPack: (application_id: number) =>
     api.get<InterviewPack>(`/agents/interview-pack/${application_id}`),
 }
