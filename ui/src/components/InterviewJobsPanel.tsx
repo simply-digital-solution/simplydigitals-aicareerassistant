@@ -82,12 +82,46 @@ function StarQuestionCard({ index, q }: { index: number; q: InterviewPack['star_
   )
 }
 
+function PackDriveLinks({ fileId, link }: { fileId: string | null; link: string | null }) {
+  if (!fileId && !link) return null
+  return (
+    <div className="flex items-center gap-3 mt-1">
+      {fileId && (
+        <a
+          href={`https://drive.google.com/uc?export=download&id=${fileId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-green-600 hover:text-green-800 font-medium"
+          aria-label="Download interview pack from Google Drive"
+        >
+          ↓ Interview Pack
+        </a>
+      )}
+      {link && (
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          aria-label="Open interview pack in Google Drive"
+        >
+          ↗ Interview Pack in Drive
+        </a>
+      )}
+    </div>
+  )
+}
+
 function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; driveConnected: boolean }) {
   const qc = useQueryClient()
   const [generating, setGenerating] = useState(false)
-  const [driveResult, setDriveResult] = useState<Pick<InterviewPackResult, 'drive_link' | 'drive_error'> | null>(null)
+  const [driveError, setDriveError] = useState<string | null>(null)
   const [movingTo, setMovingTo] = useState<string | null>(null)
   const isTerminal = job.application_status === 'offered' || job.application_status === 'rejected'
+
+  // Persistent Drive links come from job row (survive page refresh)
+  const packFileId = job.pack_drive_file_id
+  const packLink = job.pack_drive_link
 
   const { data: pack } = useQuery({
     queryKey: ['interview-pack', job.application_id],
@@ -98,10 +132,10 @@ function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; drive
 
   const handleGeneratePack = async () => {
     setGenerating(true)
-    setDriveResult(null)
+    setDriveError(null)
     try {
       const res = await agentsApi.generateInterviewPack(job.application_id)
-      setDriveResult({ drive_link: res.data.drive_link, drive_error: res.data.drive_error })
+      if (res.data.drive_error) setDriveError(res.data.drive_error)
       qc.invalidateQueries({ queryKey: ['interview-pack', job.application_id] })
       qc.invalidateQueries({ queryKey: ['interviewing-jobs'] })
     } finally {
@@ -167,16 +201,7 @@ function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; drive
       {pack ? (
         <>
           <StarQuestionsView pack={pack} />
-          {driveResult?.drive_link && (
-            <a
-              href={driveResult.drive_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
-            >
-              ↗ Open Interview Pack in Drive
-            </a>
-          )}
+          <PackDriveLinks fileId={packFileId} link={packLink} />
         </>
       ) : (
         <div className="mt-3 space-y-1">
@@ -184,6 +209,9 @@ function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; drive
             <p className="text-xs text-amber-600" role="status">
               Connect Drive to save interview questionnaire — connect Google Drive first.
             </p>
+          ) : packFileId ? (
+            // Pack already uploaded to Drive (content cleared from DB)
+            <PackDriveLinks fileId={packFileId} link={packLink} />
           ) : (
             <>
               <button
@@ -197,18 +225,8 @@ function InterviewJobCard({ job, driveConnected }: { job: InterviewingJob; drive
               {generating && (
                 <p className="text-xs text-gray-400">This takes ~15 seconds…</p>
               )}
-              {driveResult?.drive_error && (
-                <p className="text-xs text-red-500">Drive upload failed: {driveResult.drive_error}</p>
-              )}
-              {driveResult?.drive_link && (
-                <a
-                  href={driveResult.drive_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  ↗ Open Interview Pack in Drive
-                </a>
+              {driveError && (
+                <p className="text-xs text-red-500">Drive upload failed: {driveError}</p>
               )}
             </>
           )}

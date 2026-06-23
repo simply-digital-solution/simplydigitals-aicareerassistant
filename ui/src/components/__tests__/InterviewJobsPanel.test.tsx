@@ -54,6 +54,8 @@ function makeJob(overrides: Partial<InterviewingJob> = {}): InterviewingJob {
     application_status: 'interviewing',
     applied_at: '2026-06-10T00:00:00Z',
     has_interview_pack: false,
+    pack_drive_file_id: null,
+    pack_drive_link: null,
     ...overrides,
   }
 }
@@ -212,6 +214,29 @@ describe('InterviewJobsPanel', () => {
     wrap()
     expect(await screen.findByRole('button', { name: /interview questions/i })).toBeInTheDocument()
     expect(screen.queryByText(/connect drive/i)).not.toBeInTheDocument()
+  })
+
+  it('shows Download and Open in Drive links when pack_drive_file_id is set', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({
+        pack_drive_file_id: 'fid123',
+        pack_drive_link: 'https://drive.google.com/file/fid123',
+      })] } } as never
+    )
+    wrap()
+    await screen.findByText('Software Engineer')
+    expect(await screen.findByRole('link', { name: /download interview pack/i })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /open interview pack in google drive/i })).toBeInTheDocument()
+  })
+
+  it('does not show pack Drive links when pack_drive_file_id is null', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ pack_drive_file_id: null, pack_drive_link: null })] } } as never
+    )
+    wrap()
+    await screen.findByText('Software Engineer')
+    expect(screen.queryByRole('link', { name: /download interview pack/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /open interview pack in google drive/i })).not.toBeInTheDocument()
   })
 
   it('calls move to offered when Offered button clicked', async () => {

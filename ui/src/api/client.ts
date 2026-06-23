@@ -174,6 +174,8 @@ export interface InterviewingJob extends StoredJob {
   application_status: 'interviewing' | 'offered' | 'rejected'
   applied_at: string | null
   has_interview_pack: boolean
+  pack_drive_file_id: string | null
+  pack_drive_link: string | null
 }
 
 export interface RoleSuggestion {

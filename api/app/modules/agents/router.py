@@ -719,10 +719,17 @@ async def interview_from_job(
             drive_file_id = file_id
             drive_link = web_link
 
-            # Delete DB row — Drive is now the only copy
+            # Clear content from DB, keep row for Drive link persistence
             await db.execute(
-                text("DELETE FROM interview_packs WHERE application_id = :app_id AND user_id = :uid"),
-                {"app_id": request.application_id, "uid": current_user.id},
+                text("""
+                    UPDATE interview_packs
+                    SET pitch = '', star_questions = '[]',
+                        drive_file_id = :fid, drive_link = :link,
+                        updated_at = now()
+                    WHERE application_id = :app_id AND user_id = :uid
+                """),
+                {"fid": file_id, "link": web_link,
+                 "app_id": request.application_id, "uid": current_user.id},
             )
             await db.commit()
         except Exception as exc:
@@ -1264,7 +1271,9 @@ async def get_interviewing_jobs(
                    jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
                    jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.scored_by_model, jp.archived,
                    a.id AS application_id, a.status AS application_status, a.applied_at,
-                   ip.pitch IS NOT NULL AS has_interview_pack
+                   (ip.id IS NOT NULL AND (ip.pitch != '' OR ip.drive_file_id IS NOT NULL)) AS has_interview_pack,
+                   ip.drive_file_id AS pack_drive_file_id,
+                   ip.drive_link AS pack_drive_link
             FROM job_postings jp
             JOIN applications a
               ON a.job_posting_id = jp.id
