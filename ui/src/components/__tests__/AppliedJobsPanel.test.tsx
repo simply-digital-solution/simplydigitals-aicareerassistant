@@ -111,6 +111,24 @@ describe('AppliedJobsPanel', () => {
     expect(screen.queryByRole('button', { name: /re-score/i })).not.toBeInTheDocument()
   })
 
+  it('does not show Scoring… label for unscored jobs in readOnly mode', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ scored: false, fit_score: null })] } } as never
+    )
+    wrap()
+    await screen.findByText('Data Engineer')
+    expect(screen.queryByText(/scoring…/i)).not.toBeInTheDocument()
+  })
+
+  it('shows fit score badge when job is scored', async () => {
+    vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ scored: true, fit_score: 0.82 })] } } as never
+    )
+    wrap()
+    await screen.findByText('Data Engineer')
+    expect(screen.getByText(/82/)).toBeInTheDocument()
+  })
+
   it('shows Interview Scheduled button for each applied job', async () => {
     vi.mocked(clientModule.researchApi.getAppliedJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob()] } } as never

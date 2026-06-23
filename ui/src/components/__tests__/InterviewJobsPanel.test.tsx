@@ -138,6 +138,15 @@ describe('InterviewJobsPanel', () => {
     expect(await screen.findByText('Interviewing')).toBeInTheDocument()
   })
 
+  it('does not show Scoring… label for unscored jobs in readOnly mode', async () => {
+    vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
+      { data: { total: 1, jobs: [makeJob({ scored: false, fit_score: null })] } } as never
+    )
+    wrap()
+    await screen.findByText('Software Engineer')
+    expect(screen.queryByText(/scoring…/i)).not.toBeInTheDocument()
+  })
+
   it('shows Interview Questions button when no pack exists', async () => {
     vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
       { data: { total: 1, jobs: [makeJob({ has_interview_pack: false })] } } as never
