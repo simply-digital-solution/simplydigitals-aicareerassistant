@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
@@ -6,15 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.router import get_current_user
 from app.shared.database import get_db
-from app.shared.sql_compat import months_ago
+from app.shared.sql_compat import days_ago as _days_ago, months_ago
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 
 FIT_THRESHOLD = 0.7
-
-
-def _days_ago(n: int) -> str:
-    return (datetime.now(timezone.utc) - timedelta(days=n)).strftime("%Y-%m-%d")
 
 
 def _fill_days(rows: list[dict], key: str, days: int) -> list[dict]:

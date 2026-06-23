@@ -7,6 +7,7 @@ no artificial sleep needed here.
 """
 import logging
 from datetime import datetime, timezone
+from app.shared.sql_compat import now_utc
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
@@ -73,7 +74,7 @@ async def generate_resumes_for_jobs(
             results[jid] = False
             continue
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = now_utc()
         resume_json = result.model_dump_json()
 
         # Fetch linked application_id if exists

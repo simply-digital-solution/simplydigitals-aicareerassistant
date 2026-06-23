@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from app.shared.sql_compat import now_utc
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +26,7 @@ async def suspend_inactive_users(db: AsyncSession) -> list[int]:
     Find users with no activity in the last INACTIVITY_DAYS days and set
     scoring_suspended = 1.  Returns list of newly suspended user IDs.
     """
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=INACTIVITY_DAYS)).isoformat()
+    cutoff = now_utc() - timedelta(days=INACTIVITY_DAYS)
 
     # Users who have had any selection (application created) or application
     # submitted in the last 7 days
@@ -33,7 +34,7 @@ async def suspend_inactive_users(db: AsyncSession) -> list[int]:
         SELECT DISTINCT user_id FROM applications
         WHERE created_at >= :cutoff
            OR (status = 'applied' AND applied_at >= :cutoff_date)
-    """), {"cutoff": cutoff, "cutoff_date": cutoff[:10]})
+    """), {"cutoff": cutoff, "cutoff_date": cutoff.date()})
     active_ids = {row[0] for row in active_result.fetchall()}
 
     # Users who are not already suspended and not in the active set

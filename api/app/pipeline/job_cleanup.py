@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from app.shared.sql_compat import now_utc
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +48,7 @@ async def purge_stale_research_jobs(
          (applied / interviewing / offered / rejected / withdrawn / archived)
       3. No generated_resume references this job (the resume document is still live)
     """
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cutoff = now_utc() - timedelta(days=days)
     statuses = ",".join(f"'{s}'" for s in _PROTECTED_STATUSES)
 
     # Find IDs to delete in a single query to avoid a slow correlated subquery inside DELETE.

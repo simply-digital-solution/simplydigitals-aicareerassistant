@@ -27,6 +27,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional, Any
+from app.shared.sql_compat import now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -814,7 +815,7 @@ async def run_agent_session(
                 "job_description": request.job_description,
                 "trigger": request.trigger,
             }),
-            "now": datetime.now(timezone.utc).isoformat(),
+            "now": now_utc(),
         },
     )
     await db.commit()
@@ -823,7 +824,7 @@ async def run_agent_session(
         try:
             await db.execute(
                 text("UPDATE agent_jobs SET status='running', started_at=:now WHERE session_id=:sid"),
-                {"now": datetime.now(timezone.utc).isoformat(), "sid": session_id},
+                {"now": now_utc(), "sid": session_id},
             )
             await db.commit()
 
@@ -842,7 +843,7 @@ async def run_agent_session(
                     WHERE session_id=:sid
                 """),
                 {
-                    "now": datetime.now(timezone.utc).isoformat(),
+                    "now": now_utc(),
                     "sid": session_id,
                     "result": json.dumps({
                         "current_node": final_state.get("current_node"),
@@ -861,7 +862,7 @@ async def run_agent_session(
                     WHERE session_id=:sid
                 """),
                 {
-                    "now": datetime.now(timezone.utc).isoformat(),
+                    "now": now_utc(),
                     "sid": session_id,
                     "err": str(exc),
                 },
@@ -1000,7 +1001,7 @@ async def _update_draft_status(
         {
             "status": status,
             "edited": edited_content,
-            "now": datetime.now(timezone.utc).isoformat(),
+            "now": now_utc(),
             "did": draft_id,
         },
     )
@@ -1117,7 +1118,7 @@ async def save_job_feedback(
             "company":  body.company,
             "relevance": body.relevance,
             "reason":   body.reason,
-            "now":      datetime.now(timezone.utc).isoformat(),
+            "now":      now_utc(),
         },
     )
     await db.commit()
@@ -1438,7 +1439,6 @@ async def generate_resume(
     - 422: No resume in profile, or Google Drive not connected.
     - 502: LLM generation failed.
     """
-    from datetime import datetime, timezone
     from fastapi.responses import JSONResponse
     from app.modules.agents.resume_generate_agent import run_resume_generate_agent
     from app.shared.schemas import AgentError
@@ -1497,7 +1497,7 @@ async def generate_resume(
     if isinstance(result, AgentError):
         raise HTTPException(502, f"Resume generation failed: {result.error}")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = now_utc()
     resume_json = result.model_dump_json()
 
     # ── Persist generated resume (always save JSON first as safety net) ──────
@@ -1703,8 +1703,7 @@ async def retry_drive_upload(
         )
         raise HTTPException(502, f"Google Drive upload failed: {exc}")
 
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
+    now = now_utc()
 
     # Persist any refreshed token from conversion or upload step
     merged_token = new_token_data or conv_token_data
@@ -2099,8 +2098,7 @@ async def upload_resume_to_drive(
         )
     else:
         # No generated resume row yet — store link standalone
-        from datetime import datetime, timezone as _tz
-        _now = datetime.now(_tz.utc).isoformat()
+        _now = now_utc()
         await db.execute(
             text("""
                 INSERT INTO generated_resumes

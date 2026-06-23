@@ -10,6 +10,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from app.shared.sql_compat import now_utc, today_utc
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
@@ -27,7 +28,7 @@ SLEEP_QUEUE_EMPTY     = 300   # seconds to wait when no unscored jobs remain
 
 async def _get_scorings_today(db: AsyncSession, user_id: int) -> int:
     """Return how many jobs this user has already had scored today."""
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = today_utc()
     row = await db.execute(
         text("SELECT jobs_scored FROM daily_scoring_usage WHERE user_id=:uid AND date=:date"),
         {"uid": user_id, "date": today},
@@ -38,7 +39,7 @@ async def _get_scorings_today(db: AsyncSession, user_id: int) -> int:
 
 async def _increment_scorings_today(db: AsyncSession, user_id: int, count: int) -> None:
     """Increment the daily scoring counter for the user by count."""
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = today_utc()
     await db.execute(
         text("""
             INSERT INTO daily_scoring_usage (user_id, date, jobs_scored, created_at)
@@ -46,7 +47,7 @@ async def _increment_scorings_today(db: AsyncSession, user_id: int, count: int) 
             ON CONFLICT(user_id, date) DO UPDATE SET
                 jobs_scored = jobs_scored + excluded.jobs_scored
         """),
-        {"uid": user_id, "date": today, "count": count, "now": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")},
+        {"uid": user_id, "date": today, "count": count, "now": now_utc()},
     )
 
 
@@ -170,7 +171,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: batch failed after %.1fs: %s", time.monotonic() - t_start, error_msg)
-        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        now = now_utc()
         for jid in job_ids:
             await db.execute(
                 text("UPDATE job_postings SET scored=false, score_error=:err, scored_at=:now WHERE id=:id"),
@@ -182,7 +183,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     if isinstance(result, AgentError):
         error_msg = result.error
         logger.warning("llm_scorer: agent error for batch %s: %s", job_ids, error_msg)
-        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        now = now_utc()
         for jid in job_ids:
             await db.execute(
                 text("UPDATE job_postings SET scored=false, score_error=:err, scored_at=:now WHERE id=:id"),
@@ -194,7 +195,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     # Match results by job_id
     batch_model = meta.get("model")
     returned = {opp.job_id: opp for opp in result.opportunities}
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now = now_utc()
     scored_count = 0
     for jid in job_ids:
         opp = returned.get(jid)
@@ -242,7 +243,7 @@ async def _write_score(db: AsyncSession, job_id: int, opp, model: str | None = N
             "recommendation": opp.recommendation or None,
             "industries":     json.dumps(opp.inferred_industries),
             "model":          model,
-            "now":            datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "now":            now_utc(),
             "id":             job_id,
         },
     )

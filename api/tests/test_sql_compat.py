@@ -4,36 +4,36 @@ from datetime import datetime, timedelta, timezone
 from app.shared.sql_compat import days_ago, months_ago
 
 
-def test_days_ago_format():
+def test_days_ago_returns_datetime():
     result = days_ago(30)
-    datetime.strptime(result, "%Y-%m-%d")
+    assert isinstance(result, datetime)
+    assert result.tzinfo is not None
 
 
 def test_days_ago_correct_date():
     result = days_ago(7)
-    expected = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
-    assert result == expected
+    expected = datetime.now(timezone.utc) - timedelta(days=7)
+    assert abs((result - expected).total_seconds()) < 2
 
 
 def test_days_ago_zero():
     result = days_ago(0)
-    expected = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    assert result == expected
+    expected = datetime.now(timezone.utc)
+    assert abs((result - expected).total_seconds()) < 2
 
 
-def test_months_ago_format():
+def test_months_ago_returns_datetime():
     result = months_ago(3)
-    datetime.strptime(result, "%Y-%m-%d")
+    assert isinstance(result, datetime)
+    assert result.tzinfo is not None
 
 
 def test_months_ago_is_before_today():
     result = months_ago(1)
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    assert result < today
+    assert result < datetime.now(timezone.utc)
 
 
 def test_months_ago_crosses_year_boundary():
     now = datetime.now(timezone.utc)
     result = months_ago(now.month + 1)
-    year = int(result[:4])
-    assert year < now.year
+    assert result.year < now.year

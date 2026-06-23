@@ -10,6 +10,7 @@ Gap analysis: required_skills vs profile.skills → have / missing.
 import json
 import re
 from datetime import datetime, timezone
+from app.shared.sql_compat import now_utc
 from typing import Optional
 
 from sqlalchemy import text
@@ -41,7 +42,7 @@ async def save_title_skills(
             "title": title,
             "skills": json.dumps(required_skills),
             "keywords": json.dumps(source_keywords),
-            "now": datetime.now(timezone.utc).isoformat(),
+            "now": now_utc(),
         },
     )
     await db.commit()

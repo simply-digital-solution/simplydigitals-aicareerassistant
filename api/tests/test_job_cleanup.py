@@ -146,8 +146,8 @@ async def test_custom_days_used_in_cutoff():
 
     _, kwargs = db.execute.call_args_list[0]
     params = db.execute.call_args_list[0][0][1]
-    cutoff_str = params["cutoff"]
-    cutoff_dt = datetime.fromisoformat(cutoff_str)
+    cutoff_dt = params["cutoff"]
+    assert isinstance(cutoff_dt, datetime)
     expected = datetime.now(timezone.utc) - timedelta(days=7)
     # Allow 5s tolerance for test execution time
     assert abs((cutoff_dt - expected).total_seconds()) < 5

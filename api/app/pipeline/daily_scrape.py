@@ -10,6 +10,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from app.shared.sql_compat import now_utc
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
@@ -47,7 +48,7 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
     )
 
     inserted = 0
-    now = datetime.now(timezone.utc)
+    now = now_utc()
 
     for title in target_titles:
         t_title_start = time.monotonic()
@@ -123,8 +124,8 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                     "location":    job.get("location", ""),
                     "description": job.get("description", ""),
                     "industries":  industries_json,
-                    "posted_at":   posted_at.isoformat() if posted_at else None,
-                    "scraped_at":  now.isoformat(),
+                    "posted_at":   posted_at if posted_at else None,
+                    "scraped_at":  now,
                 },
             )
             if row.rowcount:
