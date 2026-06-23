@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { researchApi, agentsApi, applicationsApi, authApi } from '../api/client'
-import type { InterviewingJob, InterviewPack, InterviewPackResult } from '../api/client'
+import type { InterviewingJob, InterviewPack } from '../api/client'
 import { StoredJobCard } from './ResearchPanel'
 import TailoredResumePanel from './TailoredResumePanel'
 

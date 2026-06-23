@@ -28,9 +28,12 @@ cd ui && npm run dev      # Vite, port 5173
 cd ui && npm run build
 cd ui && npm run lint
 cd ui && npm install
-cd ui && npm test         # vitest run (single pass)
-cd ui && npm run test:watch  # vitest watch mode
+cd ui && npm test                # vitest run (single pass)
+cd ui && npm run test:watch      # vitest watch mode
+cd ui && npm run typecheck       # tsc type check — must pass before every commit
 ```
+
+> **Before committing any frontend change**: always run `npm test` AND `npm run typecheck`. Both must pass. `npm test` (vitest) does not catch TypeScript type errors — only `typecheck` does.
 
 ### Environment
 
