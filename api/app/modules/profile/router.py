@@ -100,30 +100,56 @@ def _escape(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _is_structural_line(line: str) -> bool:
+    """Return True if the line starts a new structural element (heading, bullet, blank)."""
+    s = line.strip()
+    if not s:
+        return True
+    if s.isupper() and len(s) <= 60:
+        return True
+    if s.startswith(("●", "•", "-", "–")):
+        return True
+    return False
+
+
 def _pdf_to_html(content: bytes) -> tuple[str, str]:
-    """Extract text + basic HTML from a PDF using pdfplumber."""
+    """Extract text + basic HTML from a PDF using pdfplumber.
+
+    Lines that are soft-wrapped continuations of the same paragraph are joined
+    into a single <p> so the preview doesn't show each PDF line-break as a
+    separate paragraph.
+    """
     text_parts: list[str] = []
     html_parts: list[str] = []
+
+    def _flush_para(buf: list[str]) -> None:
+        if buf:
+            html_parts.append(f'<p>{_escape(" ".join(buf))}</p>')
+            buf.clear()
+
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
             if not page_text:
                 continue
             text_parts.append(page_text)
+            para_buf: list[str] = []
             for line in page_text.splitlines():
                 stripped = line.strip()
                 if not stripped:
+                    _flush_para(para_buf)
                     html_parts.append("<br>")
-                    continue
-                # Heuristic: short ALL-CAPS lines (≤60 chars) are section headings
-                if stripped.isupper() and len(stripped) <= 60:
+                elif stripped.isupper() and len(stripped) <= 60:
+                    _flush_para(para_buf)
                     html_parts.append(f'<h2 class="resume-heading">{_escape(stripped)}</h2>')
-                # Heuristic: lines starting with ● or • are bullets
                 elif stripped.startswith(("●", "•", "-", "–")):
+                    _flush_para(para_buf)
                     bullet = _escape(stripped.lstrip("●•–- ").strip())
                     html_parts.append(f'<li>{bullet}</li>')
                 else:
-                    html_parts.append(f'<p>{_escape(stripped)}</p>')
+                    para_buf.append(stripped)
+            _flush_para(para_buf)
+
     return "\n\n".join(text_parts), "\n".join(html_parts)
 
 
