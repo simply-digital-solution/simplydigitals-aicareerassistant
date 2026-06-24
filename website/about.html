@@ -56,6 +56,19 @@
     }
     .nav-links a:hover { color: var(--white); background: rgba(255,255,255,0.06); }
     .nav-links a.active { color: var(--teal); background: rgba(0,194,203,0.1); }
+    .nav-links a.nav-btn-product {
+      border: 1px solid rgba(0,194,203,0.45);
+      color: var(--teal);
+      font-weight: 600;
+    }
+    .nav-links a.nav-btn-product:hover { background: rgba(0,194,203,0.12); color: var(--teal); }
+    .nav-links a.nav-btn-services {
+      background: rgba(0,194,203,0.15);
+      border: 1px solid rgba(0,194,203,0.3);
+      color: var(--teal);
+      font-weight: 600;
+    }
+    .nav-links a.nav-btn-services:hover { background: rgba(0,194,203,0.25); color: var(--teal); }
     .nav-links a.nav-cta {
       background: var(--teal); color: var(--navy);
       font-weight: 700; padding: 0.5rem 1.3rem;
@@ -302,8 +315,8 @@
     <a class="nav-logo" href="index.html">Simply<span>Digitals</span></a>
     <ul class="nav-links">
       <li><a href="about.html" class="active">About</a></li>
-      <li><a href="index.html#product">Product</a></li>
-      <li><a href="index.html#services">Services</a></li>
+      <li><a href="index.html#product" class="nav-btn-product">Product</a></li>
+      <li><a href="index.html#services" class="nav-btn-services">Services</a></li>
       <li><a href="index.html#why">Why Us</a></li>
       <li><a href="index.html#contact" class="nav-cta">Get in Touch</a></li>
     </ul>
