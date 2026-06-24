@@ -1,16 +1,34 @@
-"""Tests for purge_stale_research_jobs."""
+"""Tests for purge_stale_research_jobs.
+
+Execute call sequence when candidates are found:
+  [0] candidate SELECT
+  [1] DELETE FROM user_job_postings WHERE job_posting_id IN (...)
+  [2] DELETE FROM job_postings WHERE id IN (...)
+"""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timedelta, timezone
 
 
-def _make_db(fetchall_return=None, rowcount=0):
-    mock_result = MagicMock()
-    mock_result.fetchall.return_value = fetchall_return or []
-    mock_result.rowcount = rowcount
+def _make_db_with_candidates(ids: list[int]):
+    """DB mock returning the given IDs from the candidate SELECT."""
+    candidate_result = MagicMock()
+    candidate_result.fetchall.return_value = [(i,) for i in ids]
+    delete_result = MagicMock()
 
     db = AsyncMock()
-    db.execute = AsyncMock(return_value=mock_result)
+    db.execute = AsyncMock(side_effect=[candidate_result, delete_result, delete_result])
+    db.commit = AsyncMock()
+    return db
+
+
+def _make_db_empty():
+    """DB mock returning no candidates."""
+    empty_result = MagicMock()
+    empty_result.fetchall.return_value = []
+
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=empty_result)
     db.commit = AsyncMock()
     return db
 
@@ -23,7 +41,7 @@ def _make_db(fetchall_return=None, rowcount=0):
 async def test_returns_zero_when_no_candidates():
     from app.pipeline.job_cleanup import purge_stale_research_jobs
 
-    db = _make_db(fetchall_return=[])
+    db = _make_db_empty()
     deleted = await purge_stale_research_jobs(db, days=30)
 
     assert deleted == 0
@@ -38,17 +56,7 @@ async def test_returns_zero_when_no_candidates():
 async def test_deletes_stale_jobs_and_returns_count():
     from app.pipeline.job_cleanup import purge_stale_research_jobs
 
-    # First execute call returns candidate IDs
-    candidate_result = MagicMock()
-    candidate_result.fetchall.return_value = [(1,), (2,), (3,)]
-
-    delete_result = MagicMock()
-    delete_result.fetchall.return_value = []
-
-    db = AsyncMock()
-    db.execute = AsyncMock(side_effect=[candidate_result, delete_result])
-    db.commit = AsyncMock()
-
+    db = _make_db_with_candidates([1, 2, 3])
     deleted = await purge_stale_research_jobs(db, days=30)
 
     assert deleted == 3
@@ -56,31 +64,39 @@ async def test_deletes_stale_jobs_and_returns_count():
 
 
 # ---------------------------------------------------------------------------
-# DELETE statement contains correct IDs
+# user_job_postings deleted before job_postings (FK order)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_delete_statement_includes_candidate_ids():
+async def test_user_job_postings_deleted_before_job_postings():
     from app.pipeline.job_cleanup import purge_stale_research_jobs
 
-    candidate_result = MagicMock()
-    candidate_result.fetchall.return_value = [(10,), (20,)]
+    db = _make_db_with_candidates([10, 20])
+    await purge_stale_research_jobs(db, days=30)
 
-    delete_result = MagicMock()
-    delete_result.fetchall.return_value = []
+    # [1] must be the ujp DELETE, [2] must be the jp DELETE
+    ujp_sql = str(db.execute.call_args_list[1][0][0])
+    jp_sql  = str(db.execute.call_args_list[2][0][0])
+    assert "DELETE FROM user_job_postings" in ujp_sql
+    assert "DELETE FROM job_postings" in jp_sql
 
-    db = AsyncMock()
-    db.execute = AsyncMock(side_effect=[candidate_result, delete_result])
-    db.commit = AsyncMock()
 
+# ---------------------------------------------------------------------------
+# DELETE statements contain correct IDs
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_delete_statements_include_candidate_ids():
+    from app.pipeline.job_cleanup import purge_stale_research_jobs
+
+    db = _make_db_with_candidates([10, 20])
     await purge_stale_research_jobs(db, days=7)
 
-    # Second call is the DELETE
-    delete_call = db.execute.call_args_list[1]
-    sql = str(delete_call[0][0])
-    assert "10" in sql
-    assert "20" in sql
-    assert "DELETE FROM job_postings" in sql
+    ujp_sql = str(db.execute.call_args_list[1][0][0])
+    jp_sql  = str(db.execute.call_args_list[2][0][0])
+    for sql in (ujp_sql, jp_sql):
+        assert "10" in sql
+        assert "20" in sql
 
 
 # ---------------------------------------------------------------------------
@@ -91,13 +107,7 @@ async def test_delete_statement_includes_candidate_ids():
 async def test_select_excludes_protected_statuses():
     from app.pipeline.job_cleanup import purge_stale_research_jobs, _PROTECTED_STATUSES
 
-    candidate_result = MagicMock()
-    candidate_result.fetchall.return_value = []
-
-    db = AsyncMock()
-    db.execute = AsyncMock(return_value=candidate_result)
-    db.commit = AsyncMock()
-
+    db = _make_db_empty()
     await purge_stale_research_jobs(db, days=30)
 
     select_sql = str(db.execute.call_args_list[0][0][0])
@@ -113,13 +123,7 @@ async def test_select_excludes_protected_statuses():
 async def test_select_excludes_jobs_with_generated_resumes():
     from app.pipeline.job_cleanup import purge_stale_research_jobs
 
-    candidate_result = MagicMock()
-    candidate_result.fetchall.return_value = []
-
-    db = AsyncMock()
-    db.execute = AsyncMock(return_value=candidate_result)
-    db.commit = AsyncMock()
-
+    db = _make_db_empty()
     await purge_stale_research_jobs(db, days=30)
 
     select_sql = str(db.execute.call_args_list[0][0][0])
@@ -133,23 +137,14 @@ async def test_select_excludes_jobs_with_generated_resumes():
 @pytest.mark.asyncio
 async def test_custom_days_used_in_cutoff():
     from app.pipeline.job_cleanup import purge_stale_research_jobs
-    from datetime import datetime, timezone, timedelta
 
-    candidate_result = MagicMock()
-    candidate_result.fetchall.return_value = []
-
-    db = AsyncMock()
-    db.execute = AsyncMock(return_value=candidate_result)
-    db.commit = AsyncMock()
-
+    db = _make_db_empty()
     await purge_stale_research_jobs(db, days=7)
 
-    _, kwargs = db.execute.call_args_list[0]
     params = db.execute.call_args_list[0][0][1]
     cutoff_dt = params["cutoff"]
     assert isinstance(cutoff_dt, datetime)
     expected = datetime.now(timezone.utc) - timedelta(days=7)
-    # Allow 5s tolerance for test execution time
     assert abs((cutoff_dt - expected).total_seconds()) < 5
 
 
@@ -166,10 +161,9 @@ async def test_admin_cleanup_endpoint_returns_deleted_count():
     candidate_result = MagicMock()
     candidate_result.fetchall.return_value = [(1,), (2,)]
     delete_result = MagicMock()
-    delete_result.fetchall.return_value = []
 
     mock_db = AsyncMock()
-    mock_db.execute = AsyncMock(side_effect=[candidate_result, delete_result])
+    mock_db.execute = AsyncMock(side_effect=[candidate_result, delete_result, delete_result])
     mock_db.commit = AsyncMock()
 
     async def _override():

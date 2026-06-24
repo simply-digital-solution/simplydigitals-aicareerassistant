@@ -75,6 +75,8 @@ async def purge_stale_research_jobs(
         return 0
 
     placeholders = ",".join(str(i) for i in ids)
+    # Delete user_job_postings first — it has a FK to job_postings.id with no CASCADE.
+    await db.execute(text(f"DELETE FROM user_job_postings WHERE job_posting_id IN ({placeholders})"))
     await db.execute(text(f"DELETE FROM job_postings WHERE id IN ({placeholders})"))
     await db.commit()
 
