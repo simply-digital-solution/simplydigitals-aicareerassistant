@@ -109,7 +109,7 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                          description, inferred_industries, posted_at, scraped_at, scored)
                     VALUES
                         (:user_id, :uuid, :title, :company, :url, :location,
-                         :description, :industries, :posted_at, :scraped_at, 0)
+                         :description, :industries, :posted_at, :scraped_at, false)
                     ON CONFLICT (user_id, mcf_uuid) DO UPDATE SET
                         inferred_industries = excluded.inferred_industries,
                         scraped_at          = excluded.scraped_at
@@ -148,21 +148,29 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
     return inserted
 
 
-async def scrape_for_all_users(db: AsyncSession) -> None:
-    """Called by the scheduler — scrapes for every user who has a profile."""
+async def scrape_for_all_users(get_db_context) -> None:
+    """Called by the scheduler — scrapes for every user who has a profile.
+
+    Each user gets its own DB session so a failure for one user does not
+    abort the transaction and block all subsequent users.
+    """
     t_start = time.monotonic()
-    rows = await db.execute(text("""
-        SELECT p.user_id FROM profiles p
-        JOIN users u ON u.id = p.user_id
-        WHERE u.scoring_suspended = false
-    """))
-    user_ids = [r[0] for r in rows.fetchall()]
+
+    async with get_db_context() as db:
+        rows = await db.execute(text("""
+            SELECT p.user_id FROM profiles p
+            JOIN users u ON u.id = p.user_id
+            WHERE u.scoring_suspended = false
+        """))
+        user_ids = [r[0] for r in rows.fetchall()]
+
     logger.info("scrape_for_all_users: starting — found %d users: %s", len(user_ids), user_ids)
 
     summary: dict[int, int] = {}
     for uid in user_ids:
         try:
-            summary[uid] = await scrape_for_user(uid, db)
+            async with get_db_context() as db:
+                summary[uid] = await scrape_for_user(uid, db)
         except Exception as exc:
             logger.error(
                 "scrape_for_all_users: user_id=%d failed: %s",

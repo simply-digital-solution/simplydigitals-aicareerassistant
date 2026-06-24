@@ -23,8 +23,7 @@ async def _run_daily_scrape() -> None:
     from app.shared.database import get_db_context
     from app.pipeline.daily_scrape import scrape_for_all_users
     logger.info("scheduler: daily scrape triggered at %s", __import__('datetime').datetime.now().isoformat(timespec='seconds'))
-    async with get_db_context() as db:
-        await scrape_for_all_users(db)
+    await scrape_for_all_users(get_db_context)
     if _scheduler:
         job = _scheduler.get_job("daily_scrape")
         if job and job.next_run_time:

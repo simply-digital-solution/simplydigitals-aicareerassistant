@@ -229,36 +229,54 @@ async def test_job_with_empty_url_is_skipped():
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_all_users — iterates all user IDs
+# Helpers for scrape_for_all_users (get_db_context-based)
+# ---------------------------------------------------------------------------
+
+from contextlib import asynccontextmanager
+
+def _make_get_db_context(user_ids: list[int]):
+    """Returns a get_db_context that yields a fresh AsyncMock each call.
+    The first call returns a db that fetches user_ids; subsequent calls
+    return a plain db for per-user scraping."""
+    call_count = 0
+
+    @asynccontextmanager
+    async def get_db_context():
+        nonlocal call_count
+        db = AsyncMock()
+        if call_count == 0:
+            # First call: return user IDs
+            users_exec = MagicMock()
+            users_exec.fetchall.return_value = [(uid,) for uid in user_ids]
+            db.execute.return_value = users_exec
+        call_count += 1
+        yield db
+
+    return get_db_context
+
+
+# ---------------------------------------------------------------------------
+# scrape_for_all_users — iterates all user IDs, each gets own session
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_scrape_for_all_users_calls_each_user():
-    db = AsyncMock()
-    users_exec = MagicMock()
-    users_exec.fetchall.return_value = [(1,), (2,)]
-    db.execute.return_value = users_exec
+    get_db_context = _make_get_db_context([1, 2])
 
     with patch("app.pipeline.daily_scrape.scrape_for_user",
                AsyncMock(return_value=5)) as mock_scrape:
-        await scrape_for_all_users(db)
+        await scrape_for_all_users(get_db_context)
 
     assert mock_scrape.call_count == 2
-    mock_scrape.assert_any_call(1, db)
-    mock_scrape.assert_any_call(2, db)
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_all_users — one user fails, others still run
+# scrape_for_all_users — one user fails, others still run (session isolation)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_scrape_for_all_users_continues_on_error():
-    db = AsyncMock()
-    users_exec = MagicMock()
-    users_exec.fetchall.return_value = [(1,), (2,)]
-    db.execute.return_value = users_exec
-
+    get_db_context = _make_get_db_context([1, 2])
     call_count = 0
 
     async def _scrape(uid, _db):
@@ -269,6 +287,54 @@ async def test_scrape_for_all_users_continues_on_error():
         return 3
 
     with patch("app.pipeline.daily_scrape.scrape_for_user", _scrape):
-        await scrape_for_all_users(db)
+        await scrape_for_all_users(get_db_context)
 
+    # user 2 must still run even though user 1 failed
     assert call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# scrape_for_all_users — each user gets an independent DB session
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_scrape_for_all_users_uses_separate_sessions():
+    """Each user's scrape should receive its own db session, not a shared one."""
+    sessions_seen: list = []
+    get_db_context = _make_get_db_context([1, 2])
+
+    async def _capture_session(uid, db):
+        sessions_seen.append(db)
+        return 0
+
+    with patch("app.pipeline.daily_scrape.scrape_for_user", _capture_session):
+        await scrape_for_all_users(get_db_context)
+
+    assert len(sessions_seen) == 2
+    # Each call received a different session object
+    assert sessions_seen[0] is not sessions_seen[1]
+
+
+# ---------------------------------------------------------------------------
+# scrape_for_user — INSERT uses boolean false for scored column
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_insert_uses_boolean_false_for_scored():
+    """scored column must be inserted as boolean false, not integer 0."""
+    profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _upsert_exec(1),
+    ]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
+               AsyncMock(return_value=[_make_job()])):
+        await scrape_for_user(user_id=1, db=db)
+
+    # Find the INSERT call (second execute call)
+    insert_call = db.execute.call_args_list[1]
+    sql = str(insert_call.args[0])
+    assert "false" in sql.lower()
+    assert ", 0)" not in sql  # must not use integer 0
