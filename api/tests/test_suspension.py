@@ -107,6 +107,24 @@ async def test_no_users_to_suspend_skips_commit():
 
 
 @pytest.mark.asyncio
+async def test_new_account_not_returned_by_old_account_query():
+    """
+    Accounts created within INACTIVITY_DAYS are excluded by the SQL cutoff filter.
+    Simulate this by returning an empty all_unsuspended_ids list (as the DB would).
+    """
+    from app.pipeline.suspension import suspend_inactive_users
+
+    db = _make_db(
+        active_user_ids=[],
+        all_unsuspended_ids=[],   # DB returns nothing because new account filtered by created_at
+        has_profile_ids={1},
+    )
+    suspended = await suspend_inactive_users(db)
+    assert suspended == []
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_reactivate_existing_user():
     from app.pipeline.suspension import reactivate_user
 

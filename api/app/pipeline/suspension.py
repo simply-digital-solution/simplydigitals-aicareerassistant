@@ -37,11 +37,12 @@ async def suspend_inactive_users(db: AsyncSession) -> list[int]:
     """), {"cutoff": cutoff, "cutoff_date": cutoff.date()})
     active_ids = {row[0] for row in active_result.fetchall()}
 
-    # Users who are not already suspended and not in the active set
+    # Users who are not already suspended, not new (account older than INACTIVITY_DAYS)
     all_result = await db.execute(text("""
         SELECT id FROM users
         WHERE scoring_suspended = false
-    """))
+          AND created_at < :cutoff
+    """), {"cutoff": cutoff})
     all_ids = [row[0] for row in all_result.fetchall()]
 
     # Only suspend users who have a profile (i.e. have used the app)
