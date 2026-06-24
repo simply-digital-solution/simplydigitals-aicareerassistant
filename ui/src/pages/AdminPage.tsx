@@ -6,7 +6,10 @@ import { useQuery, useMutation, useQueryClient, QueryClient, QueryClientProvider
 import adminApi from '../api/adminApi'
 import type { AdminUser, DailyCount, DailyTokens, UserTokenDay, AgentRunStats } from '../api/adminApi'
 
-const ADMIN_EMAIL = 'pandiri.vasu@simplydigitals.com.sg'
+const ADMIN_EMAILS = new Set([
+  'pandiri.vasu@simplydigitals.com.sg',
+  'pandiri.vasu@gmail.com',
+])
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 60_000 } } })
 
 function useAdminEmail(): string | null {
@@ -421,7 +424,7 @@ function AdminDashboard() {
 
 export default function AdminPage() {
   const email = useAdminEmail()
-  if (email !== ADMIN_EMAIL) {
+  if (!email || !ADMIN_EMAILS.has(email)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-10 text-center max-w-sm">
@@ -432,8 +435,7 @@ export default function AdminPage() {
           </div>
           <h2 className="text-lg font-bold text-gray-900 mb-2">Access denied</h2>
           <p className="text-sm text-gray-500 mb-6">
-            This page is restricted to administrators.<br />
-            Sign in as <span className="font-medium text-gray-700">{ADMIN_EMAIL}</span> to continue.
+            This page is restricted to administrators.
           </p>
           <a href="/" className="inline-block text-sm bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 transition-colors">Go to app</a>
         </div>

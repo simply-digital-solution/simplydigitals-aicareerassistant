@@ -65,10 +65,11 @@ describe('AdminPage', () => {
     expect(link.getAttribute('href')).toBe('/')
   })
 
-  it('shows the admin email hint in access denied message', async () => {
+  it('shows access denied message for non-admin', async () => {
     mockLocalStorage(null)
     const { default: AdminPage } = await import('../AdminPage')
     render(<AdminPage />)
-    expect(screen.getByText('pandiri.vasu@simplydigitals.com.sg')).toBeTruthy()
+    expect(screen.getByText('Access denied')).toBeTruthy()
+    expect(screen.getByText(/restricted to administrators/i)).toBeTruthy()
   })
 })
