@@ -41,21 +41,24 @@ def _db_with_batch(job_rows=None, feedback_rows=None):
     Return a mock AsyncSession for a batch of jobs.
     execute() side_effect sequence:
       [0] batch job SELECT (returns jp_id, user_id, ...)
-      [1] daily scoring usage check (0 = under limit)
-      [2] feedback SELECT
-      [3..N] UPDATE user_job_postings per job (score write)
+      [1] lifetime SUM check (_get_daily_limit)
+      [2] daily scoring usage check today (_get_scorings_today)
+      [3] feedback SELECT
+      [4..N] UPDATE user_job_postings per job (score write)
       [N+1..M] UPDATE job_postings inferred_industries
       [last] INSERT daily_scoring_usage increment
     """
     db = AsyncMock()
-    select_result   = _batch_select_result(job_rows or [])
-    usage_result    = MagicMock()
+    select_result    = _batch_select_result(job_rows or [])
+    lifetime_result  = MagicMock()
+    lifetime_result.fetchone.return_value = (100,)  # existing user → 50 limit
+    usage_result     = MagicMock()
     usage_result.fetchone.return_value = (0,)
-    feedback_result = _feedback_exec(feedback_rows)
-    update_result   = MagicMock()
+    feedback_result  = _feedback_exec(feedback_rows)
+    update_result    = MagicMock()
 
     # Provide enough update results for any batch size (2 updates per job + increment)
-    db.execute.side_effect = [select_result, usage_result, feedback_result] + [update_result] * 40
+    db.execute.side_effect = [select_result, lifetime_result, usage_result, feedback_result] + [update_result] * 40
     return db
 
 

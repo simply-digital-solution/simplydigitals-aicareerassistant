@@ -29,19 +29,22 @@ def _make_db(job_rows=None, advanced_ids=None):
     # [1] advanced-status check SELECT
     adv_check = MagicMock()
     adv_check.fetchall.return_value = [(jid,) for jid in (advanced_ids or [])]
-    # [2] daily scoring usage SELECT (0 = under limit)
+    # [2] lifetime SUM (_get_daily_limit) — existing user → 50 limit
+    lifetime_result = MagicMock()
+    lifetime_result.fetchone.return_value = (100,)
+    # [3] daily scoring usage SELECT today (_get_scorings_today, 0 = under limit)
     usage_result = MagicMock()
     usage_result.fetchone.return_value = (0,)
-    # [3..N+2] rescoring=1 UPDATEs (one per scoreable job)
+    # [4..N+3] rescoring=1 UPDATEs (one per scoreable job)
     rescoring_update = MagicMock()
-    # [N+3] feedback SELECT
+    # [N+4] feedback SELECT
     feedback_result = MagicMock()
     feedback_result.mappings.return_value.all.return_value = []
     # remaining: score writes, error updates, increment INSERT
     update_result = MagicMock()
     n_jobs = len(job_rows or [])
     db.execute.side_effect = (
-        [select_result, adv_check, usage_result]
+        [select_result, adv_check, lifetime_result, usage_result]
         + [rescoring_update] * max(n_jobs, 1)
         + [feedback_result]
         + [update_result] * 20

@@ -51,6 +51,23 @@ async def _increment_scorings_today(db: AsyncSession, user_id: int, count: int) 
     )
 
 
+async def _get_daily_limit(db: AsyncSession, user_id: int) -> int:
+    """
+    Return the effective daily scoring limit for this user.
+    New users (lifetime total = 0) get new_user_scoring_limit (250).
+    Existing users get max_scorings_per_user_per_day (50).
+    """
+    settings = get_settings()
+    row = await db.execute(
+        text("SELECT COALESCE(SUM(jobs_scored), 0) FROM daily_scoring_usage WHERE user_id = :uid"),
+        {"uid": user_id},
+    )
+    lifetime_total = row.fetchone()[0]
+    if lifetime_total == 0:
+        return settings.new_user_scoring_limit
+    return settings.max_scorings_per_user_per_day
+
+
 async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
     """
     Fetch up to 5 relevant and 5 not_relevant feedback rows for the user and
@@ -131,7 +148,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     user_id = job_rows[0]["user_id"]
 
     # Enforce daily scoring cap
-    daily_limit = get_settings().max_scorings_per_user_per_day
+    daily_limit = await _get_daily_limit(db, user_id)
     scored_today = await _get_scorings_today(db, user_id)
     remaining = daily_limit - scored_today
     if remaining <= 0:
@@ -311,7 +328,7 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
         return False
 
     # Enforce daily scoring cap
-    daily_limit = get_settings().max_scorings_per_user_per_day
+    daily_limit = await _get_daily_limit(db, resolved_user_id)
     scored_today = await _get_scorings_today(db, resolved_user_id)
     if scored_today >= daily_limit:
         logger.info("llm_scorer: user_id=%d daily limit reached (%d), skipping single rescore of job_id=%d",
@@ -453,7 +470,7 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int], user_id: int |
         return {jid: False for jid in job_ids}
 
     # Enforce daily scoring cap
-    daily_limit = get_settings().max_scorings_per_user_per_day
+    daily_limit = await _get_daily_limit(db, resolved_user_id)
     scored_today = await _get_scorings_today(db, resolved_user_id)
     remaining = daily_limit - scored_today
     if remaining <= 0:

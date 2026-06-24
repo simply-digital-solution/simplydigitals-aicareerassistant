@@ -1,11 +1,16 @@
 """
 Unit tests for daily scoring usage (cost guard).
-Covers: _get_scorings_today, _increment_scorings_today,
+Covers: _get_scorings_today, _increment_scorings_today, _get_daily_limit,
         score_next_batch cap, score_single_job cap, score_jobs_by_ids cap,
         GET /api/v1/scoring/usage endpoint.
+
+_get_daily_limit adds one DB call (lifetime SUM) before _get_scorings_today.
+Call order for limit checks:
+  [N]   SELECT SUM(jobs_scored) ... — lifetime total  → _get_daily_limit
+  [N+1] SELECT jobs_scored ... WHERE date=today       → _get_scorings_today
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -14,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # ---------------------------------------------------------------------------
 
 def _make_db(execute_returns: list):
-    """Build a mock AsyncSession whose execute() calls return items in order."""
     db = AsyncMock(spec=AsyncSession)
     db.execute = AsyncMock(side_effect=execute_returns)
     db.commit = AsyncMock()
@@ -22,17 +26,20 @@ def _make_db(execute_returns: list):
 
 
 def _row(value):
-    """Mock a single-value fetchone result."""
     r = MagicMock()
     r.fetchone.return_value = (value,)
     return r
 
 
 def _no_row():
-    """Mock an empty fetchone (no row)."""
     r = MagicMock()
     r.fetchone.return_value = None
     return r
+
+
+def _lifetime(total: int):
+    """Mock for _get_daily_limit's SUM(jobs_scored) query."""
+    return _row(total)
 
 
 # ---------------------------------------------------------------------------
@@ -43,16 +50,14 @@ def _no_row():
 async def test_get_scorings_today_returns_count():
     from app.pipeline.llm_scorer import _get_scorings_today
     db = _make_db([_row(23)])
-    result = await _get_scorings_today(db, user_id=1)
-    assert result == 23
+    assert await _get_scorings_today(db, user_id=1) == 23
 
 
 @pytest.mark.asyncio
 async def test_get_scorings_today_returns_zero_when_no_row():
     from app.pipeline.llm_scorer import _get_scorings_today
     db = _make_db([_no_row()])
-    result = await _get_scorings_today(db, user_id=1)
-    assert result == 0
+    assert await _get_scorings_today(db, user_id=1) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -69,8 +74,42 @@ async def test_increment_scorings_today_upserts():
     sql = str(db.execute.call_args[0][0])
     assert "INSERT INTO daily_scoring_usage" in sql
     assert "ON CONFLICT" in sql
-    # Must use qualified table name to avoid AmbiguousColumnError on PostgreSQL
     assert "daily_scoring_usage.jobs_scored" in sql
+
+
+# ---------------------------------------------------------------------------
+# _get_daily_limit — two-tier logic
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_new_user_gets_high_limit():
+    from app.pipeline.llm_scorer import _get_daily_limit
+    db = _make_db([_lifetime(0)])  # never scored anything
+    with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        limit = await _get_daily_limit(db, user_id=1)
+    assert limit == 250
+
+
+@pytest.mark.asyncio
+async def test_existing_user_gets_standard_limit():
+    from app.pipeline.llm_scorer import _get_daily_limit
+    db = _make_db([_lifetime(10)])  # has scored before
+    with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        limit = await _get_daily_limit(db, user_id=1)
+    assert limit == 50
+
+
+@pytest.mark.asyncio
+async def test_user_becomes_existing_after_first_scoring():
+    """Once lifetime total > 0, the 50/day limit applies."""
+    from app.pipeline.llm_scorer import _get_daily_limit
+    db = _make_db([_lifetime(1)])
+    with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        limit = await _get_daily_limit(db, user_id=1)
+    assert limit == 50
 
 
 # ---------------------------------------------------------------------------
@@ -79,35 +118,82 @@ async def test_increment_scorings_today_upserts():
 
 @pytest.mark.asyncio
 async def test_score_next_batch_skips_when_limit_reached():
-    """When user has used all 50 scorings today, batch returns False immediately."""
+    """Existing user at 50/50 → batch returns False immediately."""
     from app.pipeline.llm_scorer import score_next_batch
 
-    # First execute: job SELECT returns 1 job row (new schema: jp_id, user_id)
     job_row = MagicMock()
-    job_row.__getitem__ = lambda self, k: {"user_id": 1, "jp_id": 10, "title": "Dev",
-                                            "company": "X", "url": "u", "description": "d",
-                                            "inferred_industries": "[]"}[k]
+    job_row.__getitem__ = lambda self, k: {
+        "user_id": 1, "jp_id": 10, "title": "Dev",
+        "company": "X", "url": "u", "description": "d", "inferred_industries": "[]"
+    }[k]
     jobs_result = MagicMock()
     jobs_result.mappings.return_value.all.return_value = [job_row]
 
-    # Second execute: daily_scoring_usage returns 50 (limit hit)
-    usage_result = _row(50)
-
-    db = _make_db([jobs_result, usage_result])
+    db = _make_db([
+        jobs_result,       # batch SELECT
+        _lifetime(100),    # _get_daily_limit: existing user → 50 limit
+        _row(50),          # _get_scorings_today: 50 scored today → at limit
+    ])
 
     with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
-        mock_cfg.return_value = MagicMock(scorer_batch_size=20, max_scorings_per_user_per_day=50)
+        mock_cfg.return_value = MagicMock(scorer_batch_size=10, new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
         result = await score_next_batch(db)
 
     assert result is False
 
 
 @pytest.mark.asyncio
-async def test_score_next_batch_trims_to_remaining_slots():
-    """Batch is trimmed to remaining slots when fewer than batch_size remain."""
+async def test_score_next_batch_new_user_higher_limit():
+    """New user with 0 lifetime scored gets 250 limit — not blocked at 50."""
     from app.pipeline.llm_scorer import score_next_batch
 
-    # Return 5 job rows but user has 48 scorings today (2 remaining)
+    job_row = MagicMock()
+    job_row.__getitem__ = lambda self, k: {
+        "user_id": 1, "jp_id": 10, "title": "Dev",
+        "company": "X", "url": "u", "description": "d", "inferred_industries": "[]"
+    }[k]
+    jobs_result = MagicMock()
+    jobs_result.mappings.return_value.all.return_value = [job_row]
+
+    scored_ids = []
+
+    async def fake_agent(profile, job_postings, **kwargs):
+        scored_ids.extend([j["job_id"] for j in job_postings])
+        return MagicMock(opportunities=[]), {"model": "test"}
+
+    db = AsyncMock(spec=AsyncSession)
+    call_count = 0
+
+    async def smart_execute(sql, params=None):
+        nonlocal call_count
+        results = [jobs_result, _lifetime(0), _row(50)]  # 50 today but limit=250
+        r = results[call_count] if call_count < len(results) else MagicMock()
+        call_count += 1
+        return r
+
+    db.execute = smart_execute
+    db.commit = AsyncMock()
+
+    with (
+        patch("app.pipeline.llm_scorer.get_settings") as mock_cfg,
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer._build_feedback_examples", AsyncMock(return_value="")),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
+        patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
+    ):
+        mock_cfg.return_value = MagicMock(scorer_batch_size=10, new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        result = await score_next_batch(db)
+
+    # New user has 250 limit so 50 scored today is fine — should proceed
+    assert result is True
+    assert len(scored_ids) == 1
+
+
+@pytest.mark.asyncio
+async def test_score_next_batch_trims_to_remaining_slots():
+    """Batch trimmed to remaining slots when fewer than batch_size remain."""
+    from app.pipeline.llm_scorer import score_next_batch
+
     job_rows = []
     for i in range(5):
         r = MagicMock()
@@ -119,28 +205,25 @@ async def test_score_next_batch_trims_to_remaining_slots():
 
     jobs_result = MagicMock()
     jobs_result.mappings.return_value.all.return_value = job_rows
-    usage_result = _row(48)  # 2 remaining
-
-    # Use a flexible db mock that returns usage for index 1, generic mock otherwise
-    db = AsyncMock(spec=AsyncSession)
-    call_count = 0
-
-    async def smart_execute(sql, params=None):
-        nonlocal call_count
-        result = jobs_result if call_count == 0 else (usage_result if call_count == 1 else MagicMock())
-        call_count += 1
-        return result
-
-    db.execute = smart_execute
-    db.commit = AsyncMock()
 
     scored_ids = []
 
     async def fake_run_agent(profile, job_postings, **kwargs):
         scored_ids.extend([j["job_id"] for j in job_postings])
-        output = MagicMock()
-        output.opportunities = []
-        return output, {"model": "test"}
+        return MagicMock(opportunities=[]), {"model": "test"}
+
+    db = AsyncMock(spec=AsyncSession)
+    call_count = 0
+
+    async def smart_execute(sql, params=None):
+        nonlocal call_count
+        results = [jobs_result, _lifetime(100), _row(48)]  # existing user, 2 remaining
+        r = results[call_count] if call_count < len(results) else MagicMock()
+        call_count += 1
+        return r
+
+    db.execute = smart_execute
+    db.commit = AsyncMock()
 
     with (
         patch("app.pipeline.llm_scorer.get_settings") as mock_cfg,
@@ -149,10 +232,9 @@ async def test_score_next_batch_trims_to_remaining_slots():
         patch("app.pipeline.llm_scorer.run_research_agent", fake_run_agent),
         patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
     ):
-        mock_cfg.return_value = MagicMock(scorer_batch_size=20, max_scorings_per_user_per_day=50)
+        mock_cfg.return_value = MagicMock(scorer_batch_size=10, new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
         await score_next_batch(db)
 
-    # Only 2 jobs should have been sent to the LLM
     assert len(scored_ids) == 2
 
 
@@ -162,7 +244,7 @@ async def test_score_next_batch_trims_to_remaining_slots():
 
 @pytest.mark.asyncio
 async def test_score_single_job_blocked_at_limit():
-    """score_single_job returns False immediately when daily limit is reached."""
+    """Existing user at limit → score_single_job returns False."""
     from app.pipeline.llm_scorer import score_single_job
 
     job_row = MagicMock()
@@ -170,13 +252,15 @@ async def test_score_single_job_blocked_at_limit():
         "jp_id": 1, "user_id": 1, "title": "Dev", "company": "X",
         "url": "u", "description": "d", "inferred_industries": "[]"
     }
-    app_check = _no_row()   # no advanced application
-    usage_result = _row(50)  # limit reached
-
-    db = _make_db([job_row, app_check, usage_result])
+    db = _make_db([
+        job_row,        # job SELECT
+        _no_row(),      # app_check: no advanced application
+        _lifetime(100), # _get_daily_limit: existing user → 50
+        _row(50),       # _get_scorings_today: at limit
+    ])
 
     with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
-        mock_cfg.return_value = MagicMock(max_scorings_per_user_per_day=50)
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
         result = await score_single_job(db, job_id=1)
 
     assert result is False
@@ -188,7 +272,7 @@ async def test_score_single_job_blocked_at_limit():
 
 @pytest.mark.asyncio
 async def test_score_jobs_by_ids_blocked_at_limit():
-    """score_jobs_by_ids returns all False when daily limit is reached."""
+    """Existing user at limit → score_jobs_by_ids returns all False."""
     from app.pipeline.llm_scorer import score_jobs_by_ids
 
     job_row = MagicMock()
@@ -200,14 +284,17 @@ async def test_score_jobs_by_ids_blocked_at_limit():
     jobs_result.mappings.return_value.all.return_value = [job_row]
 
     adv_result = MagicMock()
-    adv_result.fetchall.return_value = []  # no advanced apps
+    adv_result.fetchall.return_value = []
 
-    usage_result = _row(50)  # limit reached
-
-    db = _make_db([jobs_result, adv_result, usage_result])
+    db = _make_db([
+        jobs_result,    # job SELECT
+        adv_result,     # advanced status check
+        _lifetime(100), # _get_daily_limit: existing user → 50
+        _row(50),       # _get_scorings_today: at limit
+    ])
 
     with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
-        mock_cfg.return_value = MagicMock(max_scorings_per_user_per_day=50)
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
         result = await score_jobs_by_ids(db, job_ids=[1])
 
     assert result == {1: False}
@@ -218,19 +305,38 @@ async def test_score_jobs_by_ids_blocked_at_limit():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_scoring_usage_endpoint_returns_correct_counts():
+async def test_scoring_usage_endpoint_new_user():
+    """New user sees 250 limit."""
     from app.modules.scoring.router import get_scoring_usage
 
-    db = _make_db([_row(12)])
+    db = _make_db([_lifetime(0), _row(5)])  # new user, 5 scored today
     user = MagicMock()
     user.id = 1
 
-    with patch("app.modules.scoring.router.get_settings") as mock_cfg:
-        mock_cfg.return_value = MagicMock(max_scorings_per_user_per_day=50)
+    with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
         result = await get_scoring_usage(db=db, current_user=user)
 
-    assert result["jobs_scored_today"] == 12
+    assert result["daily_limit"] == 250
+    assert result["jobs_scored_today"] == 5
+    assert result["remaining"] == 245
+
+
+@pytest.mark.asyncio
+async def test_scoring_usage_endpoint_existing_user():
+    """Existing user sees 50 limit."""
+    from app.modules.scoring.router import get_scoring_usage
+
+    db = _make_db([_lifetime(80), _row(12)])  # existing user, 12 scored today
+    user = MagicMock()
+    user.id = 1
+
+    with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        result = await get_scoring_usage(db=db, current_user=user)
+
     assert result["daily_limit"] == 50
+    assert result["jobs_scored_today"] == 12
     assert result["remaining"] == 38
 
 
@@ -238,12 +344,12 @@ async def test_scoring_usage_endpoint_returns_correct_counts():
 async def test_scoring_usage_endpoint_remaining_never_negative():
     from app.modules.scoring.router import get_scoring_usage
 
-    db = _make_db([_row(55)])  # over limit somehow
+    db = _make_db([_lifetime(80), _row(55)])  # over limit
     user = MagicMock()
     user.id = 1
 
-    with patch("app.modules.scoring.router.get_settings") as mock_cfg:
-        mock_cfg.return_value = MagicMock(max_scorings_per_user_per_day=50)
+    with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
         result = await get_scoring_usage(db=db, current_user=user)
 
     assert result["remaining"] == 0
