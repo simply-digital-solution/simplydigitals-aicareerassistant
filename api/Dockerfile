@@ -42,9 +42,8 @@ COPY app/ ./app/
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
 
-# Prompts live at the project root — mounted as a volume at runtime.
-# Create the directory so the path always exists even without the mount.
-RUN mkdir -p /prompts
+# Copy prompt files into the image
+COPY prompts/ /prompts/
 
 ARG APP_VERSION=dev
 LABEL org.opencontainers.image.version=${APP_VERSION}
