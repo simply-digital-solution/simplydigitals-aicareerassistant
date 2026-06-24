@@ -16,7 +16,7 @@ from app.modules.scoring.router import router as scoring_router
 from app.modules.stats.router import router as stats_router
 from app.modules.admin.router import router as admin_router
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
 
 
