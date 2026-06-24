@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About – SimplyDigital Solutions</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:     #0D1B2A;
+      --teal:     #00C2CB;
+      --white:    #FFFFFF;
+      --offwhite: #F5F7FA;
+      --text:     #1C2B3A;
+      --muted:    #5A6A7A;
+      --border:   #DDE3EA;
+      --nav-h:    68px;
+    }
+
+    html, body {
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      background: var(--white);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: var(--nav-h);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 6%;
+      background: rgba(13,27,42,0.96);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(0,194,203,0.15);
+    }
+
+    .nav-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1.25rem;
+      color: var(--white); letter-spacing: -0.02em;
+      text-decoration: none;
+    }
+    .nav-logo span { color: var(--teal); }
+
+    .nav-links { display: flex; gap: 0.4rem; list-style: none; align-items: center; }
+    .nav-links a {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.88rem; font-weight: 500;
+      color: rgba(255,255,255,0.65);
+      text-decoration: none;
+      padding: 0.5rem 0.9rem; border-radius: 6px;
+      transition: color 0.2s, background 0.2s;
+    }
+    .nav-links a:hover { color: var(--white); background: rgba(255,255,255,0.06); }
+    .nav-links a.active { color: var(--teal); background: rgba(0,194,203,0.1); }
+    .nav-links a.nav-cta {
+      background: var(--teal); color: var(--navy);
+      font-weight: 700; padding: 0.5rem 1.3rem;
+    }
+    .nav-links a.nav-cta:hover { background: #00a8b0; }
+
+    /* Hamburger */
+    .nav-hamburger {
+      display: none; flex-direction: column; gap: 5px;
+      cursor: pointer; background: none; border: none; padding: 4px;
+    }
+    .nav-hamburger span {
+      display: block; width: 24px; height: 2px;
+      background: var(--white); border-radius: 2px;
+      transition: all 0.3s;
+    }
+
+    /* Mobile menu */
+    .mobile-menu {
+      display: none; position: fixed;
+      top: var(--nav-h); left: 0; right: 0;
+      background: rgba(13,27,42,0.98);
+      backdrop-filter: blur(12px);
+      flex-direction: column; z-index: 99;
+      border-bottom: 1px solid rgba(0,194,203,0.15);
+    }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a {
+      font-family: 'Inter', sans-serif;
+      font-size: 1rem; font-weight: 500;
+      color: rgba(255,255,255,0.8);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      padding: 1.1rem 6%;
+      transition: color 0.2s, background 0.2s;
+    }
+    .mobile-menu a:hover { color: var(--teal); background: rgba(0,194,203,0.05); }
+    .mobile-menu a.active { color: var(--teal); }
+    .mobile-menu a.mobile-cta {
+      margin: 1rem 6% 1.5rem;
+      background: var(--teal);
+      color: var(--navy);
+      font-weight: 700;
+      border-radius: 8px;
+      border: none;
+      text-align: center;
+      padding: 0.9rem;
+    }
+
+    /* ── PAGE ── */
+    .page {
+      padding-top: var(--nav-h);
+    }
+
+    /* ── HERO ── */
+    .about-hero {
+      background: var(--navy);
+      padding: 4rem 6% 3.5rem;
+      text-align: center;
+    }
+    .section-label {
+      font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--teal); margin-bottom: 0.7rem;
+    }
+    .about-hero h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(1.8rem, 5vw, 3rem);
+      font-weight: 800; color: var(--white);
+      line-height: 1.15; letter-spacing: -0.02em;
+      margin-bottom: 1rem;
+    }
+    .about-hero p {
+      font-size: 1rem; color: rgba(255,255,255,0.62);
+      line-height: 1.8; max-width: 600px; margin: 0 auto 2rem;
+    }
+    .btn-primary {
+      display: inline-block;
+      background: var(--teal); color: var(--navy);
+      font-weight: 700; font-size: 0.92rem;
+      padding: 0.82rem 1.8rem; border-radius: 8px;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .btn-primary:hover { background: #00a8b0; transform: translateY(-2px); }
+
+    /* ── STATS ── */
+    .stats-section {
+      background: var(--navy);
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 2.5rem 6%;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      max-width: 700px; margin: 0 auto;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(0,194,203,0.15);
+      border-radius: 12px;
+      padding: 1.8rem 1.2rem; text-align: center;
+    }
+    .stat-number {
+      font-family: 'Syne', sans-serif;
+      font-size: 2.2rem; font-weight: 800;
+      color: var(--teal); line-height: 1; margin-bottom: 0.4rem;
+    }
+    .stat-label { font-size: 0.78rem; font-weight: 500; color: rgba(255,255,255,0.55); line-height: 1.4; }
+
+    /* ── STORY ── */
+    .story-section {
+      padding: 3.5rem 6%;
+      max-width: 800px; margin: 0 auto;
+    }
+    .section-heading {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(1.4rem, 3vw, 2rem);
+      font-weight: 800; color: var(--navy);
+      line-height: 1.15; letter-spacing: -0.02em;
+      margin-bottom: 1rem;
+    }
+    .section-sub {
+      font-size: 1rem; color: var(--muted);
+      line-height: 1.8; margin-bottom: 1.5rem;
+    }
+
+    /* ── VALUES ── */
+    .values-section {
+      background: var(--offwhite);
+      padding: 3.5rem 6%;
+    }
+    .values-inner { max-width: 1000px; margin: 0 auto; }
+    .values-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.2rem; margin-top: 2rem;
+    }
+    .value-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.6rem;
+      display: flex; gap: 1rem; align-items: flex-start;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .value-card:hover {
+      border-color: var(--teal);
+      box-shadow: 0 6px 20px rgba(0,194,203,0.08);
+    }
+    .value-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: rgba(0,194,203,0.1);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; color: var(--teal);
+    }
+    .value-card h3 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1rem; font-weight: 700;
+      color: var(--navy); margin-bottom: 0.4rem;
+    }
+    .value-card p { font-size: 0.88rem; color: var(--muted); line-height: 1.7; }
+
+    /* ── EXPERTISE ── */
+    .expertise-section {
+      padding: 3.5rem 6%;
+      max-width: 1000px; margin: 0 auto;
+    }
+    .tag-cloud { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
+    .tag {
+      background: rgba(0,194,203,0.1); border: 1px solid rgba(0,194,203,0.25);
+      color: var(--teal); font-size: 0.78rem; font-weight: 600;
+      padding: 0.35rem 0.85rem; border-radius: 100px;
+    }
+
+    /* ── CTA ── */
+    .cta-section {
+      background: var(--navy);
+      padding: 4rem 6%; text-align: center;
+    }
+    .cta-section h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+      font-weight: 800; color: var(--white);
+      margin-bottom: 1rem; letter-spacing: -0.02em;
+    }
+    .cta-section p {
+      font-size: 1rem; color: rgba(255,255,255,0.6);
+      line-height: 1.8; max-width: 520px;
+      margin: 0 auto 2rem;
+    }
+    .cta-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn-secondary {
+      display: inline-block;
+      background: transparent; color: var(--white);
+      font-weight: 500; font-size: 0.92rem;
+      padding: 0.82rem 1.8rem; border-radius: 8px;
+      text-decoration: none; border: 1px solid rgba(255,255,255,0.22);
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--teal); color: var(--teal); }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--navy);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding: 1.2rem 6%;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.6rem;
+    }
+    .footer-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem; color: var(--white); }
+    .footer-logo span { color: var(--teal); }
+    footer p { font-size: 0.75rem; color: rgba(255,255,255,0.35); }
+
+    /* ── RESPONSIVE ── */
+    @media (min-width: 600px) {
+      .values-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (min-width: 900px) {
+      .stats-grid { grid-template-columns: repeat(4, 1fr); }
+      .values-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 899px) {
+      .nav-links { display: none; }
+      .nav-hamburger { display: flex; }
+    }
+
+    @media (max-width: 580px) {
+      .about-hero { padding: 3rem 5% 2.5rem; }
+      .story-section, .values-section, .expertise-section { padding: 2.5rem 5%; }
+      .cta-section { padding: 3rem 5%; }
+      .cta-group { flex-direction: column; align-items: center; }
+      .btn-primary, .btn-secondary { width: 100%; max-width: 300px; text-align: center; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a class="nav-logo" href="index.html">Simply<span>Digitals</span></a>
+    <ul class="nav-links">
+      <li><a href="about.html" class="active">About</a></li>
+      <li><a href="index.html#product">Product</a></li>
+      <li><a href="index.html#services">Services</a></li>
+      <li><a href="index.html#why">Why Us</a></li>
+      <li><a href="index.html#contact" class="nav-cta">Get in Touch</a></li>
+    </ul>
+    <button class="nav-hamburger" id="hamburger" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+  <!-- MOBILE MENU -->
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="about.html" class="active">About</a>
+    <a href="index.html#product">Product</a>
+    <a href="index.html#services">Services</a>
+    <a href="index.html#why">Why Us</a>
+    <a href="index.html#contact" class="mobile-cta">Get in Touch</a>
+  </div>
+
+  <div class="page">
+
+    <!-- HERO -->
+    <section class="about-hero">
+      <div class="section-label">Who We Are</div>
+      <h1>Helping Organisations Navigate<br>the AI Journey with Confidence</h1>
+      <p>SimplyDigital Solutions is a Singapore-incorporated technology company specialising in AI integration, cloud-first application development, and professional AI training.</p>
+      <a href="index.html#contact" class="btn-primary">Talk to Us</a>
+    </section>
+
+    <!-- STATS -->
+    <section class="stats-section">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-number">20+</div>
+          <div class="stat-label">Years of enterprise delivery experience</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number">3</div>
+          <div class="stat-label">Core services: Consult, Build, Train</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number">AI</div>
+          <div class="stat-label">First and only focus</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number">SG</div>
+          <div class="stat-label">Singapore-based, APAC-ready</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STORY -->
+    <section class="story-section">
+      <div class="section-label">Our Story</div>
+      <h2 class="section-heading">Built by Practitioners, Not Theorists</h2>
+      <p class="section-sub">We work with organisations across industries — helping them adopt AI effectively, build intelligent solutions, and equip their teams with the skills to sustain that change. Our founding team brings over 20 years of enterprise delivery experience, so governance, quality, and real-world practicality are built into everything we do.</p>
+      <p class="section-sub">We believe AI adoption only succeeds when it is grounded in clear business outcomes, sound governance, and people who know how to deliver. That belief shapes every engagement we take on.</p>
+    </section>
+
+    <!-- VALUES -->
+    <section class="values-section">
+      <div class="values-inner">
+        <div class="section-label">What We Stand For</div>
+        <h2 class="section-heading">Our Values</h2>
+        <div class="values-grid">
+          <div class="value-card">
+            <div class="value-icon">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div>
+              <h3>Governance First</h3>
+              <p>Compliance and audit trails are not afterthoughts — they are built into how we design and deliver every solution from day one.</p>
+            </div>
+          </div>
+          <div class="value-card">
+            <div class="value-icon">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            </div>
+            <div>
+              <h3>Real Accountability</h3>
+              <p>We take programmes from requirements and design through to production and post-go-live support. No strategy decks without delivery.</p>
+            </div>
+          </div>
+          <div class="value-card">
+            <div class="value-icon">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div>
+              <h3>People at the Centre</h3>
+              <p>AI adoption only sticks when your team owns it. We invest in enabling your people, not just deploying technology.</p>
+            </div>
+          </div>
+          <div class="value-card">
+            <div class="value-icon">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            </div>
+            <div>
+              <h3>Practical Over Perfect</h3>
+              <p>We bridge the gap between what AI can do and what your organisation actually needs — focused on outcomes that work in the real world.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EXPERTISE -->
+    <section class="expertise-section">
+      <div class="section-label">What We Bring</div>
+      <h2 class="section-heading">Capabilities Across Every Engagement</h2>
+      <p class="section-sub" style="max-width:600px;">Whether you're in financial services, healthcare, professional services, or the public sector — these capabilities come standard on every project.</p>
+      <div class="tag-cloud">
+        <span class="tag">AI Strategy</span>
+        <span class="tag">Cloud-First Design</span>
+        <span class="tag">Data Governance</span>
+        <span class="tag">Regulatory Compliance</span>
+        <span class="tag">Audit Traceability</span>
+        <span class="tag">Change Management</span>
+        <span class="tag">AI Governance</span>
+        <span class="tag">Team Enablement</span>
+        <span class="tag">Enterprise Integration</span>
+        <span class="tag">Agile Delivery</span>
+        <span class="tag">Stakeholder Management</span>
+        <span class="tag">Model Risk</span>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+      <h2>Ready to Start Your AI Journey?</h2>
+      <p>Tell us about your organisation and what you're looking to achieve. We'll get back to you within one business day.</p>
+      <div class="cta-group">
+        <a href="index.html#contact" class="btn-primary">Get in Touch</a>
+        <a href="https://aicareerassistant.simplydigitals.com.sg/" class="btn-secondary" target="_blank" rel="noopener">Try AI Career Assistant Free</a>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      <div class="footer-logo">Simply<span>Digitals</span></div>
+      <p>© 2026 SimplyDigital Solutions Pte. Ltd. · Singapore</p>
+      <p style="font-size:0.78rem; color:rgba(255,255,255,0.35);">Your personal data is handled in accordance with Singapore's PDPA.</p>
+    </footer>
+
+  </div><!-- /page -->
+
+  <script>
+    const hamburger = document.getElementById('hamburger')
+    const mobileMenu = document.getElementById('mobileMenu')
+
+    hamburger.addEventListener('click', (e) => {
+      e.stopPropagation()
+      mobileMenu.classList.toggle('open')
+    })
+
+    document.addEventListener('click', (e) => {
+      if (!hamburger.contains(e.target) && !mobileMenu.contains(e.target)) {
+        mobileMenu.classList.remove('open')
+      }
+    })
+  </script>
+
+</body>
+</html>

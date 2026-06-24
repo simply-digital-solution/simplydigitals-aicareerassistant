@@ -189,24 +189,65 @@ function StartupRedirect({ onTabChange }: { onTabChange: (t: Tab) => void }) {
   return null
 }
 
+function MobileBlock() {
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
+  if (!isMobile) return null
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: '#0D1B2A',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '2rem', textAlign: 'center',
+    }}>
+      <svg width="48" height="48" fill="none" stroke="#00C2CB" strokeWidth="1.5" viewBox="0 0 24 24" style={{ marginBottom: '1.5rem' }}>
+        <rect x="5" y="2" width="14" height="20" rx="2" />
+        <path d="M12 18h.01" />
+      </svg>
+      <h1 style={{
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '1.4rem', fontWeight: 700,
+        color: '#ffffff', marginBottom: '1rem', lineHeight: 1.3,
+      }}>
+        Desktop Required
+      </h1>
+      <p style={{
+        fontFamily: 'system-ui, sans-serif',
+        fontSize: '0.95rem', color: 'rgba(255,255,255,0.6)',
+        lineHeight: 1.7, maxWidth: '320px',
+      }}>
+        AI Career Assistant is optimised for desktop use. Some features may not work well on mobile.
+        Please open this on your laptop or desktop computer.
+      </p>
+    </div>
+  )
+}
+
 function App() {
   const { email, isAuthenticated, signIn, signOut } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('Pipeline')
 
-  if (!isAuthenticated) {
-    return <LoginPage onSignIn={signIn} />
-  }
-
   return (
-    <QueryClientProvider client={queryClient}>
-      <StartupRedirect onTabChange={setActiveTab} />
-      <Layout
-        email={email!}
-        onSignOut={signOut}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
-    </QueryClientProvider>
+    <>
+      <MobileBlock />
+      {(() => {
+        if (!isAuthenticated) {
+          return <LoginPage onSignIn={signIn} />
+        }
+
+        return (
+          <QueryClientProvider client={queryClient}>
+            <StartupRedirect onTabChange={setActiveTab} />
+            <Layout
+              email={email!}
+              onSignOut={signOut}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
+          </QueryClientProvider>
+        )
+      })()}
+    </>
   )
 }
 
