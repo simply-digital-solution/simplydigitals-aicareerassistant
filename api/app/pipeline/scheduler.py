@@ -48,11 +48,14 @@ async def _run_daily_suspension() -> None:
 
 async def _run_daily_job_cleanup() -> None:
     from app.shared.database import get_db_context
-    from app.pipeline.job_cleanup import purge_stale_research_jobs
-    logger.info("scheduler: daily research-job cleanup triggered")
+    from app.pipeline.job_cleanup import archive_old_job_postings, purge_stale_research_jobs
+    logger.info("scheduler: daily job cleanup triggered")
+    async with get_db_context() as db:
+        archived = await archive_old_job_postings(db)
+    logger.info("scheduler: archived %d old job posting(s)", archived)
     async with get_db_context() as db:
         deleted = await purge_stale_research_jobs(db)
-    logger.info("scheduler: cleanup done — %d stale job(s) deleted", deleted)
+    logger.info("scheduler: deleted %d stale job(s)", deleted)
 
 
 def start(get_db_context_fn) -> None:

@@ -313,6 +313,18 @@ async def run_suspend_inactive(
     return {"suspended_count": len(suspended), "suspended_user_ids": suspended}
 
 
+@router.post("/admin/cleanup/archive-old-jobs")
+async def run_archive_old_jobs(
+    days: int = 14,
+    _: str = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually archive user_job_postings rows for jobs posted more than `days` days ago."""
+    from app.pipeline.job_cleanup import archive_old_job_postings
+    archived = await archive_old_job_postings(db, days=days)
+    return {"archived": archived, "older_than_days": days}
+
+
 @router.post("/admin/cleanup/research-jobs")
 async def run_research_job_cleanup(
     days: int = 30,
