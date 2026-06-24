@@ -1162,7 +1162,7 @@ async def get_stored_jobs(
         ind_placeholders = ",".join(f":ind{i}" for i in range(len(target_industries)))
         where_clauses.append(
             f"(inferred_industries = '[]' OR inferred_industries IS NULL OR "
-            f"EXISTS (SELECT 1 FROM json_each(inferred_industries) WHERE value IN ({ind_placeholders})))"
+            f"EXISTS (SELECT 1 FROM json_array_elements_text(inferred_industries::json) AS v WHERE v IN ({ind_placeholders})))"
         )
         for i, ind in enumerate(target_industries):
             params[f"ind{i}"] = ind
@@ -1172,8 +1172,8 @@ async def get_stored_jobs(
         params["role"] = f"%{role}%"
 
     if days > 0:
-        where_clauses.append("posted_at >= datetime('now', :cutoff)")
-        params["cutoff"] = f"-{days} days"
+        where_clauses.append("posted_at >= NOW() - INTERVAL '1 day' * :cutoff")
+        params["cutoff"] = days
 
     if min_score > 0:
         where_clauses.append("fit_score >= :min_score")
