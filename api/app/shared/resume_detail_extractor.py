@@ -17,25 +17,25 @@ import asyncio
 import json
 import re
 
-_SYSTEM_PROMPT = """You are a resume parser. Extract structured information from the resume text.
+_SYSTEM_PROMPT_BASE = """You are a resume parser. Extract structured information from the resume text.
 Return ONLY valid JSON matching the schema below. No markdown, no explanation, no commentary.
 
 Schema:
-{
+{{
   "years_experience": number or null,
   "seniority_level": "string",
   "target_industries": ["string"],
   "target_roles": ["string"],
   "skills": ["string"],
-  "education": [{"degree": "string", "institution": "string", "year": "string"}],
-  "certifications": [{"name": "string", "issuer": "string", "issued_date": "string", "expiry_date": "string"}],
-  "contact": {"phone_country_code": "string", "phone_local": "string", "email": "string"}
-}
+  "education": [{{"degree": "string", "institution": "string", "year": "string"}}],
+  "certifications": [{{"name": "string", "issuer": "string", "issued_date": "string", "expiry_date": "string"}}],
+  "contact": {{"phone_country_code": "string", "phone_local": "string", "email": "string"}}
+}}
 
 Rules:
 - years_experience: total years of professional experience as an integer, or null if cannot be determined
 - seniority_level: one of "junior", "mid", "senior", "lead", "principal", "director", "vp", "executive" — infer from titles, responsibilities, and years
-- target_industries: 1-5 industries this person has worked in or is suited for
+- target_industries: {industry_rule}
 - target_roles: 3-7 job titles this person could reasonably apply for
 - skills: all technical and professional skills mentioned, no duplicates
 - education: degree name, institution name, graduation year (or empty string if unknown)
@@ -44,6 +44,22 @@ Rules:
 - contact.phone_local: the local number without country code, e.g. "90673055"; empty string if not found
 - contact.email: empty string if not found
 - Return empty arrays/strings/null for any field not found — never omit a key"""
+
+_INDUSTRY_RULE_FREE = "1-5 industries this person has worked in or is suited for"
+
+_INDUSTRY_RULE_CONSTRAINED = (
+    "1-5 industries this person has worked in or is suited for — "
+    "pick ONLY from this exact list (use the exact label strings, do not invent new ones): {labels}"
+)
+
+
+def _build_system_prompt(job_industry_labels: list[str]) -> str:
+    if job_industry_labels:
+        labels = ", ".join(f'"{l}"' for l in job_industry_labels)
+        industry_rule = _INDUSTRY_RULE_CONSTRAINED.format(labels=labels)
+    else:
+        industry_rule = _INDUSTRY_RULE_FREE
+    return _SYSTEM_PROMPT_BASE.format(industry_rule=industry_rule)
 
 _USER_PROMPT = """Extract all details from this resume:
 
@@ -132,14 +148,25 @@ def _parse_response(raw: str) -> dict:
 LLM_EXTRACTION_TIMEOUT = 30.0
 
 
-async def extract_resume_details(resume_text: str, api_client) -> dict:
+async def extract_resume_details(
+    resume_text: str,
+    api_client,
+    job_industry_labels: list[str] | None = None,
+) -> dict:
     """
     Call LLM to extract all fields from the resume.
+
+    job_industry_labels: distinct industry labels already present in the user's
+    job postings. When provided, the LLM is instructed to classify target_industries
+    using only those labels — guaranteeing exact-match alignment with job postings.
+    When empty or None (first-time user with no jobs yet), the LLM picks freely.
+
     Times out after 30s and returns _empty_result() on any failure — never raises.
     """
     snippet = resume_text[:12000]
+    system_prompt = _build_system_prompt(job_industry_labels or [])
     messages = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": _USER_PROMPT.format(resume_text=snippet)},
     ]
     try:

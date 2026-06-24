@@ -30,6 +30,13 @@ async def _run_daily_scrape() -> None:
             logger.info("scheduler: next scrape scheduled at %s", job.next_run_time.isoformat(timespec='seconds'))
 
 
+async def _run_industry_refinement() -> None:
+    from app.shared.database import get_db_context
+    from app.pipeline.industry_refinement import refine_all_users
+    logger.info("scheduler: industry refinement triggered")
+    await refine_all_users(get_db_context)
+
+
 async def _run_daily_suspension() -> None:
     from app.shared.database import get_db_context
     from app.pipeline.suspension import suspend_inactive_users
@@ -61,6 +68,13 @@ def start(get_db_context_fn) -> None:
         misfire_grace_time=3600,
     )
     _scheduler.add_job(
+        _run_industry_refinement,
+        trigger=CronTrigger(hour=5, minute=30, timezone="Asia/Singapore"),
+        id="industry_refinement",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
         _run_daily_suspension,
         trigger=CronTrigger(hour=6, minute=0, timezone="Asia/Singapore"),
         id="daily_suspension",
@@ -75,7 +89,7 @@ def start(get_db_context_fn) -> None:
         misfire_grace_time=3600,
     )
     _scheduler.start()
-    logger.info("scheduler: started — scrape 05:00 SGT, suspension 06:00 SGT, job cleanup 04:00 SGT")
+    logger.info("scheduler: started — scrape 05:00 SGT, refinement 05:30 SGT, suspension 06:00 SGT, job cleanup 04:00 SGT")
 
     from app.pipeline.llm_scorer import run_scorer_loop
     _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))

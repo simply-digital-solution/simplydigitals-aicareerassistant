@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import text
+
 from app.shared.database import get_db, get_db_context
 from app.modules.auth.router import get_current_user
 from app.shared.models import Profile
@@ -16,6 +18,20 @@ from app.shared.resume_detail_extractor import extract_resume_details, deduplica
 from app.shared.api_client import get_llm_client
 
 router = APIRouter(prefix="/api/v1/profile", tags=["profile"])
+
+
+async def _get_job_industry_labels(user_id: int, db: AsyncSession) -> list[str]:
+    """Return distinct industry labels from the user's job postings, sorted."""
+    rows = await db.execute(text("""
+        SELECT DISTINCT value
+        FROM job_postings,
+             json_array_elements_text(inferred_industries::json) AS value
+        WHERE user_id = :uid
+          AND inferred_industries IS NOT NULL
+          AND inferred_industries != '[]'
+        ORDER BY value
+    """), {"uid": user_id})
+    return [r[0] for r in rows.fetchall()]
 
 
 def _dedupe_json_array(value: str | None) -> str | None:
@@ -174,7 +190,8 @@ async def extract_and_save(
         raise HTTPException(status_code=422, detail="No resume found. Upload your resume first.")
 
     client = get_llm_client()
-    extracted = await extract_resume_details(profile.resume_text, client)
+    job_labels = await _get_job_industry_labels(current_user.id, db)
+    extracted = await extract_resume_details(profile.resume_text, client, job_industry_labels=job_labels)
 
     # --- Additive merge helpers ---
     def _merge_str_array(existing_json: str | None, new_items: list[str]) -> str:
@@ -264,7 +281,8 @@ async def _background_extract(user_id: int) -> None:
             if not profile or not profile.resume_text:
                 return
             client = get_llm_client()
-            extracted = await extract_resume_details(profile.resume_text, client)
+            job_labels = await _get_job_industry_labels(user_id, db)
+            extracted = await extract_resume_details(profile.resume_text, client, job_industry_labels=job_labels)
             if extracted["years_experience"] is not None:
                 profile.years_experience = extracted["years_experience"]
             if extracted["seniority_level"]:
