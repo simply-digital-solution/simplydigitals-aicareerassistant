@@ -20,7 +20,6 @@ def _load_system_prompt() -> str:
     return PROMPT_FILE.read_text(encoding="utf-8")
 
 
-MAX_JOBS_TO_SCORE = 10   # MCF structured fields are ~100 tokens/job — 10 fits within 4096 output limit
 DESC_SNIPPET_CHARS = 300  # fallback for non-MCF sources that return prose descriptions
 
 
@@ -38,8 +37,7 @@ def _build_user_message(
     employment_type = search_filters.get("employment_type") or "any"
     location = search_filters.get("location") or ', '.join(profile.get('targets', {}).get('locations', []))
 
-    # Trim to avoid exceeding local LLM output token budget
-    postings = job_postings[:MAX_JOBS_TO_SCORE]
+    postings = job_postings
 
     candidate_summary = profile.get('candidate_summary') or ''
     seniority = profile.get('seniority_level') or ''
