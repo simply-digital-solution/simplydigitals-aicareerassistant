@@ -69,6 +69,8 @@ async def test_increment_scorings_today_upserts():
     sql = str(db.execute.call_args[0][0])
     assert "INSERT INTO daily_scoring_usage" in sql
     assert "ON CONFLICT" in sql
+    # Must use qualified table name to avoid AmbiguousColumnError on PostgreSQL
+    assert "daily_scoring_usage.jobs_scored" in sql
 
 
 # ---------------------------------------------------------------------------
