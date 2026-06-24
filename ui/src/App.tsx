@@ -193,32 +193,46 @@ function MobileBlock() {
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
   if (!isMobile) return null
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: '#0D1B2A',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      padding: '2rem', textAlign: 'center',
-    }}>
-      <svg width="48" height="48" fill="none" stroke="#00C2CB" strokeWidth="1.5" viewBox="0 0 24 24" style={{ marginBottom: '1.5rem' }}>
-        <rect x="5" y="2" width="14" height="20" rx="2" />
-        <path d="M12 18h.01" />
-      </svg>
-      <h1 style={{
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: '1.4rem', fontWeight: 700,
-        color: '#ffffff', marginBottom: '1rem', lineHeight: 1.3,
-      }}>
-        Desktop Required
-      </h1>
-      <p style={{
-        fontFamily: 'system-ui, sans-serif',
-        fontSize: '0.95rem', color: 'rgba(255,255,255,0.6)',
-        lineHeight: 1.7, maxWidth: '320px',
-      }}>
-        AI Career Assistant is optimised for desktop use. Some features may not work well on mobile.
-        Please open this on your laptop or desktop computer.
-      </p>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, overflowY: 'auto',
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      background: '#ffffff' }}>
+      {/* Nav */}
+      <div style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb',
+        padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <span style={{ fontWeight: 700, fontSize: '1rem', color: '#4f46e5' }}>AI Career Assistant</span>
+        </div>
+        <a href="/about.html" style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 4, textDecoration: 'none' }}>
+          <span style={{ display: 'block', width: 22, height: 2, background: '#4f46e5', borderRadius: 2 }} />
+          <span style={{ display: 'block', width: 22, height: 2, background: '#4f46e5', borderRadius: 2 }} />
+          <span style={{ display: 'block', width: 22, height: 2, background: '#4f46e5', borderRadius: 2 }} />
+        </a>
+      </div>
+      {/* Hero */}
+      <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+        padding: '64px 24px 56px', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ffffff',
+          lineHeight: 1.2, marginBottom: 16 }}>
+          Desktop Required
+        </h1>
+        <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.88)',
+          lineHeight: 1.7, maxWidth: 340, margin: '0 auto' }}>
+          AI Career Assistant is optimised for desktop use. Some features may not work well on mobile.
+          Please open this on your laptop or desktop computer.
+        </p>
+      </div>
+      {/* Footer */}
+      <div style={{ background: '#111827', padding: '32px 24px', textAlign: 'center' }}>
+        <p style={{ fontSize: '0.825rem', color: '#6b7280', marginBottom: 4 }}>
+          AI Career Assistant is a product of SimplyDigital Solutions Pte. Ltd.
+        </p>
+        <p style={{ fontSize: '0.825rem', color: '#6b7280' }}>
+          © 2026 SimplyDigital Solutions Pte. Ltd. · Singapore
+        </p>
+      </div>
     </div>
   )
 }
