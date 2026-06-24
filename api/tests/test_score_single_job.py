@@ -1,5 +1,15 @@
 """
 Unit tests for score_single_job() in llm_scorer.py
+
+Execute call sequence (success path, user_id provided):
+  [0] job SELECT (returns jp_id, user_id, ...)
+  [1] application status check SELECT
+  [2] daily scoring usage SELECT (_get_scorings_today)
+  [3] rescoring=true UPDATE
+  [4] feedback SELECT (_build_feedback_examples)
+  [5] _write_score → UPDATE user_job_postings (params: jid, uid, fit_score, ...)
+  [6] UPDATE job_postings inferred_industries (params: ind, id)
+  [7] _increment_scorings_today INSERT
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,7 +24,7 @@ from app.pipeline.llm_scorer import score_single_job
 
 def _make_job_row(job_id=1, user_id=42):
     return {
-        "id": job_id, "user_id": user_id,
+        "jp_id": job_id, "user_id": user_id,
         "title": "Software Engineer", "company": "TechCo",
         "url": "https://example.com/job/1",
         "description": "Build APIs",
@@ -38,24 +48,28 @@ def _make_db(job_row=None, advanced_status=False):
     # [4] feedback SELECT
     feedback_result = MagicMock()
     feedback_result.mappings.return_value.all.return_value = []
-    # [5] score write or error UPDATE
+    # [5] _write_score UPDATE user_job_postings
     update_result = MagicMock()
-    # [6] _increment_scorings_today INSERT
+    # [6] UPDATE job_postings inferred_industries
+    ind_update = MagicMock()
+    # [7] _increment_scorings_today INSERT
     increment_result = MagicMock()
-    db.execute.side_effect = [select_result, app_check, usage_result, rescoring_update,
-                               feedback_result, update_result, increment_result]
+    db.execute.side_effect = [
+        select_result, app_check, usage_result, rescoring_update,
+        feedback_result, update_result, ind_update, increment_result,
+    ]
     return db
 
 
 def _make_opportunity(job_id=1, fit_score=0.85):
     opp = MagicMock()
-    opp.job_id            = job_id
-    opp.fit_score         = fit_score
-    opp.reasons           = ["Strong match"]
-    opp.risks             = ["One risk"]
-    opp.key_keywords      = ["Python"]
-    opp.scoring_breakdown = []
-    opp.recommendation    = "Apply."
+    opp.job_id              = job_id
+    opp.fit_score           = fit_score
+    opp.reasons             = ["Strong match"]
+    opp.risks               = ["One risk"]
+    opp.key_keywords        = ["Python"]
+    opp.scoring_breakdown   = []
+    opp.recommendation      = "Apply."
     opp.inferred_industries = ["Technology & Software"]
     return opp
 
@@ -104,10 +118,10 @@ async def test_successful_single_score():
     # [3] is the rescoring=true UPDATE
     rescoring_sql = db.execute.call_args_list[3].args[0].text
     assert "rescoring=true" in rescoring_sql
-    # [5] is the score write (_write_score)
+    # [5] is the _write_score UPDATE user_job_postings
     update_params = db.execute.call_args_list[5].args[1]
     assert update_params["fit_score"] == 0.82
-    assert update_params["id"] == 1
+    assert update_params["jid"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +141,7 @@ async def test_agent_error_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
+    # Error UPDATE is the 6th execute call ([5])
     update_params = db.execute.call_args_list[5].args[1]
     assert "parse failed" in update_params["err"]
     # Must NOT reset scored/fit_score — only rescoring=false and score_error
@@ -237,8 +252,7 @@ async def test_skips_scoring_when_application_in_advanced_status():
 
     assert ok is False
     db.commit.assert_not_called()
-    # No rescoring=true UPDATE, no LLM call — only 2 execute calls (job SELECT + app check)
-    # Daily usage check is skipped because we return early on advanced status
+    # Only 2 execute calls: job SELECT + app check (return early)
     assert db.execute.call_count == 2
 
 

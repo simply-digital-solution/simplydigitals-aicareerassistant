@@ -41,11 +41,16 @@ async def generate_resumes_for_jobs(
         logger.warning("resume_generator: user_id=%d has no resume text", user_id)
         return {jid: False for jid in job_ids}
 
-    # Fetch all job descriptions in one query
+    # Fetch all job descriptions in one query — join through user_job_postings for ownership check
     placeholders = ",".join(f":id{i}" for i in range(len(job_ids)))
     params = {f"id{i}": jid for i, jid in enumerate(job_ids)}
     rows = await db.execute(
-        text(f"SELECT id, description FROM job_postings WHERE id IN ({placeholders}) AND user_id = :uid"),
+        text(f"""
+            SELECT jp.id, jp.description
+            FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id
+            WHERE jp.id IN ({placeholders}) AND ujp.user_id = :uid
+        """),
         {"uid": user_id, **params},
     )
     job_map = {r["id"]: r["description"] or "" for r in rows.mappings().all()}

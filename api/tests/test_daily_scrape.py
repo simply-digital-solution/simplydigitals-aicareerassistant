@@ -5,7 +5,8 @@ All external calls (MCF scraper, DB) are mocked so tests run without a live
 database or network connection.
 
 Per-job execute() call sequence (after profile select):
-  1. INSERT ... ON CONFLICT DO UPDATE ... → .rowcount (0 = dup unchanged, 1 = inserted/updated)
+  1. INSERT INTO job_postings ... ON CONFLICT ... RETURNING id → .fetchone() returns (id,)
+  2. INSERT INTO user_job_postings ... ON CONFLICT DO NOTHING RETURNING id → .fetchone() returns (id,) or None
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -31,10 +32,17 @@ def _profile_exec(profile):
     return m
 
 
-def _upsert_exec(rowcount=1):
-    """Simulates the upsert INSERT ... ON CONFLICT DO UPDATE."""
+def _jp_insert_exec(job_id=42):
+    """Simulates job_postings INSERT ... RETURNING id."""
     m = MagicMock()
-    m.rowcount = rowcount
+    m.fetchone.return_value = (job_id,)
+    return m
+
+
+def _ujp_insert_exec(inserted=True):
+    """Simulates user_job_postings INSERT ON CONFLICT DO NOTHING RETURNING id."""
+    m = MagicMock()
+    m.fetchone.return_value = (1,) if inserted else None
     return m
 
 
@@ -83,7 +91,7 @@ async def test_no_target_titles_returns_zero():
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_user — happy path: no duplicate, job inserted
+# scrape_for_user — happy path: new job inserted into both tables
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -91,8 +99,9 @@ async def test_inserts_new_job():
     profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
     db = AsyncMock()
     db.execute.side_effect = [
-        _profile_exec(profile),  # SELECT profile
-        _upsert_exec(1),          # INSERT ON CONFLICT → 1 row inserted
+        _profile_exec(profile),   # SELECT profile
+        _jp_insert_exec(42),      # INSERT job_postings RETURNING id
+        _ujp_insert_exec(True),   # INSERT user_job_postings RETURNING id
     ]
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
@@ -104,7 +113,7 @@ async def test_inserts_new_job():
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_user — same mcf_uuid → upsert updates industries, rowcount=0
+# scrape_for_user — same mcf_uuid, user_job_postings already exists → 0 inserted
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -112,8 +121,9 @@ async def test_same_day_duplicate_is_skipped():
     profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
     db = AsyncMock()
     db.execute.side_effect = [
-        _profile_exec(profile),  # SELECT profile
-        _upsert_exec(0),          # ON CONFLICT → same industries, nothing changed
+        _profile_exec(profile),   # SELECT profile
+        _jp_insert_exec(42),      # job_postings upsert returns existing id
+        _ujp_insert_exec(False),  # user_job_postings already exists → DO NOTHING
     ]
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
@@ -121,11 +131,11 @@ async def test_same_day_duplicate_is_skipped():
         inserted = await scrape_for_user(user_id=1, db=db)
 
     assert inserted == 0
-    assert db.execute.call_count == 2
+    assert db.execute.call_count == 3
 
 
 # ---------------------------------------------------------------------------
-# scrape_for_user — existing job with changed industries → upsert updates it
+# scrape_for_user — new mcf_uuid → inserted
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -133,8 +143,9 @@ async def test_different_date_not_duplicate():
     profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
     db = AsyncMock()
     db.execute.side_effect = [
-        _profile_exec(profile),  # SELECT profile
-        _upsert_exec(1),          # INSERT ON CONFLICT → inserted or updated
+        _profile_exec(profile),
+        _jp_insert_exec(43),
+        _ujp_insert_exec(True),
     ]
 
     job = _make_job(posted_at="2026-06-15T10:00:00Z", mcf_uuid="newuuid456")
@@ -181,7 +192,7 @@ async def test_industry_filter_drops_non_matching():
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[job])):
         inserted = await scrape_for_user(user_id=1, db=db)
 
-    # Filtered before dedup check — only 1 execute call (profile select)
+    # Filtered before DB insert — only 1 execute call (profile select)
     assert inserted == 0
     assert db.execute.call_count == 1
 
@@ -199,7 +210,8 @@ async def test_industry_filter_passes_matching():
     db = AsyncMock()
     db.execute.side_effect = [
         _profile_exec(profile),
-        _upsert_exec(1),
+        _jp_insert_exec(44),
+        _ujp_insert_exec(True),
     ]
 
     job = _make_job(inferred_industries=["Banking & Finance"])  # fuzzy match ≥0.80
@@ -235,9 +247,7 @@ async def test_job_with_empty_url_is_skipped():
 from contextlib import asynccontextmanager
 
 def _make_get_db_context(user_ids: list[int]):
-    """Returns a get_db_context that yields a fresh AsyncMock each call.
-    The first call returns a db that fetches user_ids; subsequent calls
-    return a plain db for per-user scraping."""
+    """Returns a get_db_context that yields a fresh AsyncMock each call."""
     call_count = 0
 
     @asynccontextmanager
@@ -321,20 +331,21 @@ async def test_scrape_for_all_users_uses_separate_sessions():
 
 @pytest.mark.asyncio
 async def test_insert_uses_boolean_false_for_scored():
-    """scored column must be inserted as boolean false, not integer 0."""
+    """scored column in user_job_postings must be inserted as boolean false."""
     profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
     db = AsyncMock()
     db.execute.side_effect = [
         _profile_exec(profile),
-        _upsert_exec(1),
+        _jp_insert_exec(42),
+        _ujp_insert_exec(True),
     ]
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
                AsyncMock(return_value=[_make_job()])):
         await scrape_for_user(user_id=1, db=db)
 
-    # Find the INSERT call (second execute call)
-    insert_call = db.execute.call_args_list[1]
+    # Find the user_job_postings INSERT call (third execute call)
+    insert_call = db.execute.call_args_list[2]
     sql = str(insert_call.args[0])
+    assert "user_job_postings" in sql
     assert "false" in sql.lower()
-    assert ", 0)" not in sql  # must not use integer 0

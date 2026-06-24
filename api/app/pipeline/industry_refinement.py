@@ -59,11 +59,12 @@ async def refine_user_industries(user_id: int, db: AsyncSession) -> bool:
 
     rows = await db.execute(text("""
         SELECT DISTINCT value
-        FROM job_postings,
-             json_array_elements_text(inferred_industries::json) AS value
-        WHERE user_id = :uid
-          AND inferred_industries IS NOT NULL
-          AND inferred_industries != '[]'
+        FROM user_job_postings ujp
+        JOIN job_postings jp ON jp.id = ujp.job_posting_id,
+             json_array_elements_text(jp.inferred_industries::json) AS value
+        WHERE ujp.user_id = :uid
+          AND jp.inferred_industries IS NOT NULL
+          AND jp.inferred_industries != '[]'
         ORDER BY value
     """), {"uid": user_id})
     job_labels: list[str] = [r[0] for r in rows.fetchall()]

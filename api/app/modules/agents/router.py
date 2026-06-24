@@ -1149,53 +1149,60 @@ async def get_stored_jobs(
     profile = await _load_profile(db, current_user.id)
     target_industries: list[str] = profile.get("industries") or []
 
-    where_clauses = [
-        "user_id = :uid",
-        "archived = false",
-        "(scored = true OR rescoring = true)",
-        "id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND job_posting_id IS NOT NULL)",
+    ujp_where = [
+        "ujp.user_id = :uid",
+        "ujp.archived = false",
+        "(ujp.scored = true OR ujp.rescoring = true)",
+        "jp.id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND job_posting_id IS NOT NULL)",
     ]
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
 
     # Industry filter: pass jobs with no industries, exclude those that don't match
     if target_industries:
         ind_placeholders = ",".join(f":ind{i}" for i in range(len(target_industries)))
-        where_clauses.append(
-            f"(inferred_industries = '[]' OR inferred_industries IS NULL OR "
-            f"EXISTS (SELECT 1 FROM json_array_elements_text(inferred_industries::json) AS v WHERE v IN ({ind_placeholders})))"
+        ujp_where.append(
+            f"(jp.inferred_industries = '[]' OR jp.inferred_industries IS NULL OR "
+            f"EXISTS (SELECT 1 FROM json_array_elements_text(jp.inferred_industries::json) AS v WHERE v IN ({ind_placeholders})))"
         )
         for i, ind in enumerate(target_industries):
             params[f"ind{i}"] = ind
 
     if role:
-        where_clauses.append("title LIKE :role")
+        ujp_where.append("jp.title LIKE :role")
         params["role"] = f"%{role}%"
 
     if days > 0:
-        where_clauses.append("posted_at >= NOW() - INTERVAL '1 day' * :cutoff")
+        ujp_where.append("jp.posted_at >= NOW() - INTERVAL '1 day' * :cutoff")
         params["cutoff"] = days
 
     if min_score > 0:
-        where_clauses.append("fit_score >= :min_score")
+        ujp_where.append("ujp.fit_score >= :min_score")
         params["min_score"] = min_score
 
-    where_sql = " AND ".join(where_clauses)
+    where_sql = " AND ".join(ujp_where)
 
     count_row = await db.execute(
-        text(f"SELECT COUNT(*) FROM job_postings WHERE {where_sql}"),
+        text(f"""
+            SELECT COUNT(*)
+            FROM user_job_postings ujp
+            JOIN job_postings jp ON jp.id = ujp.job_posting_id
+            WHERE {where_sql}
+        """),
         params,
     )
     total = count_row.scalar_one()
 
     rows = await db.execute(
         text(f"""
-            SELECT id, mcf_uuid, title, company, url, location,
-                   inferred_industries, posted_at, scraped_at,
-                   scored, fit_score, reasons, risks, key_keywords, scoring_breakdown, recommendation, score_error, scored_at, scored_by_model,
-                   rescoring
-            FROM job_postings
+            SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
+                   ujp.scored_at, ujp.scored_by_model, ujp.rescoring
+            FROM user_job_postings ujp
+            JOIN job_postings jp ON jp.id = ujp.job_posting_id
             WHERE {where_sql}
-            ORDER BY posted_at DESC, scraped_at DESC
+            ORDER BY jp.posted_at DESC, jp.scraped_at DESC
             LIMIT :limit OFFSET :offset
         """),
         params,
@@ -1217,15 +1224,16 @@ async def get_selected_jobs(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
-                   jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.scored_by_model, jp.archived,
+                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
+                   ujp.scored_at, ujp.scored_by_model, ujp.archived,
                    a.id AS application_id
             FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             JOIN applications a
               ON a.job_posting_id = jp.id
              AND a.user_id = :uid
              AND a.status = 'selected'
-            WHERE jp.user_id = :uid
             ORDER BY a.created_at DESC
         """),
         {"uid": current_user.id},
@@ -1244,15 +1252,16 @@ async def get_applied_jobs(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
-                   jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.scored_by_model, jp.archived,
+                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
+                   ujp.scored_at, ujp.scored_by_model, ujp.archived,
                    a.id AS application_id, a.applied_at
             FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             JOIN applications a
               ON a.job_posting_id = jp.id
              AND a.user_id = :uid
              AND a.status = 'applied'
-            WHERE jp.user_id = :uid
             ORDER BY a.updated_at DESC
         """),
         {"uid": current_user.id},
@@ -1271,19 +1280,20 @@ async def get_interviewing_jobs(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   jp.scored, jp.fit_score, jp.reasons, jp.risks, jp.key_keywords,
-                   jp.scoring_breakdown, jp.recommendation, jp.score_error, jp.scored_at, jp.scored_by_model, jp.archived,
+                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
+                   ujp.scored_at, ujp.scored_by_model, ujp.archived,
                    a.id AS application_id, a.status AS application_status, a.applied_at,
                    (ip.id IS NOT NULL AND (ip.pitch != '' OR ip.drive_file_id IS NOT NULL)) AS has_interview_pack,
                    ip.drive_file_id AS pack_drive_file_id,
                    ip.drive_link AS pack_drive_link
             FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             JOIN applications a
               ON a.job_posting_id = jp.id
              AND a.user_id = :uid
              AND a.status IN ('interviewing', 'offered', 'rejected')
             LEFT JOIN interview_packs ip ON ip.application_id = a.id
-            WHERE jp.user_id = :uid
             ORDER BY a.updated_at DESC
         """),
         {"uid": current_user.id},
@@ -1310,7 +1320,7 @@ async def bulk_archive_jobs(
     for i, jid in enumerate(body.job_ids):
         params[f"id{i}"] = jid
     await db.execute(
-        text(f"UPDATE job_postings SET archived = true WHERE user_id = :uid AND id IN ({placeholders})"),
+        text(f"UPDATE user_job_postings SET archived = true WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),
         params,
     )
     await db.commit()
@@ -1329,36 +1339,37 @@ async def bulk_rescore_jobs(
     """Score multiple jobs in one LLM call. Returns updated job rows keyed by id."""
     from app.pipeline.llm_scorer import score_jobs_by_ids
 
-    # Verify ownership — silently drop IDs not owned by this user
+    # Verify ownership via user_job_postings — silently drop IDs not owned by this user
     placeholders = ",".join(f":id{i}" for i in range(len(body.job_ids)))
     params: dict = {"uid": current_user.id}
     for i, jid in enumerate(body.job_ids):
         params[f"id{i}"] = jid
 
     owned = await db.execute(
-        text(f"SELECT id FROM job_postings WHERE user_id = :uid AND id IN ({placeholders})"),
+        text(f"SELECT job_posting_id FROM user_job_postings WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),
         params,
     )
     owned_ids = [r[0] for r in owned.fetchall()]
     if not owned_ids:
         raise HTTPException(404, "No owned jobs found")
 
-    await score_jobs_by_ids(db, owned_ids)
+    await score_jobs_by_ids(db, owned_ids, user_id=current_user.id)
 
     # Fetch and return updated rows
     owned_placeholders = ",".join(f":id{i}" for i in range(len(owned_ids)))
-    owned_params: dict = {}
+    owned_params: dict = {"uid": current_user.id}
     for i, jid in enumerate(owned_ids):
         owned_params[f"id{i}"] = jid
     rows = await db.execute(
         text(f"""
-            SELECT id, mcf_uuid, title, company, url, location,
-                   inferred_industries, posted_at, scraped_at,
-                   scored, fit_score, reasons, risks, key_keywords,
-                   scoring_breakdown, recommendation, score_error, scored_at, scored_by_model,
-                   rescoring
-            FROM job_postings
-            WHERE id IN ({owned_placeholders})
+            SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
+                   ujp.scored_at, ujp.scored_by_model, ujp.rescoring
+            FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
+            WHERE jp.id IN ({owned_placeholders})
         """),
         owned_params,
     )
@@ -1374,13 +1385,13 @@ async def archive_job(
 ):
     """Mark a job posting as archived — it will no longer appear in the research panel."""
     result = await db.execute(
-        text("SELECT id FROM job_postings WHERE id = :id AND user_id = :uid"),
+        text("SELECT id FROM user_job_postings WHERE job_posting_id = :id AND user_id = :uid"),
         {"id": job_id, "uid": current_user.id},
     )
     if not result.fetchone():
         raise HTTPException(404, "Job not found")
     await db.execute(
-        text("UPDATE job_postings SET archived = true WHERE id = :id AND user_id = :uid"),
+        text("UPDATE user_job_postings SET archived = true WHERE job_posting_id = :id AND user_id = :uid"),
         {"id": job_id, "uid": current_user.id},
     )
     await db.commit()
@@ -1396,24 +1407,26 @@ async def rescore_job(
     from app.pipeline.llm_scorer import score_single_job  # local import avoids circular dep
 
     result = await db.execute(
-        text("SELECT id FROM job_postings WHERE id = :id AND user_id = :uid"),
+        text("SELECT id FROM user_job_postings WHERE job_posting_id = :id AND user_id = :uid"),
         {"id": job_id, "uid": current_user.id},
     )
     if not result.fetchone():
         raise HTTPException(404, "Job not found")
 
-    await score_single_job(db, job_id)
+    await score_single_job(db, job_id, user_id=current_user.id)
 
     row = await db.execute(
         text("""
-            SELECT id, mcf_uuid, title, company, url, location,
-                   inferred_industries, posted_at, scraped_at,
-                   scored, fit_score, reasons, risks, key_keywords,
-                   scoring_breakdown, recommendation, score_error, scored_at, scored_by_model,
-                   rescoring
-            FROM job_postings WHERE id = :id
+            SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
+                   ujp.scored_at, ujp.scored_by_model, ujp.rescoring
+            FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
+            WHERE jp.id = :id
         """),
-        {"id": job_id},
+        {"id": job_id, "uid": current_user.id},
     )
     job = row.mappings().first()
     return dict(job) if job else {}
@@ -1445,9 +1458,14 @@ async def generate_resume(
     from app.shared.resume_docx import build_docx_bytes
     from app.shared.google_drive import upload_or_update_file, convert_docx_to_pdf_bytes
 
-    # Fetch job
+    # Fetch job (ownership via user_job_postings)
     job_row = await db.execute(
-        text("SELECT id, title, company, description FROM job_postings WHERE id = :id AND user_id = :uid"),
+        text("""
+            SELECT jp.id, jp.title, jp.company, jp.description
+            FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
+            WHERE jp.id = :id
+        """),
         {"id": job_id, "uid": current_user.id},
     )
     job = job_row.mappings().first()

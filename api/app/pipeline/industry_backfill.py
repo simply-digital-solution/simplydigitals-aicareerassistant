@@ -59,6 +59,8 @@ async def backfill_industries(db: AsyncSession) -> int:
             ORDER BY id ASC
         """)
     )
+    # Note: job_postings is now content-only (no user_id). We classify once
+    # per unique posting — all users sharing that posting benefit automatically.
     jobs = rows.mappings().all()
 
     if not jobs:

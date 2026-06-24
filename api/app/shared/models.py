@@ -376,16 +376,14 @@ class TitleSkillMap(Base):
 
 
 # ---------------------------------------------------------------------------
-# Job postings (auto-scraped, scored in background)
+# Job postings (auto-scraped, content only — no user ownership)
 # ---------------------------------------------------------------------------
 
 class JobPosting(Base):
     __tablename__ = "job_postings"
-    __table_args__ = (UniqueConstraint("user_id", "mcf_uuid"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    mcf_uuid = Column(String(100), nullable=False)
+    mcf_uuid = Column(String(100), nullable=False, unique=True, index=True)
     title = Column(String(255), nullable=False)
     company = Column(String(255), nullable=False)
     url = Column(String(1000), nullable=False)
@@ -394,15 +392,36 @@ class JobPosting(Base):
     inferred_industries = Column(Text)          # JSON array
     posted_at = Column(DateTime(timezone=True))
     scraped_at = Column(DateTime(timezone=True), default=_now, nullable=False)
-    # LLM scoring fields — null until scored
+
+    user_job_postings = relationship("UserJobPosting", back_populates="job_posting", lazy="dynamic")
+
+
+# ---------------------------------------------------------------------------
+# User-specific job posting scores/status
+# ---------------------------------------------------------------------------
+
+class UserJobPosting(Base):
+    __tablename__ = "user_job_postings"
+    __table_args__ = (UniqueConstraint("user_id", "job_posting_id"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    job_posting_id = Column(Integer, ForeignKey("job_postings.id"), nullable=False, index=True)
     scored = Column(Boolean, default=False, nullable=False, index=True)
     fit_score = Column(Float)
     reasons = Column(Text)                      # JSON array
     risks = Column(Text)                        # JSON array
     key_keywords = Column(Text)                 # JSON array
     scoring_breakdown = Column(Text)            # JSON array of ScoreCategory
-    score_error = Column(Text)                  # set when scoring fails; scored stays 0
+    score_error = Column(Text)
     scored_at = Column(DateTime(timezone=True))
+    recommendation = Column(Text)
+    rescoring = Column(Boolean, default=False, nullable=False)
+    scored_by_model = Column(String(100))
+    archived = Column(Boolean, default=False, nullable=False, index=True)
+
+    user = relationship("User")
+    job_posting = relationship("JobPosting", back_populates="user_job_postings")
 
 
 # ---------------------------------------------------------------------------

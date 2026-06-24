@@ -82,9 +82,9 @@ async def test_score_next_batch_skips_when_limit_reached():
     """When user has used all 50 scorings today, batch returns False immediately."""
     from app.pipeline.llm_scorer import score_next_batch
 
-    # First execute: job SELECT returns 1 job row
+    # First execute: job SELECT returns 1 job row (new schema: jp_id, user_id)
     job_row = MagicMock()
-    job_row.__getitem__ = lambda self, k: {"user_id": 1, "id": 10, "title": "Dev",
+    job_row.__getitem__ = lambda self, k: {"user_id": 1, "jp_id": 10, "title": "Dev",
                                             "company": "X", "url": "u", "description": "d",
                                             "inferred_industries": "[]"}[k]
     jobs_result = MagicMock()
@@ -112,7 +112,7 @@ async def test_score_next_batch_trims_to_remaining_slots():
     for i in range(5):
         r = MagicMock()
         r.__getitem__ = lambda self, k, i=i: {
-            "user_id": 1, "id": 10 + i, "title": f"Dev{i}",
+            "user_id": 1, "jp_id": 10 + i, "title": f"Dev{i}",
             "company": "X", "url": "u", "description": "d", "inferred_industries": "[]"
         }[k]
         job_rows.append(r)
@@ -167,7 +167,7 @@ async def test_score_single_job_blocked_at_limit():
 
     job_row = MagicMock()
     job_row.mappings.return_value.first.return_value = {
-        "id": 1, "user_id": 1, "title": "Dev", "company": "X",
+        "jp_id": 1, "user_id": 1, "title": "Dev", "company": "X",
         "url": "u", "description": "d", "inferred_industries": "[]"
     }
     app_check = _no_row()   # no advanced application
@@ -193,7 +193,7 @@ async def test_score_jobs_by_ids_blocked_at_limit():
 
     job_row = MagicMock()
     job_row.__getitem__ = lambda self, k: {
-        "id": 1, "user_id": 1, "title": "Dev", "company": "X",
+        "jp_id": 1, "user_id": 1, "title": "Dev", "company": "X",
         "url": "u", "description": "d", "inferred_industries": "[]"
     }[k]
     jobs_result = MagicMock()

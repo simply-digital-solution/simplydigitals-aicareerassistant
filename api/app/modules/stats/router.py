@@ -52,7 +52,7 @@ async def get_dashboard_stats(
     # 1. Jobs scored by AI per day (last 30 days)
     r1 = await db.execute(text("""
         SELECT date(scored_at) AS day, count(*) AS count
-        FROM job_postings
+        FROM user_job_postings
         WHERE user_id = :uid AND scored = true AND scored_at >= :since
         GROUP BY day ORDER BY day
     """), {"uid": uid, "since": since})
@@ -64,7 +64,7 @@ async def get_dashboard_stats(
     # 2. Jobs fit for profile per day (fit_score >= threshold, last 30 days)
     r2 = await db.execute(text("""
         SELECT date(scored_at) AS day, count(*) AS count
-        FROM job_postings
+        FROM user_job_postings
         WHERE user_id = :uid AND fit_score >= :threshold AND scored_at >= :since
         GROUP BY day ORDER BY day
     """), {"uid": uid, "threshold": FIT_THRESHOLD, "since": since})

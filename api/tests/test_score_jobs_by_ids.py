@@ -14,7 +14,7 @@ from app.pipeline.llm_scorer import score_jobs_by_ids
 
 def _make_job_row(job_id=1, user_id=42):
     return {
-        "id": job_id, "user_id": user_id,
+        "jp_id": job_id, "user_id": user_id,
         "title": "Engineer", "company": "Co",
         "url": "https://example.com", "description": "Build stuff",
         "inferred_industries": "[]",

@@ -69,7 +69,7 @@ async def test_returns_updated_jobs():
 async def test_only_owned_ids_scored():
     captured = {}
 
-    async def fake_scorer(db, job_ids):
+    async def fake_scorer(db, job_ids, user_id=None):
         captured["job_ids"] = job_ids
         return {jid: True for jid in job_ids}
 

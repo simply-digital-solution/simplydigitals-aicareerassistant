@@ -239,18 +239,18 @@ async def list_users(
     _: str = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[UserRow]:
-    rows = await db.execute(text(f"""
+    rows = await db.execute(text("""
         SELECT
             u.id,
             u.email,
             u.created_at,
             u.scoring_suspended,
-            MAX(ar.started_at)         AS last_active,
-            COUNT(ar.id)               AS total_llm_requests,
-            COUNT(DISTINCT jp.id)      AS total_jobs
+            MAX(ar.started_at)          AS last_active,
+            COUNT(ar.id)                AS total_llm_requests,
+            COUNT(DISTINCT ujp.id)      AS total_jobs
         FROM users u
         LEFT JOIN agent_runs ar ON ar.user_id = u.id
-        LEFT JOIN job_postings jp ON jp.user_id = u.id
+        LEFT JOIN user_job_postings ujp ON ujp.user_id = u.id
         GROUP BY u.id
         ORDER BY last_active DESC NULLS LAST
     """))

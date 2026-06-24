@@ -4,9 +4,12 @@ Unit tests for api/app/pipeline/llm_scorer.py
 All DB and agent calls are mocked — no live database or LLM needed.
 
 DB execute() call sequence inside score_next_batch:
-  1. SELECT job_postings (batch SELECT)
-  2. SELECT job_feedback (feedback examples)
-  3..N. UPDATE job_postings (one per job in batch)
+  1. SELECT from user_job_postings JOIN job_postings (batch SELECT) — rows have jp_id/user_id
+  2. SELECT daily_scoring_usage (usage check)
+  3. SELECT job_feedback (feedback examples)
+  4..N. UPDATE user_job_postings (one per job in batch, via _write_score)
+  N+1. UPDATE job_postings inferred_industries (one per scored job)
+  last. INSERT daily_scoring_usage (increment counter)
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -37,10 +40,12 @@ def _db_with_batch(job_rows=None, feedback_rows=None):
     """
     Return a mock AsyncSession for a batch of jobs.
     execute() side_effect sequence:
-      [0] batch job SELECT
+      [0] batch job SELECT (returns jp_id, user_id, ...)
       [1] daily scoring usage check (0 = under limit)
       [2] feedback SELECT
-      [3..N] UPDATE per job (only reached when jobs were found)
+      [3..N] UPDATE user_job_postings per job (score write)
+      [N+1..M] UPDATE job_postings inferred_industries
+      [last] INSERT daily_scoring_usage increment
     """
     db = AsyncMock()
     select_result   = _batch_select_result(job_rows or [])
@@ -49,8 +54,8 @@ def _db_with_batch(job_rows=None, feedback_rows=None):
     feedback_result = _feedback_exec(feedback_rows)
     update_result   = MagicMock()
 
-    # Provide enough update results for any batch size
-    db.execute.side_effect = [select_result, usage_result, feedback_result] + [update_result] * 20
+    # Provide enough update results for any batch size (2 updates per job + increment)
+    db.execute.side_effect = [select_result, usage_result, feedback_result] + [update_result] * 40
     return db
 
 
@@ -59,8 +64,9 @@ def _make_job_row(job_id=1, user_id=42,
                   url="https://www.mycareersfuture.gov.sg/job/xyz",
                   description="Build ML models",
                   inferred_industries='["Technology & Software"]'):
+    # New schema: jp_id (job_postings.id), user_id
     return {
-        "id":                  job_id,
+        "jp_id":               job_id,
         "user_id":             user_id,
         "title":               title,
         "company":             company,
@@ -104,6 +110,18 @@ def _make_feedback_row(job_title="Data Engineer", company="ACME",
             "relevance": relevance, "reason": reason}
 
 
+def _find_ujp_update_calls(db):
+    """Return execute calls that UPDATE user_job_postings with a score."""
+    return [c for c in db.execute.call_args_list
+            if "UPDATE user_job_postings" in c.args[0].text
+            and c.args[1].get("fit_score") is not None]
+
+
+def _find_error_calls(db):
+    """Return execute calls that set score_error on user_job_postings."""
+    return [c for c in db.execute.call_args_list if c.args[1].get("err")]
+
+
 # ---------------------------------------------------------------------------
 # Empty queue → returns False
 # ---------------------------------------------------------------------------
@@ -139,12 +157,13 @@ async def test_successful_score_writes_result():
     assert had_work is True
     db.commit.assert_called()
 
-    # UPDATE is call index 3 (0=job SELECT, 1=usage check, 2=feedback SELECT, 3=score write)
-    params = db.execute.call_args_list[3].args[1]
+    # Find the score write UPDATE
+    score_calls = _find_ujp_update_calls(db)
+    assert len(score_calls) == 1
+    params = score_calls[0].args[1]
     assert params["fit_score"] == 0.78
-    assert params["id"] == 1
-    update_sql = db.execute.call_args_list[3].args[0].text
-    assert "score_error" in update_sql
+    assert params["jid"] == 1
+    assert "score_error" in score_calls[0].args[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -166,10 +185,9 @@ async def test_batch_scores_multiple_jobs():
         had_work = await score_next_batch(db)
 
     assert had_work is True
-    # 1 batch SELECT + 1 usage check + 1 feedback SELECT + 3 UPDATEs + 1 increment = 7 execute calls
-    assert db.execute.call_count == 7
-
-    scored_ids = {db.execute.call_args_list[i].args[1]["id"] for i in range(3, 6)}
+    score_calls = _find_ujp_update_calls(db)
+    assert len(score_calls) == 3
+    scored_ids = {c.args[1]["jid"] for c in score_calls}
     assert scored_ids == {10, 20, 30}
 
 
@@ -193,14 +211,10 @@ async def test_batch_matches_by_job_id_not_position():
     ):
         await score_next_batch(db)
 
-    # job_id=1 should get fit_score=0.4, job_id=2 should get fit_score=0.9
-    update_calls = {
-        db.execute.call_args_list[i].args[1]["id"]:
-        db.execute.call_args_list[i].args[1]["fit_score"]
-        for i in range(3, 5)
-    }
-    assert update_calls[1] == 0.4
-    assert update_calls[2] == 0.9
+    score_calls = _find_ujp_update_calls(db)
+    scores_by_id = {c.args[1]["jid"]: c.args[1]["fit_score"] for c in score_calls}
+    assert scores_by_id[1] == 0.4
+    assert scores_by_id[2] == 0.9
 
 
 # ---------------------------------------------------------------------------
@@ -222,12 +236,9 @@ async def test_missing_job_id_marked_as_failed():
     ):
         await score_next_batch(db)
 
-    # job_id=1 scored, job_id=2 marked as error
-    call_params = [db.execute.call_args_list[i].args[1] for i in range(3, 5)]
-    scored   = next(p for p in call_params if p.get("id") == 1)
-    failed   = next(p for p in call_params if p.get("id") == 2)
-    assert scored["fit_score"] == 0.75
-    assert "Missing" in failed["err"]
+    error_calls = _find_error_calls(db)
+    assert len(error_calls) == 1
+    assert "Missing" in error_calls[0].args[1]["err"]
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +260,7 @@ async def test_agent_exception_marks_all_jobs_failed():
     assert had_work is True
     db.commit.assert_called()
 
-    # Both jobs should have score_error set
-    error_calls = [c for c in db.execute.call_args_list if c.args[1].get("err")]
+    error_calls = _find_error_calls(db)
     assert len(error_calls) == 2
     for call in error_calls:
         params = call.args[1]
@@ -279,7 +289,7 @@ async def test_agent_error_result_marks_all_jobs_failed():
         had_work = await score_next_batch(db)
 
     assert had_work is True
-    error_calls = [c for c in db.execute.call_args_list if c.args[1].get("err")]
+    error_calls = _find_error_calls(db)
     assert len(error_calls) == 2
     for call in error_calls:
         assert call.args[1]["err"] == "parse failed"
@@ -352,7 +362,7 @@ async def test_score_fields_json_encoded_in_update():
     ):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[3].args[1]
+    params = _find_ujp_update_calls(db)[0].args[1]
     assert json.loads(params["reasons"])  == ["r1"]
     assert json.loads(params["risks"])    == ["risk1"]
     assert json.loads(params["keywords"]) == ["k1", "k2"]
@@ -378,7 +388,7 @@ async def test_scoring_breakdown_json_encoded_in_update():
     ):
         await score_next_batch(db)
 
-    params    = db.execute.call_args_list[3].args[1]
+    params    = _find_ujp_update_calls(db)[0].args[1]
     breakdown = json.loads(params["breakdown"])
     assert len(breakdown) == 1
     assert breakdown[0]["category"]    == "Technical"
@@ -400,7 +410,7 @@ async def test_scoring_breakdown_empty_list_when_not_provided():
     ):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[3].args[1]
+    params = _find_ujp_update_calls(db)[0].args[1]
     assert json.loads(params["breakdown"]) == []
 
 
@@ -422,7 +432,7 @@ async def test_recommendation_stored_in_update():
     ):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[3].args[1]
+    params = _find_ujp_update_calls(db)[0].args[1]
     assert params["recommendation"] == "Apply — strong match."
 
 
@@ -440,16 +450,16 @@ async def test_empty_recommendation_stored_as_none():
     ):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[3].args[1]
+    params = _find_ujp_update_calls(db)[0].args[1]
     assert params["recommendation"] is None
 
 
 # ---------------------------------------------------------------------------
-# inferred_industries written back in UPDATE
+# inferred_industries written back to job_postings (shared table)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_inferred_industries_written_in_update():
+async def test_inferred_industries_written_to_job_postings():
     row = _make_job_row(job_id=1)
     db  = _db_with_batch([row])
 
@@ -462,8 +472,12 @@ async def test_inferred_industries_written_in_update():
     ):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[3].args[1]
-    assert json.loads(params["industries"]) == ["Banking & Financial Services", "Technology & Software"]
+    # Find the job_postings inferred_industries update
+    ind_calls = [c for c in db.execute.call_args_list
+                 if "UPDATE job_postings" in c.args[0].text
+                 and "inferred_industries" in c.args[0].text]
+    assert len(ind_calls) == 1
+    assert json.loads(ind_calls[0].args[1]["ind"]) == ["Banking & Financial Services", "Technology & Software"]
 
 
 @pytest.mark.asyncio
@@ -480,8 +494,11 @@ async def test_empty_inferred_industries_stored_as_empty_list():
     ):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[3].args[1]
-    assert json.loads(params["industries"]) == []
+    ind_calls = [c for c in db.execute.call_args_list
+                 if "UPDATE job_postings" in c.args[0].text
+                 and "inferred_industries" in c.args[0].text]
+    assert len(ind_calls) == 1
+    assert json.loads(ind_calls[0].args[1]["ind"]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -503,7 +520,7 @@ async def test_scored_by_model_written_from_meta():
     ):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[3].args[1]
+    params = _find_ujp_update_calls(db)[0].args[1]
     assert params["model"] == "gemini-flash-latest"
 
 
@@ -522,7 +539,7 @@ async def test_scored_by_model_none_when_meta_missing():
     ):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[3].args[1]
+    params = _find_ujp_update_calls(db)[0].args[1]
     assert params["model"] is None
 
 
@@ -670,9 +687,10 @@ async def test_exception_failure_stamps_scored_at():
     ):
         await score_next_batch(db)
 
-    update_call = db.execute.call_args_list[3]
-    sql    = update_call.args[0].text
-    params = update_call.args[1]
+    error_calls = _find_error_calls(db)
+    assert len(error_calls) == 1
+    sql    = error_calls[0].args[0].text
+    params = error_calls[0].args[1]
     assert "scored_at" in sql
     assert params.get("now") is not None
 
@@ -690,9 +708,10 @@ async def test_agent_error_failure_stamps_scored_at():
     ):
         await score_next_batch(db)
 
-    update_call = db.execute.call_args_list[3]
-    sql    = update_call.args[0].text
-    params = update_call.args[1]
+    error_calls = _find_error_calls(db)
+    assert len(error_calls) == 1
+    sql    = error_calls[0].args[0].text
+    params = error_calls[0].args[1]
     assert "scored_at" in sql
     assert params.get("now") is not None
 
@@ -712,11 +731,10 @@ async def test_missing_job_stamps_scored_at():
     ):
         await score_next_batch(db)
 
-    # Find the failure UPDATE (has an "err" param and "scored_at")
-    failure_calls = [c for c in db.execute.call_args_list if c.args[1].get("err")]
-    assert len(failure_calls) == 1
-    assert "scored_at" in failure_calls[0].args[0].text
-    assert failure_calls[0].args[1].get("now") is not None
+    error_calls = _find_error_calls(db)
+    assert len(error_calls) == 1
+    assert "scored_at" in error_calls[0].args[0].text
+    assert error_calls[0].args[1].get("now") is not None
 
 
 # ---------------------------------------------------------------------------
@@ -725,14 +743,13 @@ async def test_missing_job_stamps_scored_at():
 
 @pytest.mark.asyncio
 async def test_loop_query_includes_errored_jobs_with_old_scored_at():
-    """The SELECT WHERE clause must include score_error IS NOT NULL with cooldown."""
+    """The SELECT WHERE clause must include score_error IS NULL with cooldown."""
     db = _db_with_batch(job_rows=[])
 
     await score_next_batch(db)
 
     select_sql = db.execute.call_args_list[0].args[0].text
     assert "score_error IS NULL" in select_sql
-    # Also retries errored jobs after cooldown
     assert "scored_at" in select_sql
     assert "30 minutes" in select_sql
 

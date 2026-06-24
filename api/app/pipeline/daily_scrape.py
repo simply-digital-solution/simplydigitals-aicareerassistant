@@ -1,10 +1,10 @@
 """
 Daily scraper — pulls MCF jobs for every user based on their profile.
 
-Deduplication rule: skip if (user_id, title, company, date(posted_at)) already
-exists. Same job re-posted on a different date is kept — it may have updated
-requirements. Same job on the same date is a true duplicate (MCF assigns a new
-UUID to the same posting) and is dropped.
+Deduplication rules:
+  job_postings: unique by mcf_uuid — content is shared across users.
+  user_job_postings: unique by (user_id, job_posting_id) — per-user scoring row.
+  Same job re-posted on a different date is kept (may have updated requirements).
 """
 import json
 import logging
@@ -101,22 +101,21 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
 
             industries_json = json.dumps(job.get("inferred_industries") or [])
 
-            # Upsert: insert new jobs; update industries on existing ones (keeps scoring intact)
-            row = await db.execute(
+            # Step 1: upsert into job_postings (content, shared across users)
+            jp_row = await db.execute(
                 text("""
                     INSERT INTO job_postings
-                        (user_id, mcf_uuid, title, company, url, location,
-                         description, inferred_industries, posted_at, scraped_at, scored)
+                        (mcf_uuid, title, company, url, location,
+                         description, inferred_industries, posted_at, scraped_at)
                     VALUES
-                        (:user_id, :uuid, :title, :company, :url, :location,
-                         :description, :industries, :posted_at, :scraped_at, false)
-                    ON CONFLICT (user_id, mcf_uuid) DO UPDATE SET
+                        (:uuid, :title, :company, :url, :location,
+                         :description, :industries, :posted_at, :scraped_at)
+                    ON CONFLICT (mcf_uuid) DO UPDATE SET
                         inferred_industries = excluded.inferred_industries,
                         scraped_at          = excluded.scraped_at
-                    WHERE excluded.inferred_industries != job_postings.inferred_industries
+                    RETURNING id
                 """),
                 {
-                    "user_id":     user_id,
                     "uuid":        uuid,
                     "title":       job_title,
                     "company":     job_company,
@@ -128,7 +127,23 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                     "scraped_at":  now,
                 },
             )
-            if row.rowcount:
+            jp_id_row = jp_row.fetchone()
+            if not jp_id_row:
+                title_skipped += 1
+                continue
+            job_posting_id = jp_id_row[0]
+
+            # Step 2: create user_job_postings row (unscored) if not yet exists
+            ujp_row = await db.execute(
+                text("""
+                    INSERT INTO user_job_postings (user_id, job_posting_id, scored)
+                    VALUES (:uid, :jid, false)
+                    ON CONFLICT (user_id, job_posting_id) DO NOTHING
+                    RETURNING id
+                """),
+                {"uid": user_id, "jid": job_posting_id},
+            )
+            if ujp_row.fetchone():
                 title_inserted += 1
             else:
                 title_skipped += 1
