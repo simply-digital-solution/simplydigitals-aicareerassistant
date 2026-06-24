@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Gemini — required in production, optional in dev (falls back to Ollama)
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_fallback_model: str = "gemini-2.5-flash"
 
     # Ollama — local dev only, not used in production
     specialist_model: str = "deepseek-r1:7b"

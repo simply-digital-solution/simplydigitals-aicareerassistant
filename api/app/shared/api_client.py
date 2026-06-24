@@ -385,6 +385,7 @@ class GeminiClient(BaseLLMClient):
     def __init__(self):
         settings = get_settings()
         self._model = settings.gemini_model
+        self._fallback_model = settings.gemini_fallback_model
         self._api_key = settings.gemini_api_key
         self._max_corrections = settings.max_self_corrections
 
@@ -420,13 +421,26 @@ class GeminiClient(BaseLLMClient):
         requested_at = datetime.now(timezone.utc)
         full_text = ""
 
-        url = f"{GEMINI_BASE_URL}/{self._model}:generateContent"
         headers = {"X-goog-api-key": self._api_key, "Content-Type": "application/json"}
+        models_to_try = [self._model]
+        if self._fallback_model and self._fallback_model != self._model:
+            models_to_try.append(self._fallback_model)
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+        data = None
+        for model in models_to_try:
+            url = f"{GEMINI_BASE_URL}/{model}:generateContent"
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code == 503 and model != models_to_try[-1]:
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "GeminiClient: %s returned 503, retrying with fallback %s",
+                        model, models_to_try[-1],
+                    )
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                break
 
         candidates = data.get("candidates", [])
         if candidates:

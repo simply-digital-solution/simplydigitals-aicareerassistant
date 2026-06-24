@@ -306,6 +306,77 @@ def test_get_llm_client_returns_gemini_when_key_is_set():
     api_client._client = None  # clean up
 
 
+# ---------------------------------------------------------------------------
+# GeminiClient._call() — 503 fallback to secondary model
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_gemini_call_falls_back_to_secondary_model_on_503():
+    """When primary model returns 503, _call() retries with the fallback model."""
+    from app.shared.api_client import GeminiClient, GEMINI_BASE_URL
+
+    urls_called = []
+
+    async def mock_post(url, *, json, headers):
+        urls_called.append(url)
+        mock_resp = MagicMock()
+        if "flash-lite" in url:
+            mock_resp.status_code = 503
+            mock_resp.raise_for_status.side_effect = Exception("503")
+        else:
+            mock_resp.status_code = 200
+            mock_resp.raise_for_status = MagicMock()
+            mock_resp.json.return_value = _make_gemini_response("fallback response")
+        return mock_resp
+
+    mock_http = AsyncMock()
+    mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+    mock_http.__aexit__ = AsyncMock(return_value=False)
+    mock_http.post = mock_post
+
+    with patch("httpx.AsyncClient", return_value=mock_http), \
+         patch("app.shared.llm_logger.log_llm_call"):
+
+        client = GeminiClient()
+        client._api_key = "key"
+        client._model = "gemini-2.5-flash-lite"
+        client._fallback_model = "gemini-2.5-flash"
+
+        result, _ = await client._call([{"role": "user", "content": "hi"}])
+
+    assert result == "fallback response"
+    assert any("flash-lite" in u for u in urls_called)
+    assert any("gemini-2.5-flash:" in u for u in urls_called)
+
+
+@pytest.mark.asyncio
+async def test_gemini_call_raises_on_503_when_no_fallback():
+    """When fallback model is same as primary, 503 is raised normally."""
+    from app.shared.api_client import GeminiClient
+
+    async def mock_post(url, *, json, headers):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 503
+        mock_resp.raise_for_status.side_effect = Exception("503 no fallback")
+        return mock_resp
+
+    mock_http = AsyncMock()
+    mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+    mock_http.__aexit__ = AsyncMock(return_value=False)
+    mock_http.post = mock_post
+
+    with patch("httpx.AsyncClient", return_value=mock_http), \
+         patch("app.shared.llm_logger.log_llm_call"):
+
+        client = GeminiClient()
+        client._api_key = "key"
+        client._model = "gemini-2.5-flash-lite"
+        client._fallback_model = "gemini-2.5-flash-lite"  # same as primary
+
+        with pytest.raises(Exception, match="503"):
+            await client._call([{"role": "user", "content": "hi"}])
+
+
 def test_get_llm_client_returns_ollama_when_key_is_empty():
     """get_llm_client() must return OllamaClient when gemini_api_key is empty."""
     from app.shared import api_client
