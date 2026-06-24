@@ -45,7 +45,7 @@ async def _increment_scorings_today(db: AsyncSession, user_id: int, count: int) 
             INSERT INTO daily_scoring_usage (user_id, date, jobs_scored, created_at)
             VALUES (:uid, :date, :count, :now)
             ON CONFLICT(user_id, date) DO UPDATE SET
-                jobs_scored = jobs_scored + excluded.jobs_scored
+                jobs_scored = daily_scoring_usage.jobs_scored + excluded.jobs_scored
         """),
         {"uid": user_id, "date": today, "count": count, "now": now_utc()},
     )
