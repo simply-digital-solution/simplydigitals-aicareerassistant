@@ -80,6 +80,16 @@ async def test_get_selected_jobs_filters_by_selected_status():
 
 
 @pytest.mark.asyncio
+async def test_get_selected_jobs_excludes_archived():
+    """Archived jobs must not appear in Selected tab even if archive succeeded."""
+    from app.modules.agents.router import get_selected_jobs
+    db = _db_selected([])
+    await get_selected_jobs(current_user=_make_user(), db=db)
+    sql = db.execute.call_args.args[0].text
+    assert "archived = false" in sql
+
+
+@pytest.mark.asyncio
 async def test_get_selected_jobs_joins_on_job_posting_id():
     from app.modules.agents.router import get_selected_jobs
     db = _db_selected([])
