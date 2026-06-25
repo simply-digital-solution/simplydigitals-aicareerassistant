@@ -76,3 +76,40 @@ async def test_get_applied_jobs_filters_by_user():
 
     params = db.execute.call_args.args[1]
     assert params["uid"] == 42
+
+
+@pytest.mark.asyncio
+async def test_get_applied_jobs_ordered_by_applied_at_desc():
+    """Positive: query must sort by applied_at DESC so most recent applications appear first."""
+    from app.modules.agents.router import get_applied_jobs
+
+    db = _db_with_applied_jobs([])
+    await get_applied_jobs(current_user=_make_user(), db=db)
+
+    sql = db.execute.call_args.args[0].text
+    assert "applied_at" in sql
+    assert "DESC" in sql
+
+
+@pytest.mark.asyncio
+async def test_get_applied_jobs_not_ordered_by_updated_at():
+    """Negative: query must NOT sort by updated_at — that's not the application date."""
+    from app.modules.agents.router import get_applied_jobs
+
+    db = _db_with_applied_jobs([])
+    await get_applied_jobs(current_user=_make_user(), db=db)
+
+    sql = db.execute.call_args.args[0].text
+    assert "ORDER BY a.updated_at" not in sql
+
+
+@pytest.mark.asyncio
+async def test_get_applied_jobs_nulls_last():
+    """Positive: NULLS LAST ensures jobs without applied_at appear at the end."""
+    from app.modules.agents.router import get_applied_jobs
+
+    db = _db_with_applied_jobs([])
+    await get_applied_jobs(current_user=_make_user(), db=db)
+
+    sql = db.execute.call_args.args[0].text
+    assert "NULLS LAST" in sql
