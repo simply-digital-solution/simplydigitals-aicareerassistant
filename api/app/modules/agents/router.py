@@ -1234,6 +1234,7 @@ async def get_selected_jobs(
               ON a.job_posting_id = jp.id
              AND a.user_id = :uid
              AND a.status = 'selected'
+            WHERE ujp.archived = false
             ORDER BY a.created_at DESC
         """),
         {"uid": current_user.id},
