@@ -1263,7 +1263,7 @@ async def get_applied_jobs(
               ON a.job_posting_id = jp.id
              AND a.user_id = :uid
              AND a.status = 'applied'
-            ORDER BY a.updated_at DESC
+            ORDER BY a.applied_at DESC NULLS LAST
         """),
         {"uid": current_user.id},
     )
