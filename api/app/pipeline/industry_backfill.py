@@ -53,14 +53,16 @@ async def backfill_industries(db: AsyncSession) -> int:
     """
     rows = await db.execute(
         text("""
-            SELECT id, title, company, description
-            FROM job_postings
-            WHERE inferred_industries = '[]' OR inferred_industries IS NULL
-            ORDER BY id ASC
+            SELECT DISTINCT jp.id, jp.title, jp.company, jp.description
+            FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id
+            WHERE (jp.inferred_industries = '[]' OR jp.inferred_industries IS NULL)
+              AND ujp.archived = false
+            ORDER BY jp.id ASC
         """)
     )
-    # Note: job_postings is now content-only (no user_id). We classify once
-    # per unique posting — all users sharing that posting benefit automatically.
+    # Only classify jobs with at least one active (non-archived) user posting —
+    # no point spending tokens on jobs no user will ever see.
     jobs = rows.mappings().all()
 
     if not jobs:
