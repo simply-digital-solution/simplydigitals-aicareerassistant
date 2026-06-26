@@ -33,7 +33,7 @@ Return ONLY valid JSON matching this exact schema:
     {
       "section_type": "summary",
       "title": "exact section heading from candidate's resume e.g. 'Professional Summary'",
-      "content": ["paragraph 1", "paragraph 2"],
+      "content": ["single paragraph, no more than 6 lines"],
       "experience": []
     },
     {
@@ -83,7 +83,7 @@ Return ONLY valid JSON matching this exact schema:
 - **Never use first person** — no "I", "my", "I have". Always use third-person past-tense action verbs.
 - **Experience `summary`**: exactly 2 sentences per role. Pick the most impactful highlights relevant to the target job. No "I". Start each sentence with a past-tense action verb.
 - **Experience `bullets`**: maximum 5 bullets per role. Each bullet must start with a past-tense action verb (e.g. "Led", "Delivered", "Engineered", "Authored", "Championed"). Select only the most relevant bullets for the target job.
-- **Summary section**: maximum 2 paragraphs, 5–10 lines total. Each paragraph must be 2–3 sentences. Do not pad with additional paragraphs or long lists.
+- **Summary section**: exactly 1 paragraph, no more than 6 lines. Do not split into multiple paragraphs or add lists.
 - **Competencies section**: consolidate all competencies into a maximum of 5 categories. Any new skills required by the JD must be merged into the most relevant existing category — never added as standalone lines or extra categories beyond 5.
 - If a `CANDIDATE'S ADDITIONAL CONTEXT` section is provided, treat it as verified facts about the candidate. Use it to fill gaps identified in the JD — add relevant skills or experience into the appropriate resume sections. Never invent anything beyond what is stated there.
 - Return ONLY valid JSON. Nothing else.
