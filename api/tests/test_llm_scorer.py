@@ -4,12 +4,13 @@ Unit tests for api/app/pipeline/llm_scorer.py
 All DB and agent calls are mocked — no live database or LLM needed.
 
 DB execute() call sequence inside score_next_batch:
-  1. SELECT from user_job_postings JOIN job_postings (batch SELECT) — rows have jp_id/user_id
-  2. SELECT daily_scoring_usage (usage check)
-  3. SELECT job_feedback (feedback examples)
-  4..N. UPDATE user_job_postings (one per job in batch, via _write_score)
-  N+1. UPDATE job_postings inferred_industries (one per scored job)
-  last. INSERT daily_scoring_usage (increment counter)
+  1. SELECT from user_job_postings JOIN job_postings (LIMIT 1)
+  2. SELECT lifetime SUM (_get_daily_limit)
+  3. SELECT daily_scoring_usage today (_get_scorings_today)
+  4. SELECT job_feedback (feedback examples)
+  5. UPDATE user_job_postings (score write, via _write_score)
+  6. UPDATE job_postings inferred_industries
+  7. INSERT daily_scoring_usage (increment counter)
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -170,68 +171,54 @@ async def test_successful_score_writes_result():
 
 
 # ---------------------------------------------------------------------------
-# Batch of 3 jobs — all scored, matched by job_id
+# Only one job fetched per call (LIMIT 1)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_batch_scores_multiple_jobs():
-    rows = [_make_job_row(job_id=i) for i in [10, 20, 30]]
-    db   = _db_with_batch(rows)
+async def test_scores_exactly_one_job_per_call():
+    """score_next_batch fetches and scores exactly 1 job per invocation."""
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
 
-    opps   = [_make_opportunity(job_id=i, fit_score=round(0.5 + i * 0.01, 2)) for i in [10, 20, 30]]
-    result = _make_research_result(opps)
+    opp    = _make_opportunity(job_id=1, fit_score=0.78)
+    result = _make_research_result([opp])
 
-    with (
-        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
-        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
-    ):
-        had_work = await score_next_batch(db)
+    captured: dict = {}
 
-    assert had_work is True
-    score_calls = _find_ujp_update_calls(db)
-    assert len(score_calls) == 3
-    scored_ids = {c.args[1]["jid"] for c in score_calls}
-    assert scored_ids == {10, 20, 30}
-
-
-# ---------------------------------------------------------------------------
-# Reordered response — matched correctly by job_id
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_batch_matches_by_job_id_not_position():
-    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
-    db   = _db_with_batch(rows)
-
-    # LLM returns opportunities in reverse order
-    opps   = [_make_opportunity(job_id=2, fit_score=0.9),
-              _make_opportunity(job_id=1, fit_score=0.4)]
-    result = _make_research_result(opps)
+    async def fake_agent(profile, job_postings, **kwargs):
+        captured["job_postings"] = job_postings
+        return _make_research_result([_make_opportunity(job_id=job_postings[0]["job_id"])]), {}
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
-        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock(return_value=(result, {}))),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
     ):
         await score_next_batch(db)
 
-    score_calls = _find_ujp_update_calls(db)
-    scores_by_id = {c.args[1]["jid"]: c.args[1]["fit_score"] for c in score_calls}
-    assert scores_by_id[1] == 0.4
-    assert scores_by_id[2] == 0.9
+    assert len(captured["job_postings"]) == 1
+    assert captured["job_postings"][0]["job_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_select_query_uses_limit_1():
+    """The SELECT must use LIMIT 1 — single job per call."""
+    db = _db_with_batch(job_rows=[])
+    await score_next_batch(db)
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "LIMIT 1" in select_sql
 
 
 # ---------------------------------------------------------------------------
-# Missing job_id in response — marked as failed individually
+# Missing job_id in response — single job marked as failed
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_missing_job_id_marked_as_failed():
-    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
-    db   = _db_with_batch(rows)
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
 
-    # LLM only returns job_id=1, skips job_id=2
-    opps   = [_make_opportunity(job_id=1, fit_score=0.75)]
-    result = _make_research_result(opps)
+    # LLM returns wrong job_id
+    result = _make_research_result([_make_opportunity(job_id=999)])
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
@@ -245,13 +232,13 @@ async def test_missing_job_id_marked_as_failed():
 
 
 # ---------------------------------------------------------------------------
-# Agent raises exception → all jobs in batch marked failed
+# Agent raises exception → job marked failed
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_agent_exception_marks_all_jobs_failed():
-    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
-    db   = _db_with_batch(rows)
+async def test_agent_exception_marks_job_failed():
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
@@ -262,57 +249,50 @@ async def test_agent_exception_marks_all_jobs_failed():
 
     assert had_work is True
     db.commit.assert_called()
-
     error_calls = _find_error_calls(db)
-    assert len(error_calls) == 2
-    for call in error_calls:
-        params = call.args[1]
-        assert "RuntimeError" in params["err"]
-        assert "scored=false" in call.args[0].text
+    assert len(error_calls) == 1
+    assert "RuntimeError" in error_calls[0].args[1]["err"]
+    assert "scored=false" in error_calls[0].args[0].text
 
 
 # ---------------------------------------------------------------------------
-# Agent returns AgentError → all jobs in batch marked failed
+# Agent returns AgentError → job marked failed
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_agent_error_result_marks_all_jobs_failed():
+async def test_agent_error_result_marks_job_failed():
     from app.shared.schemas import AgentError
 
-    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
-    db   = _db_with_batch(rows)
-
-    agent_err = AgentError(error="parse failed")
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
         patch("app.pipeline.llm_scorer.run_research_agent",
-              AsyncMock(return_value=(agent_err, {}))),
+              AsyncMock(return_value=(AgentError(error="parse failed"), {}))),
     ):
         had_work = await score_next_batch(db)
 
     assert had_work is True
     error_calls = _find_error_calls(db)
-    assert len(error_calls) == 2
-    for call in error_calls:
-        assert call.args[1]["err"] == "parse failed"
+    assert len(error_calls) == 1
+    assert error_calls[0].args[1]["err"] == "parse failed"
 
 
 # ---------------------------------------------------------------------------
-# job_id is passed in each job dict sent to the agent
+# job_id is passed in the job dict sent to the agent
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_job_id_passed_in_job_dicts():
-    rows = [_make_job_row(job_id=99), _make_job_row(job_id=100)]
-    db   = _db_with_batch(rows)
+async def test_job_id_passed_in_job_dict():
+    row = _make_job_row(job_id=99)
+    db  = _db_with_batch([row])
 
     captured = {}
 
     async def fake_agent(profile, job_postings, **kwargs):
         captured["job_postings"] = job_postings
-        opps = [_make_opportunity(job_id=j["job_id"]) for j in job_postings]
-        return _make_research_result(opps), {}
+        return _make_research_result([_make_opportunity(job_id=99)]), {}
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
@@ -320,7 +300,7 @@ async def test_job_id_passed_in_job_dicts():
     ):
         await score_next_batch(db)
 
-    assert [j["job_id"] for j in captured["job_postings"]] == [99, 100]
+    assert captured["job_postings"][0]["job_id"] == 99
 
 
 # ---------------------------------------------------------------------------
@@ -721,12 +701,11 @@ async def test_agent_error_failure_stamps_scored_at():
 
 @pytest.mark.asyncio
 async def test_missing_job_stamps_scored_at():
-    rows = [_make_job_row(job_id=1), _make_job_row(job_id=2)]
-    db   = _db_with_batch(rows)
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
 
-    # LLM returns only job 1; job 2 is missing
-    opps   = [_make_opportunity(job_id=1)]
-    result = _make_research_result(opps)
+    # LLM returns wrong job_id — job 1 goes missing
+    result = _make_research_result([_make_opportunity(job_id=999)])
 
     with (
         patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),

@@ -107,12 +107,9 @@ async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
 
 async def score_next_batch(db: AsyncSession) -> bool:
     """
-    Pick up to batch_size unscored jobs, score them in one LLM call, write back.
-    Matches results by job_id — missing or failed jobs are marked individually.
-    Returns True if any jobs were processed, False if queue was empty.
+    Pick the next unscored job and score it in a single LLM call.
+    Returns True if a job was processed, False if the queue was empty.
     """
-    batch_size = get_settings().scorer_batch_size
-
     rows = await db.execute(
         text("""
             SELECT ujp.id AS ujp_id, ujp.user_id, jp.id AS jp_id,
@@ -136,51 +133,45 @@ async def score_next_batch(db: AsyncSession) -> bool:
                   AND a.status IN ('applied', 'interviewing', 'offered', 'rejected', 'withdrawn')
               )
             ORDER BY jp.posted_at ASC, jp.scraped_at ASC
-            LIMIT :batch_size
+            LIMIT 1
         """),
-        {"batch_size": batch_size},
+        {},
     )
     job_rows = rows.mappings().all()
     if not job_rows:
         return False
 
-    # All jobs in a batch must belong to the same user (scorer loops per-user queue)
-    user_id = job_rows[0]["user_id"]
+    job_row = job_rows[0]
+    user_id = job_row["user_id"]
+    jp_id   = job_row["jp_id"]
 
     # Enforce daily scoring cap
     daily_limit = await _get_daily_limit(db, user_id)
     scored_today = await _get_scorings_today(db, user_id)
-    remaining = daily_limit - scored_today
-    if remaining <= 0:
+    if scored_today >= daily_limit:
         logger.info("llm_scorer: user_id=%d has reached daily scoring limit (%d)", user_id, daily_limit)
         return False
-    job_rows = list(job_rows)[:remaining]
 
-    # jp_id is the job_postings.id used as job_id in LLM calls
-    jp_ids = [r["jp_id"] for r in job_rows]
-    logger.info("llm_scorer: scoring batch of %d jobs %s for user_id=%d (%d/%d used today)",
-                len(job_rows), jp_ids, user_id, scored_today, daily_limit)
+    logger.info("llm_scorer: scoring job_id=%d for user_id=%d (%d/%d used today)",
+                jp_id, user_id, scored_today, daily_limit)
 
     profile = await _load_profile(db, user_id)
     feedback_examples = await _build_feedback_examples(db, user_id)
 
-    job_dicts = [
-        {
-            "job_id":              r["jp_id"],
-            "title":               r["title"],
-            "company":             r["company"],
-            "url":                 r["url"],
-            "description":         r["description"] or "",
-            "inferred_industries": json.loads(r["inferred_industries"] or "[]"),
-        }
-        for r in job_rows
-    ]
+    job_dict = {
+        "job_id":              jp_id,
+        "title":               job_row["title"],
+        "company":             job_row["company"],
+        "url":                 job_row["url"],
+        "description":         job_row["description"] or "",
+        "inferred_industries": json.loads(job_row["inferred_industries"] or "[]"),
+    }
 
     t_start = time.monotonic()
     try:
         result, meta = await run_research_agent(
             profile=profile,
-            job_postings=job_dicts,
+            job_postings=[job_dict],
             search_filters={},
             db=db,
             user_id=user_id,
@@ -188,54 +179,45 @@ async def score_next_batch(db: AsyncSession) -> bool:
             feedback_examples=feedback_examples,
             full_description=True,
         )
-        logger.info("llm_scorer: batch LLM call completed in %.1fs", time.monotonic() - t_start)
+        logger.info("llm_scorer: LLM call completed in %.1fs", time.monotonic() - t_start)
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
-        logger.error("llm_scorer: batch failed after %.1fs: %s", time.monotonic() - t_start, error_msg)
-        now = now_utc()
-        for jp_id in jp_ids:
-            await db.execute(
-                text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
-                {"err": error_msg, "now": now, "jid": jp_id, "uid": user_id},
-            )
+        logger.error("llm_scorer: job_id=%d failed after %.1fs: %s", jp_id, time.monotonic() - t_start, error_msg)
+        await db.execute(
+            text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            {"err": error_msg, "now": now_utc(), "jid": jp_id, "uid": user_id},
+        )
         await db.commit()
         return True
 
     if isinstance(result, AgentError):
         error_msg = result.error
-        logger.warning("llm_scorer: agent error for batch %s: %s", jp_ids, error_msg)
-        now = now_utc()
-        for jp_id in jp_ids:
-            await db.execute(
-                text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
-                {"err": error_msg, "now": now, "jid": jp_id, "uid": user_id},
-            )
+        logger.warning("llm_scorer: agent error for job_id=%d: %s", jp_id, error_msg)
+        await db.execute(
+            text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            {"err": error_msg, "now": now_utc(), "jid": jp_id, "uid": user_id},
+        )
         await db.commit()
         return True
 
-    # Match results by job_id (which is jp.id = job_postings.id)
-    batch_model = meta.get("model")
+    single_model = meta.get("model")
     returned = {opp.job_id: opp for opp in result.opportunities}
-    now = now_utc()
-    scored_count = 0
-    for jp_id in jp_ids:
-        opp = returned.get(jp_id)
-        if opp is None:
-            logger.warning("llm_scorer: job_id=%d missing from batch response", jp_id)
-            await db.execute(
-                text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
-                {"err": "Missing from LLM batch response", "now": now, "jid": jp_id, "uid": user_id},
-            )
-            continue
-        await _write_score(db, jp_id, user_id, opp, model=batch_model)
-        # Also update inferred_industries on the shared job_postings row
+    opp = returned.get(jp_id)
+    if opp is None:
+        logger.warning("llm_scorer: job_id=%d missing from LLM response", jp_id)
         await db.execute(
-            text("UPDATE job_postings SET inferred_industries=:ind WHERE id=:id"),
-            {"ind": json.dumps(opp.inferred_industries), "id": jp_id},
+            text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            {"err": "Missing from LLM response", "now": now_utc(), "jid": jp_id, "uid": user_id},
         )
-        scored_count += 1
+        await db.commit()
+        return True
 
-    await _increment_scorings_today(db, user_id, scored_count)
+    await _write_score(db, jp_id, user_id, opp, model=single_model)
+    await db.execute(
+        text("UPDATE job_postings SET inferred_industries=:ind WHERE id=:id"),
+        {"ind": json.dumps(opp.inferred_industries), "id": jp_id},
+    )
+    await _increment_scorings_today(db, user_id, 1)
     await db.commit()
     return True
 
@@ -415,156 +397,16 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
 
 async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int], user_id: int | None = None) -> dict[int, bool]:
     """
-    Score a specific list of jobs (job_postings.id) in one LLM call — used by bulk rescore endpoint.
+    Score a specific list of jobs (job_postings.id) one at a time — used by bulk rescore endpoint.
     user_id scopes ownership check; if omitted, looks up via user_job_postings.
     Returns a dict mapping job_id → True (scored) / False (failed/missing).
     """
     if not job_ids:
         return {}
 
-    placeholders = ",".join(f":id{i}" for i in range(len(job_ids)))
-    params = {f"id{i}": jid for i, jid in enumerate(job_ids)}
-    if user_id is not None:
-        params["uid"] = user_id
-        uid_filter = "AND ujp.user_id = :uid"
-    else:
-        uid_filter = ""
-
-    rows = await db.execute(
-        text(f"""
-            SELECT jp.id AS jp_id, ujp.user_id,
-                   jp.title, jp.company, jp.url, jp.description, jp.inferred_industries
-            FROM job_postings jp
-            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id
-            WHERE jp.id IN ({placeholders}) {uid_filter}
-        """),
-        params,
-    )
-    job_rows = rows.mappings().all()
-    if not job_rows:
-        return {jid: False for jid in job_ids}
-
-    resolved_user_id = user_id or job_rows[0]["user_id"]
-    found_ids = {r["jp_id"] for r in job_rows}
-
-    # Exclude jobs whose application has progressed to applied or beyond
-    if found_ids:
-        adv_placeholders = ",".join(f":aid{i}" for i in range(len(found_ids)))
-        adv_params = {f"aid{i}": jid for i, jid in enumerate(found_ids)}
-        adv_params["uid"] = resolved_user_id
-        adv_rows = await db.execute(
-            text(f"""
-                SELECT DISTINCT job_posting_id FROM applications
-                WHERE job_posting_id IN ({adv_placeholders})
-                  AND user_id = :uid
-                  AND status IN ('applied', 'interviewing', 'offered', 'rejected', 'withdrawn')
-            """),
-            adv_params,
-        )
-        advanced_ids = {r[0] for r in adv_rows.fetchall()}
-        if advanced_ids:
-            logger.info("llm_scorer: skipping %d job(s) in advanced status: %s", len(advanced_ids), advanced_ids)
-            found_ids -= advanced_ids
-
-    if not found_ids:
-        return {jid: False for jid in job_ids}
-
-    # Enforce daily scoring cap
-    daily_limit = await _get_daily_limit(db, resolved_user_id)
-    scored_today = await _get_scorings_today(db, resolved_user_id)
-    remaining = daily_limit - scored_today
-    if remaining <= 0:
-        logger.info("llm_scorer: user_id=%d daily limit reached (%d), skipping bulk rescore", resolved_user_id, daily_limit)
-        return {jid: False for jid in job_ids}
-    if len(found_ids) > remaining:
-        logger.info("llm_scorer: trimming bulk rescore from %d to %d (daily limit)", len(found_ids), remaining)
-        found_ids = set(list(found_ids)[:remaining])
-
-    logger.info("llm_scorer: bulk rescoring %d jobs for user_id=%d (%d/%d used today)",
-                len(found_ids), resolved_user_id, scored_today, daily_limit)
-
-    # Mark as in-progress — old score fields untouched so jobs stay visible
-    for jid in found_ids:
-        await db.execute(
-            text("UPDATE user_job_postings SET rescoring=true, score_error=NULL WHERE job_posting_id=:jid AND user_id=:uid"),
-            {"jid": jid, "uid": resolved_user_id},
-        )
-    await db.commit()
-
-    profile = await _load_profile(db, resolved_user_id)
-    feedback_examples = await _build_feedback_examples(db, resolved_user_id)
-
-    job_dicts = [
-        {
-            "job_id":              r["jp_id"],
-            "title":               r["title"],
-            "company":             r["company"],
-            "url":                 r["url"],
-            "description":         r["description"] or "",
-            "inferred_industries": json.loads(r["inferred_industries"] or "[]"),
-        }
-        for r in job_rows
-        if r["jp_id"] in found_ids
-    ]
-
-    results: dict[int, bool] = {jid: False for jid in job_ids}
-
-    t_start = time.monotonic()
-    try:
-        result, meta = await run_research_agent(
-            profile=profile,
-            job_postings=job_dicts,
-            search_filters={},
-            db=db,
-            user_id=resolved_user_id,
-            request_type="scoring",
-            feedback_examples=feedback_examples,
-            full_description=True,
-        )
-        logger.info("llm_scorer: bulk rescore LLM call completed in %.1fs", time.monotonic() - t_start)
-    except Exception as exc:
-        error_msg = f"{type(exc).__name__}: {exc}"
-        logger.error("llm_scorer: bulk rescore failed: %s", error_msg)
-        for jid in found_ids:
-            await db.execute(
-                text("UPDATE user_job_postings SET rescoring=false, score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
-                {"err": error_msg, "jid": jid, "uid": resolved_user_id},
-            )
-        await db.commit()
-        return results
-
-    if isinstance(result, AgentError):
-        logger.warning("llm_scorer: bulk rescore agent error: %s", result.error)
-        for jid in found_ids:
-            await db.execute(
-                text("UPDATE user_job_postings SET rescoring=false, score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
-                {"err": result.error, "jid": jid, "uid": resolved_user_id},
-            )
-        await db.commit()
-        return results
-
-    bulk_model = meta.get("model")
-    returned = {opp.job_id: opp for opp in result.opportunities}
-    scored_count = 0
-    for jid in found_ids:
-        opp = returned.get(jid)
-        if opp is None:
-            logger.warning("llm_scorer: job_id=%d missing from bulk response", jid)
-            await db.execute(
-                text("UPDATE user_job_postings SET rescoring=false, score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
-                {"err": "Missing from LLM bulk response", "jid": jid, "uid": resolved_user_id},
-            )
-        else:
-            await _write_score(db, jid, resolved_user_id, opp, model=bulk_model)
-            await db.execute(
-                text("UPDATE job_postings SET inferred_industries=:ind WHERE id=:id"),
-                {"ind": json.dumps(opp.inferred_industries), "id": jid},
-            )
-            results[jid] = True
-            scored_count += 1
-
-    await _increment_scorings_today(db, resolved_user_id, scored_count)
-    await db.commit()
+    results: dict[int, bool] = {}
+    for jid in job_ids:
+        results[jid] = await score_single_job(db, jid, user_id=user_id)
     return results
 
 

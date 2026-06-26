@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     max_tool_iterations: int = 25
     max_self_corrections: int = 3
     max_concurrent_jobs: int = 5
-    scorer_batch_size: int = 10
+    scorer_batch_size: int = 1
     max_scorings_per_user_per_day: int = 50    # existing users
     new_user_scoring_limit: int = 250          # users who have never had a job scored
     token_budget_per_session: int = 100_000

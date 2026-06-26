@@ -190,27 +190,35 @@ async def test_score_next_batch_new_user_higher_limit():
 
 
 @pytest.mark.asyncio
-async def test_score_next_batch_trims_to_remaining_slots():
-    """Batch trimmed to remaining slots when fewer than batch_size remain."""
+async def test_score_next_batch_scores_one_job_when_slots_remain():
+    """score_next_batch scores exactly 1 job when daily slots remain."""
     from app.pipeline.llm_scorer import score_next_batch
 
-    job_rows = []
-    for i in range(5):
-        r = MagicMock()
-        r.__getitem__ = lambda self, k, i=i: {
-            "user_id": 1, "jp_id": 10 + i, "title": f"Dev{i}",
-            "company": "X", "url": "u", "description": "d", "inferred_industries": "[]"
-        }[k]
-        job_rows.append(r)
+    job_row = MagicMock()
+    job_row.__getitem__ = lambda self, k: {
+        "user_id": 1, "jp_id": 10, "title": "Dev",
+        "company": "X", "url": "u", "description": "d", "inferred_industries": "[]"
+    }[k]
 
     jobs_result = MagicMock()
-    jobs_result.mappings.return_value.all.return_value = job_rows
+    jobs_result.mappings.return_value.all.return_value = [job_row]
 
     scored_ids = []
 
     async def fake_run_agent(profile, job_postings, **kwargs):
         scored_ids.extend([j["job_id"] for j in job_postings])
-        return MagicMock(opportunities=[]), {"model": "test"}
+        opp = MagicMock()
+        opp.job_id = job_postings[0]["job_id"]
+        opp.fit_score = 0.8
+        opp.reasons = []
+        opp.risks = []
+        opp.key_keywords = []
+        opp.scoring_breakdown = []
+        opp.recommendation = ""
+        opp.inferred_industries = []
+        result = MagicMock()
+        result.opportunities = [opp]
+        return result, {"model": "test"}
 
     db = AsyncMock(spec=AsyncSession)
     call_count = 0
@@ -232,10 +240,11 @@ async def test_score_next_batch_trims_to_remaining_slots():
         patch("app.pipeline.llm_scorer.run_research_agent", fake_run_agent),
         patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
     ):
-        mock_cfg.return_value = MagicMock(scorer_batch_size=10, new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        mock_cfg.return_value = MagicMock(scorer_batch_size=1, new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
         await score_next_batch(db)
 
-    assert len(scored_ids) == 2
+    assert len(scored_ids) == 1
+    assert scored_ids[0] == 10
 
 
 # ---------------------------------------------------------------------------
