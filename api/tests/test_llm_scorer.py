@@ -737,14 +737,16 @@ async def test_loop_query_includes_errored_jobs_with_old_scored_at():
 
 
 @pytest.mark.asyncio
-async def test_loop_query_excludes_jobs_currently_rescoring():
-    """Jobs with rescoring=true must not be picked up by the loop."""
+async def test_loop_query_picks_up_pending_rescores():
+    """Jobs with scored=true AND rescoring=true (pending rescore) must be picked up by the loop."""
     db = _db_with_batch(job_rows=[])
 
     await score_next_batch(db)
 
     select_sql = db.execute.call_args_list[0].args[0].text
-    assert "rescoring = false" in select_sql
+    # Both new unscored jobs and pending rescores are included
+    assert "scored = false AND ujp.rescoring = false" in select_sql
+    assert "scored = true AND ujp.rescoring = true" in select_sql
 
 
 @pytest.mark.asyncio

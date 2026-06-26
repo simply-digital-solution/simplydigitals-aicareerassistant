@@ -118,13 +118,17 @@ async def score_next_batch(db: AsyncSession) -> bool:
             FROM user_job_postings ujp
             JOIN job_postings jp ON jp.id = ujp.job_posting_id
             JOIN users u ON u.id = ujp.user_id
-            WHERE ujp.scored = false
-              AND ujp.rescoring = false
-              AND u.scoring_suspended = false
+            WHERE u.scoring_suspended = false
               AND (
-                ujp.score_error IS NULL
-                OR ujp.scored_at < NOW() - INTERVAL '30 minutes'
-                OR ujp.scored_at IS NULL
+                -- New unscored job
+                (ujp.scored = false AND ujp.rescoring = false AND (
+                  ujp.score_error IS NULL
+                  OR ujp.scored_at < NOW() - INTERVAL '30 minutes'
+                  OR ujp.scored_at IS NULL
+                ))
+                OR
+                -- Pending rescore (card stays visible with spinner)
+                (ujp.scored = true AND ujp.rescoring = true)
               )
               AND NOT EXISTS (
                 SELECT 1 FROM applications a
@@ -132,7 +136,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
                   AND a.user_id = ujp.user_id
                   AND a.status IN ('applied', 'interviewing', 'offered', 'rejected', 'withdrawn')
               )
-            ORDER BY jp.posted_at ASC, jp.scraped_at ASC
+            ORDER BY ujp.rescoring DESC, jp.posted_at ASC, jp.scraped_at ASC
             LIMIT 1
         """),
         {},
