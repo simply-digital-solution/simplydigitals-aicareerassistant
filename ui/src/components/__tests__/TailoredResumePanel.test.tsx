@@ -322,6 +322,19 @@ describe('TailoredResumePanel', () => {
       expect(screen.getByText(/gemini 503/i)).toBeInTheDocument(),
     )
   })
+
+  it('shows friendly message when AI service is unavailable (503)', async () => {
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    const apiErr = { response: { data: { detail: 'AI service is temporarily unavailable. Please try again in a few minutes.' } } }
+    mockResearchApi.generateResume.mockRejectedValue(apiErr)
+
+    renderPanel()
+    await waitFor(() => screen.getByRole('button', { name: /generate/i }))
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+    await waitFor(() =>
+      expect(screen.getByText(/AI service is temporarily unavailable/i)).toBeInTheDocument(),
+    )
+  })
 })
 
 describe('MarkAppliedButton', () => {

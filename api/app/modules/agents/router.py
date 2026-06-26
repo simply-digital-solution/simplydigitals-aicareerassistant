@@ -1503,15 +1503,21 @@ async def generate_resume(
     application_id = app["id"] if app else None
 
     # ── LLM generation ───────────────────────────────────────────────────────
-    result, _ = await run_resume_generate_agent(
-        resume_text=resume_text,
-        jd_text=job["description"] or "",
-        candidate_name=candidate_name,
-        additional_context=body.additional_context,
-        db=db,
-        user_id=current_user.id,
-        application_id=application_id,
-    )
+    import httpx as _httpx
+    try:
+        result, _ = await run_resume_generate_agent(
+            resume_text=resume_text,
+            jd_text=job["description"] or "",
+            candidate_name=candidate_name,
+            additional_context=body.additional_context,
+            db=db,
+            user_id=current_user.id,
+            application_id=application_id,
+        )
+    except _httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 503:
+            raise HTTPException(503, "AI service is temporarily unavailable. Please try again in a few minutes.")
+        raise
 
     if isinstance(result, AgentError):
         raise HTTPException(502, f"Resume generation failed: {result.error}")
