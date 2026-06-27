@@ -22,7 +22,7 @@ from app.shared.schemas import AgentError
 
 logger = logging.getLogger(__name__)
 
-SLEEP_BETWEEN_BATCHES = 30    # seconds between scoring batches
+SLEEP_BETWEEN_BATCHES = 5     # seconds between scoring jobs
 SLEEP_QUEUE_EMPTY     = 300   # seconds to wait when no unscored jobs remain
 
 
