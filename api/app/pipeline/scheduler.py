@@ -6,12 +6,15 @@ Crons:
   06:00 SGT daily  → suspend_inactive_users()
 Loop:
   continuous asyncio task → run_scorer_loop()
+Startup:
+  one-shot task → backfill_industries() if any jobs are unclassified
 """
 import asyncio
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +61,37 @@ async def _run_daily_job_cleanup() -> None:
     logger.info("scheduler: deleted %d stale job(s)", deleted)
 
 
+async def _count_unclassified_jobs(db) -> int:
+    """Return the number of active jobs with no industry classification."""
+    row = await db.execute(
+        text("""
+            SELECT COUNT(DISTINCT jp.id)
+            FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id
+            WHERE (jp.inferred_industries = '[]' OR jp.inferred_industries IS NULL)
+              AND ujp.archived = false
+        """)
+    )
+    return row.scalar() or 0
+
+
+async def _startup_industry_backfill(get_db_context_fn) -> None:
+    """Run industry backfill at startup if any active jobs are unclassified."""
+    try:
+        async with get_db_context_fn() as db:
+            count = await _count_unclassified_jobs(db)
+        if count == 0:
+            logger.info("scheduler: all jobs classified — skipping startup backfill")
+            return
+        logger.info("scheduler: %d unclassified job(s) found — starting backfill", count)
+        from app.pipeline.industry_backfill import backfill_industries
+        async with get_db_context_fn() as db:
+            classified = await backfill_industries(db)
+        logger.info("scheduler: startup backfill complete — %d job(s) classified", classified)
+    except Exception:
+        logger.exception("scheduler: startup backfill failed — will retry on next deploy")
+
+
 def start(get_db_context_fn) -> None:
     """Start the scheduler and scorer loop. Call once from app lifespan."""
     global _scheduler, _scorer_task
@@ -97,6 +131,9 @@ def start(get_db_context_fn) -> None:
     from app.pipeline.llm_scorer import run_scorer_loop
     _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))
     logger.info("scheduler: LLM scorer loop started")
+
+    asyncio.create_task(_startup_industry_backfill(get_db_context_fn))
+    logger.info("scheduler: startup industry backfill task queued")
 
 
 def stop() -> None:
