@@ -73,11 +73,11 @@ async def get_dashboard_stats(
         "date", 30,
     )
 
-    # 3. Jobs selected per day — applications created in last 30 days
+    # 3. Jobs selected per day — applications with status='selected' created in last 30 days
     r3 = await db.execute(text("""
         SELECT date(created_at) AS day, count(*) AS count
         FROM applications
-        WHERE user_id = :uid AND created_at >= :since
+        WHERE user_id = :uid AND status = 'selected' AND created_at >= :since
         GROUP BY day ORDER BY day
     """), {"uid": uid, "since": since})
     selected_by_day = _fill_days(

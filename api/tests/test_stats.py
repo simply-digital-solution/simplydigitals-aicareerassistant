@@ -151,3 +151,54 @@ async def test_user_id_passed_to_all_queries():
     for call in db.execute.call_args_list:
         params = call.args[1]
         assert params.get("uid") == 42
+
+
+@pytest.mark.asyncio
+async def test_selected_by_day_query_filters_by_status_selected():
+    """
+    Regression: dashboard selected count must only count applications with
+    status='selected', not all applications. Previously missing the status
+    filter caused the dashboard to show a higher count than the Selected tab.
+    """
+    from app.modules.stats.router import get_dashboard_stats
+
+    db = _make_db([[], [], [], [], []])
+    await get_dashboard_stats(current_user=_make_user(), db=db)
+
+    # The 3rd execute call is the selected_by_day query (0-indexed: call index 2)
+    third_call_sql = str(db.execute.call_args_list[2].args[0])
+    assert "status = 'selected'" in third_call_sql, (
+        "selected_by_day query must filter by status='selected' to match the Selected tab count"
+    )
+
+
+@pytest.mark.asyncio
+async def test_selected_count_does_not_include_applied_or_interviewing():
+    """
+    Positive: selected_by_day reflects only status='selected' rows.
+    Applied and interviewing rows in DB must not inflate the count.
+    """
+    from app.modules.stats.router import get_dashboard_stats
+
+    today = date.today().isoformat()
+    # Simulate: 2 selected jobs today returned by the query
+    selected_rows = [_row(today, 2)]
+    db = _make_db([[], [], selected_rows, [], []])
+    result = await get_dashboard_stats(current_user=_make_user(), db=db)
+
+    last_entry = result["selected_by_day"][-1]
+    assert last_entry["date"] == today
+    assert last_entry["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_selected_count_zero_when_no_selected_applications():
+    """
+    Negative: selected_by_day is all zeros when there are no selected applications.
+    """
+    from app.modules.stats.router import get_dashboard_stats
+
+    db = _make_db([[], [], [], [], []])
+    result = await get_dashboard_stats(current_user=_make_user(), db=db)
+
+    assert all(e["count"] == 0 for e in result["selected_by_day"])
