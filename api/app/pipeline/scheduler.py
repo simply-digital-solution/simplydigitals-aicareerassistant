@@ -16,6 +16,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import text
 
+from app.shared.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 _scheduler: AsyncIOScheduler | None = None
@@ -92,6 +94,32 @@ async def _startup_industry_backfill(get_db_context_fn) -> None:
         logger.exception("scheduler: startup backfill failed — will retry on next deploy")
 
 
+def _start_traffic_controller() -> None:
+    """Start LLMTrafficController if feature flag is enabled."""
+    if not get_settings().enable_llm_traffic_controller:
+        logger.info("scheduler: LLM traffic controller disabled (enable_llm_traffic_controller=false)")
+        return
+    try:
+        from app.shared.llm_traffic_controller import _init_controller
+        controller = _init_controller()
+        controller.start()
+        logger.info("scheduler: LLM traffic controller started")
+    except Exception:
+        logger.exception("scheduler: failed to start LLM traffic controller — continuing without it")
+
+
+def _stop_traffic_controller() -> None:
+    """Stop LLMTrafficController if it was started."""
+    try:
+        from app.shared.llm_traffic_controller import get_controller, _clear_controller
+        controller = get_controller()
+        if controller:
+            controller.stop()
+        _clear_controller()
+    except Exception:
+        logger.exception("scheduler: error stopping LLM traffic controller")
+
+
 def start(get_db_context_fn) -> None:
     """Start the scheduler and scorer loop. Call once from app lifespan."""
     global _scheduler, _scorer_task
@@ -128,6 +156,8 @@ def start(get_db_context_fn) -> None:
     _scheduler.start()
     logger.info("scheduler: started — scrape 05:00 SGT, refinement 05:30 SGT, suspension 06:00 SGT, job cleanup 04:00 SGT")
 
+    _start_traffic_controller()
+
     from app.pipeline.llm_scorer import run_scorer_loop
     _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))
     logger.info("scheduler: LLM scorer loop started")
@@ -145,4 +175,5 @@ def stop() -> None:
     if _scorer_task:
         _scorer_task.cancel()
         _scorer_task = None
+    _stop_traffic_controller()
     logger.info("scheduler: stopped")

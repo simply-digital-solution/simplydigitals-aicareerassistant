@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # LLM rate limiting — Gemini paid tier is 1000 RPM; free tier was 15
     llm_rpm_limit: int = 1000
 
+    # LLM Traffic Controller — set to true in .env to enable (Release 5)
+    enable_llm_traffic_controller: bool = False
+
     # Monitor
     monitor_interval_seconds: int = 900  # 15 minutes
     stale_application_days: int = 14
