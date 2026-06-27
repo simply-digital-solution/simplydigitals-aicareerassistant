@@ -104,6 +104,43 @@ async def test_move_invalid_status_raises_400():
 
 
 # ---------------------------------------------------------------------------
+# kanban helpers — raw SQL mapping rows
+# ---------------------------------------------------------------------------
+
+def _make_row(app_id=1, user_id=1, status="selected",
+              status_updated_at=None, company_name="Acme", role_title="Engineer"):
+    """Return a dict simulating a raw SQL mapping row from the kanban query."""
+    return {
+        "id": app_id,
+        "user_id": user_id,
+        "status": status,
+        "company_name": company_name,
+        "role_title": role_title,
+        "job_description": None,
+        "jd_summary": None,
+        "source_url": None,
+        "source": "manual",
+        "fit_score": None,
+        "deadline": None,
+        "applied_at": None,
+        "notes": None,
+        "job_posting_id": None,
+        "status_updated_at": status_updated_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
+        "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        "updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+
+
+def _make_kanban_db(rows: list[dict]):
+    """Return an AsyncMock DB whose execute().mappings() returns the given rows."""
+    db = AsyncMock()
+    result = MagicMock()
+    result.mappings.return_value = rows
+    db.execute.return_value = result
+    return db
+
+
+# ---------------------------------------------------------------------------
 # kanban — ordered by status_updated_at DESC
 # ---------------------------------------------------------------------------
 
@@ -111,17 +148,11 @@ async def test_move_invalid_status_raises_400():
 async def test_kanban_orders_by_status_updated_at_desc():
     from app.modules.applications.router import get_pipeline
 
-    older = _make_app(app_id=1, status="selected",
-                      status_updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
-    newer = _make_app(app_id=2, status="selected",
-                      status_updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
+    older_row = _make_row(app_id=1, status_updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    newer_row = _make_row(app_id=2, status_updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
 
-    db = AsyncMock()
-    result = MagicMock()
-    # API returns apps ordered DESC already — simulate backend returning newer first
-    result.scalars.return_value.all.return_value = [newer, older]
-    db.execute.return_value = result
-
+    # DB returns rows already ordered DESC (newer first)
+    db = _make_kanban_db([newer_row, older_row])
     board = await get_pipeline(current_user=_make_user(), db=db)
 
     selected = board["selected"]
@@ -329,15 +360,68 @@ async def test_create_skips_backfill_when_no_job_posting_id():
 async def test_kanban_groups_by_status():
     from app.modules.applications.router import get_pipeline
 
-    app_selected = _make_app(app_id=1, status="selected")
-    app_applied = _make_app(app_id=2, status="applied")
+    row_selected = _make_row(app_id=1, status="selected")
+    row_applied  = _make_row(app_id=2, status="applied")
 
-    db = AsyncMock()
-    result = MagicMock()
-    result.scalars.return_value.all.return_value = [app_selected, app_applied]
-    db.execute.return_value = result
-
+    db = _make_kanban_db([row_selected, row_applied])
     board = await get_pipeline(current_user=_make_user(), db=db)
 
     assert any(a.id == 1 for a in board["selected"])
     assert any(a.id == 2 for a in board["applied"])
+
+
+@pytest.mark.asyncio
+async def test_kanban_excludes_archived_jobs():
+    """
+    Positive: kanban SQL JOINs user_job_postings with archived=false,
+    so archived job postings do not appear in any column.
+    """
+    from app.modules.applications.router import get_pipeline
+
+    # Only non-archived rows are returned by the DB (JOIN filters them out)
+    row_active = _make_row(app_id=1, status="selected")
+    db = _make_kanban_db([row_active])
+    board = await get_pipeline(current_user=_make_user(), db=db)
+
+    assert len(board["selected"]) == 1
+    assert board["selected"][0].id == 1
+
+
+@pytest.mark.asyncio
+async def test_kanban_sql_joins_user_job_postings_with_archived_filter():
+    """
+    Regression: kanban query must JOIN user_job_postings with archived=false
+    to match the Selected tab query — prevents inflated selected count.
+    """
+    from app.modules.applications.router import get_pipeline
+
+    db = _make_kanban_db([])
+    await get_pipeline(current_user=_make_user(), db=db)
+
+    sql = str(db.execute.call_args_list[0].args[0])
+    assert "user_job_postings" in sql
+    assert "archived" in sql
+
+
+@pytest.mark.asyncio
+async def test_kanban_empty_board_returns_all_status_keys():
+    """Positive: board always has all status keys even when no apps exist."""
+    from app.modules.applications.router import get_pipeline, VALID_STATUSES
+
+    db = _make_kanban_db([])
+    board = await get_pipeline(current_user=_make_user(), db=db)
+
+    assert set(board.keys()) == VALID_STATUSES
+    assert all(v == [] for v in board.values())
+
+
+@pytest.mark.asyncio
+async def test_kanban_unknown_status_bucketed_into_selected():
+    """Negative: application with unknown status falls back to 'selected' bucket."""
+    from app.modules.applications.router import get_pipeline
+
+    row = _make_row(app_id=5, status="unknown_future_status")
+    db = _make_kanban_db([row])
+    board = await get_pipeline(current_user=_make_user(), db=db)
+
+    assert any(a.id == 5 for a in board["selected"])

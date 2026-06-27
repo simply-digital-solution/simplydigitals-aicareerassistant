@@ -98,17 +98,25 @@ async def get_pipeline(
     db: AsyncSession = Depends(get_db),
 ):
     """Returns applications grouped by status for the Kanban board."""
-    result = await db.execute(
-        select(Application)
-        .where(Application.user_id == current_user.id)
-        .order_by(Application.status_updated_at.desc())
+    rows = await db.execute(
+        text("""
+            SELECT a.*
+            FROM applications a
+            JOIN user_job_postings ujp
+              ON ujp.job_posting_id = a.job_posting_id
+             AND ujp.user_id = a.user_id
+             AND ujp.archived = false
+            WHERE a.user_id = :uid
+            ORDER BY a.status_updated_at DESC
+        """),
+        {"uid": current_user.id},
     )
-    apps = result.scalars().all()
+    app_rows = [dict(r) for r in rows.mappings()]
 
     board: dict[str, list] = {s: [] for s in VALID_STATUSES}
-    for app in apps:
-        status = app.status if app.status in VALID_STATUSES else "selected"
-        board[status].append(ApplicationResponse.model_validate(app))
+    for row in app_rows:
+        status = row["status"] if row["status"] in VALID_STATUSES else "selected"
+        board[status].append(ApplicationResponse.model_validate(row))
 
     return board
 
