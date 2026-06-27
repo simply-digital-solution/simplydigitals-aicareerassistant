@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     new_user_scoring_limit: int = 250          # users who have never had a job scored
     token_budget_per_session: int = 100_000
 
+    # LLM rate limiting — Gemini paid tier is 1000 RPM; free tier was 15
+    llm_rpm_limit: int = 1000
+
     # Monitor
     monitor_interval_seconds: int = 900  # 15 minutes
     stale_application_days: int = 14

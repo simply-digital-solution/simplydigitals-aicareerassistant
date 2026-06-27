@@ -1,8 +1,8 @@
 """
 Global Gemini API rate limiter — token bucket using a sliding window.
 
-Gemini free tier: 15 RPM (requests per minute) per API key, shared across
-all users and all concurrent requests in this process.
+RPM limit is read from settings (llm_rpm_limit). Default is 1000 for the
+paid Gemini tier. Override in .env: LLM_RPM_LIMIT=<value>
 
 Usage:
     await gemini_rate_limiter.acquire()   # blocks until a slot is available
@@ -14,11 +14,12 @@ in the process regardless of which user triggered the call.
 import asyncio
 import time
 import logging
+from app.shared.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 WINDOW_SECONDS = 60
-DEFAULT_MAX_RPM = 15
+DEFAULT_MAX_RPM = 1000
 
 
 class SlidingWindowRateLimiter:
@@ -69,8 +70,13 @@ class SlidingWindowRateLimiter:
         return max(0, self._max - self.slots_used)
 
 
+def _build_rate_limiter() -> SlidingWindowRateLimiter:
+    try:
+        rpm = get_settings().llm_rpm_limit
+    except Exception:
+        rpm = DEFAULT_MAX_RPM
+    return SlidingWindowRateLimiter(max_per_window=rpm, window_seconds=WINDOW_SECONDS)
+
+
 # Module-level singleton — shared across all requests in the process
-gemini_rate_limiter = SlidingWindowRateLimiter(
-    max_per_window=DEFAULT_MAX_RPM,
-    window_seconds=WINDOW_SECONDS,
-)
+gemini_rate_limiter = _build_rate_limiter()
