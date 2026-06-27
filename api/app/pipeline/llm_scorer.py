@@ -221,7 +221,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: job_id=%d failed after %.1fs: %s", jp_id, time.monotonic() - t_start, error_msg)
         await db.execute(
-            text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scored=false, rescoring=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": error_msg, "now": now_utc(), "jid": jp_id, "uid": user_id},
         )
         await db.commit()
@@ -231,7 +231,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         error_msg = result.error
         logger.warning("llm_scorer: agent error for job_id=%d: %s", jp_id, error_msg)
         await db.execute(
-            text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scored=false, rescoring=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": error_msg, "now": now_utc(), "jid": jp_id, "uid": user_id},
         )
         await db.commit()
@@ -243,7 +243,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     if opp is None:
         logger.warning("llm_scorer: job_id=%d missing from LLM response", jp_id)
         await db.execute(
-            text("UPDATE user_job_postings SET scored=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scored=false, rescoring=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": "Missing from LLM response", "now": now_utc(), "jid": jp_id, "uid": user_id},
         )
         await db.commit()

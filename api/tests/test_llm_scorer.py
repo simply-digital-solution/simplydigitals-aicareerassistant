@@ -229,6 +229,7 @@ async def test_missing_job_id_marked_as_failed():
     error_calls = _find_error_calls(db)
     assert len(error_calls) == 1
     assert "Missing" in error_calls[0].args[1]["err"]
+    assert "rescoring=false" in error_calls[0].args[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +254,7 @@ async def test_agent_exception_marks_job_failed():
     assert len(error_calls) == 1
     assert "RuntimeError" in error_calls[0].args[1]["err"]
     assert "scored=false" in error_calls[0].args[0].text
+    assert "rescoring=false" in error_calls[0].args[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +279,7 @@ async def test_agent_error_result_marks_job_failed():
     error_calls = _find_error_calls(db)
     assert len(error_calls) == 1
     assert error_calls[0].args[1]["err"] == "parse failed"
+    assert "rescoring=false" in error_calls[0].args[0].text
 
 
 # ---------------------------------------------------------------------------
