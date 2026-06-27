@@ -760,3 +760,161 @@ async def test_loop_query_excludes_applied_or_advanced_status_jobs():
     assert "NOT EXISTS" in select_sql
     assert "applied" in select_sql
     assert "interviewing" in select_sql
+
+
+# ---------------------------------------------------------------------------
+# Release 4 — dual-path: controller enqueue when flag on
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_flag_off_uses_direct_path():
+    """Positive: flag off → run_research_agent is called directly (no controller)."""
+    row    = _make_job_row(job_id=10)
+    db     = _db_with_batch([row])
+    opp    = _make_opportunity(job_id=10)
+    result = _make_research_result([opp])
+
+    mock_agent = AsyncMock(return_value=(result, {"model": "gemini-2.5-flash-lite"}))
+    mock_settings = MagicMock()
+    mock_settings.enable_llm_traffic_controller = False
+    mock_settings.max_scorings_per_user_per_day = 50
+    mock_settings.new_user_scoring_limit = 250
+
+    with (
+        patch("app.pipeline.llm_scorer.get_settings", return_value=mock_settings),
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", mock_agent),
+    ):
+        had_work = await score_next_batch(db)
+
+    assert had_work is True
+    mock_agent.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_flag_on_enqueues_to_controller_not_direct_agent():
+    """Positive: flag on → enqueue() is called, run_research_agent is NOT called."""
+    row = _make_job_row(job_id=20, user_id=5)
+    db  = _db_with_batch([row])
+
+    mock_controller = MagicMock()
+    mock_controller.enqueue.return_value = True
+    mock_controller.queue_size = 1
+
+    mock_settings = MagicMock()
+    mock_settings.enable_llm_traffic_controller = True
+    mock_settings.max_scorings_per_user_per_day = 50
+    mock_settings.new_user_scoring_limit = 250
+
+    mock_agent = AsyncMock()
+
+    with (
+        patch("app.pipeline.llm_scorer.get_settings", return_value=mock_settings),
+        patch("app.pipeline.llm_scorer.run_research_agent", mock_agent),
+        patch("app.shared.llm_traffic_controller.get_controller", return_value=mock_controller),
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+    ):
+        had_work = await score_next_batch(db)
+
+    assert had_work is True
+    mock_controller.enqueue.assert_called_once_with(user_id=5, job_id=20)
+    mock_agent.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_flag_on_enqueue_passes_correct_user_and_job():
+    """Positive: enqueue receives the exact user_id and job_id from the SELECT result."""
+    row = _make_job_row(job_id=77, user_id=99)
+    db  = _db_with_batch([row])
+
+    mock_controller = MagicMock()
+    mock_controller.enqueue.return_value = True
+    mock_controller.queue_size = 1
+
+    mock_settings = MagicMock()
+    mock_settings.enable_llm_traffic_controller = True
+    mock_settings.max_scorings_per_user_per_day = 50
+    mock_settings.new_user_scoring_limit = 250
+
+    with (
+        patch("app.pipeline.llm_scorer.get_settings", return_value=mock_settings),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock()),
+        patch("app.shared.llm_traffic_controller.get_controller", return_value=mock_controller),
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+    ):
+        await score_next_batch(db)
+
+    mock_controller.enqueue.assert_called_once_with(user_id=99, job_id=77)
+
+
+@pytest.mark.asyncio
+async def test_flag_on_queue_full_still_returns_true():
+    """Negative: controller returns False (queue full) — score_next_batch still returns True (job was found)."""
+    row = _make_job_row(job_id=30, user_id=5)
+    db  = _db_with_batch([row])
+
+    mock_controller = MagicMock()
+    mock_controller.enqueue.return_value = False  # queue full
+    mock_controller.queue_size = 500
+
+    mock_settings = MagicMock()
+    mock_settings.enable_llm_traffic_controller = True
+    mock_settings.max_scorings_per_user_per_day = 50
+    mock_settings.new_user_scoring_limit = 250
+
+    with (
+        patch("app.pipeline.llm_scorer.get_settings", return_value=mock_settings),
+        patch("app.pipeline.llm_scorer.run_research_agent", AsyncMock()),
+        patch("app.shared.llm_traffic_controller.get_controller", return_value=mock_controller),
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+    ):
+        had_work = await score_next_batch(db)
+
+    assert had_work is True
+
+
+@pytest.mark.asyncio
+async def test_flag_on_controller_none_falls_back_to_direct_path():
+    """Negative: flag on but controller not initialised → falls back to direct agent call."""
+    row    = _make_job_row(job_id=40)
+    db     = _db_with_batch([row])
+    opp    = _make_opportunity(job_id=40)
+    result = _make_research_result([opp])
+
+    mock_settings = MagicMock()
+    mock_settings.enable_llm_traffic_controller = True
+    mock_settings.max_scorings_per_user_per_day = 50
+    mock_settings.new_user_scoring_limit = 250
+
+    mock_agent = AsyncMock(return_value=(result, {"model": "gemini-2.5-flash-lite"}))
+
+    with (
+        patch("app.pipeline.llm_scorer.get_settings", return_value=mock_settings),
+        patch("app.pipeline.llm_scorer.run_research_agent", mock_agent),
+        patch("app.shared.llm_traffic_controller.get_controller", return_value=None),
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+    ):
+        had_work = await score_next_batch(db)
+
+    assert had_work is True
+    mock_agent.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_empty_queue_returns_false_regardless_of_flag():
+    """Negative: empty queue always returns False regardless of which path is active."""
+    db = _db_with_batch(job_rows=[])
+
+    for flag in (True, False):
+        db.execute.reset_mock()
+        db.execute.side_effect = [_batch_select_result([])]
+
+        mock_settings = MagicMock()
+        mock_settings.enable_llm_traffic_controller = flag
+        mock_settings.max_scorings_per_user_per_day = 50
+        mock_settings.new_user_scoring_limit = 250
+
+        with patch("app.pipeline.llm_scorer.get_settings", return_value=mock_settings):
+            had_work = await score_next_batch(db)
+
+        assert had_work is False, f"Expected False when flag={flag} and queue empty"

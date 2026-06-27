@@ -181,7 +181,7 @@ async def test_score_next_batch_new_user_higher_limit():
         patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
         patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
     ):
-        mock_cfg.return_value = MagicMock(scorer_batch_size=10, new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        mock_cfg.return_value = MagicMock(scorer_batch_size=10, new_user_scoring_limit=250, max_scorings_per_user_per_day=50, enable_llm_traffic_controller=False)
         result = await score_next_batch(db)
 
     # New user has 250 limit so 50 scored today is fine — should proceed
@@ -240,7 +240,7 @@ async def test_score_next_batch_scores_one_job_when_slots_remain():
         patch("app.pipeline.llm_scorer.run_research_agent", fake_run_agent),
         patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
     ):
-        mock_cfg.return_value = MagicMock(scorer_batch_size=1, new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        mock_cfg.return_value = MagicMock(scorer_batch_size=1, new_user_scoring_limit=250, max_scorings_per_user_per_day=50, enable_llm_traffic_controller=False)
         await score_next_batch(db)
 
     assert len(scored_ids) == 1

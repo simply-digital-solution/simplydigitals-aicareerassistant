@@ -105,10 +105,10 @@ async def _build_feedback_examples(db: AsyncSession, user_id: int) -> str:
     return "\n".join(lines)
 
 
-async def score_next_batch(db: AsyncSession) -> bool:
+async def _pick_next_job(db: AsyncSession) -> dict | None:
     """
-    Pick the next unscored job and score it in a single LLM call.
-    Returns True if a job was processed, False if the queue was empty.
+    SELECT the next job to score — shared by both the direct path and the
+    controller-enqueue path. Returns a mapping dict or None if queue is empty.
     """
     rows = await db.execute(
         text("""
@@ -142,10 +142,25 @@ async def score_next_batch(db: AsyncSession) -> bool:
         {},
     )
     job_rows = rows.mappings().all()
-    if not job_rows:
+    return job_rows[0] if job_rows else None
+
+
+async def score_next_batch(db: AsyncSession) -> bool:
+    """
+    Pick the next unscored job and process it.
+
+    When enable_llm_traffic_controller=True: enqueues (user_id, job_id) into
+    the LLMTrafficController and returns True immediately (non-blocking).
+
+    When enable_llm_traffic_controller=False (default): scores the job directly
+    via run_research_agent — identical to the original behaviour.
+
+    Returns True if a job was found, False if the queue was empty.
+    """
+    job_row = await _pick_next_job(db)
+    if not job_row:
         return False
 
-    job_row = job_rows[0]
     user_id = job_row["user_id"]
     jp_id   = job_row["jp_id"]
 
@@ -156,6 +171,24 @@ async def score_next_batch(db: AsyncSession) -> bool:
         logger.info("llm_scorer: user_id=%d has reached daily scoring limit (%d)", user_id, daily_limit)
         return False
 
+    if get_settings().enable_llm_traffic_controller:
+        # Controller path — enqueue and return; dispatcher handles the LLM call
+        from app.shared.llm_traffic_controller import get_controller
+        controller = get_controller()
+        if controller is not None:
+            enqueued = controller.enqueue(user_id=user_id, job_id=jp_id)
+            if enqueued:
+                logger.info(
+                    "llm_scorer: enqueued job_id=%d for user_id=%d (queue_size=%d)",
+                    jp_id, user_id, controller.queue_size,
+                )
+            else:
+                logger.warning("llm_scorer: controller queue full — dropping job_id=%d", jp_id)
+            return True
+        else:
+            logger.warning("llm_scorer: controller flag on but controller not initialised — falling back to direct path")
+
+    # Direct path (flag off, or controller not available) — unchanged behaviour
     logger.info("llm_scorer: scoring job_id=%d for user_id=%d (%d/%d used today)",
                 jp_id, user_id, scored_today, daily_limit)
 
