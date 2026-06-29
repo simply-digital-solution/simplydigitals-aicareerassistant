@@ -18,9 +18,20 @@ from app.shared.llm_traffic_controller import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _noop_db_context():
+    """Dummy async context manager — used wherever a real DB is not needed."""
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _ctx():
+        yield None
+
+    return _ctx()
+
+
 def make_controller() -> LLMTrafficController:
     """Return a fresh controller without starting the dispatch loop."""
-    return LLMTrafficController()
+    return LLMTrafficController(get_db_context_fn=lambda: _noop_db_context())
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +107,7 @@ def test_enqueue_increases_queue_size():
 
 def test_enqueue_returns_false_when_queue_full():
     """Negative: enqueue returns False and does not raise when queue is full."""
-    ctrl = LLMTrafficController()
+    ctrl = make_controller()
     for i in range(_QUEUE_MAX_SIZE):
         ctrl.enqueue(user_id=1, job_id=i)
     result = ctrl.enqueue(user_id=1, job_id=99999)
@@ -231,7 +242,7 @@ def test_get_controller_returns_none_before_init():
 def test_init_controller_returns_instance():
     """Positive: _init_controller() returns a LLMTrafficController."""
     _clear_controller()
-    ctrl = _init_controller()
+    ctrl = _init_controller(get_db_context_fn=lambda: _noop_db_context())
     assert isinstance(ctrl, LLMTrafficController)
     _clear_controller()
 
@@ -239,14 +250,14 @@ def test_init_controller_returns_instance():
 def test_get_controller_returns_instance_after_init():
     """Positive: get_controller() returns the same instance after _init_controller()."""
     _clear_controller()
-    ctrl = _init_controller()
+    ctrl = _init_controller(get_db_context_fn=lambda: _noop_db_context())
     assert get_controller() is ctrl
     _clear_controller()
 
 
 def test_clear_controller_sets_singleton_to_none():
     """Positive: _clear_controller() resets singleton to None."""
-    _init_controller()
+    _init_controller(get_db_context_fn=lambda: _noop_db_context())
     _clear_controller()
     assert get_controller() is None
 
@@ -254,11 +265,50 @@ def test_clear_controller_sets_singleton_to_none():
 def test_init_controller_replaces_existing_singleton():
     """Negative: calling _init_controller() twice replaces the first instance."""
     _clear_controller()
-    ctrl1 = _init_controller()
-    ctrl2 = _init_controller()
+    ctrl1 = _init_controller(get_db_context_fn=lambda: _noop_db_context())
+    ctrl2 = _init_controller(get_db_context_fn=lambda: _noop_db_context())
     assert ctrl1 is not ctrl2
     assert get_controller() is ctrl2
     _clear_controller()
+
+
+# ---------------------------------------------------------------------------
+# _do_score — real implementation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_do_score_calls_score_single_job():
+    """Positive: _do_score opens a DB session and calls score_single_job."""
+    mock_db = MagicMock()
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def fake_db_context():
+        yield mock_db
+
+    ctrl = LLMTrafficController(get_db_context_fn=fake_db_context)
+
+    with patch("app.pipeline.llm_scorer.score_single_job", new_callable=AsyncMock) as mock_score:
+        await ctrl._do_score(user_id=5, job_id=42)
+
+    mock_score.assert_awaited_once_with(mock_db, job_id=42, user_id=5)
+
+
+@pytest.mark.asyncio
+async def test_do_score_propagates_db_context_error():
+    """Negative: if get_db_context_fn raises, _do_score raises (caught by _score_with_lock)."""
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def broken_db_context():
+        raise RuntimeError("DB unavailable")
+        yield  # pragma: no cover
+
+    ctrl = LLMTrafficController(get_db_context_fn=broken_db_context)
+
+    with pytest.raises(RuntimeError, match="DB unavailable"):
+        await ctrl._do_score(user_id=1, job_id=99)
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +322,7 @@ def test_scheduler_does_not_start_controller_when_flag_off():
     mock_settings = MagicMock()
     mock_settings.enable_llm_traffic_controller = False
     with patch("app.pipeline.scheduler.get_settings", return_value=mock_settings):
-        _start_traffic_controller()
+        _start_traffic_controller(get_db_context_fn=lambda: _noop_db_context())
     assert get_controller() is None
 
 
@@ -284,7 +334,7 @@ async def test_scheduler_starts_controller_when_flag_on():
     mock_settings = MagicMock()
     mock_settings.enable_llm_traffic_controller = True
     with patch("app.pipeline.scheduler.get_settings", return_value=mock_settings):
-        _start_traffic_controller()
+        _start_traffic_controller(get_db_context_fn=lambda: _noop_db_context())
     ctrl = get_controller()
     try:
         assert ctrl is not None
@@ -306,7 +356,7 @@ def test_scheduler_start_controller_exception_does_not_crash():
             "app.shared.llm_traffic_controller._init_controller",
             side_effect=RuntimeError("init failed"),
         ):
-            _start_traffic_controller()  # must not raise
+            _start_traffic_controller(get_db_context_fn=lambda: _noop_db_context())  # must not raise
 
 
 def test_scheduler_stop_controller_is_safe_when_never_started():

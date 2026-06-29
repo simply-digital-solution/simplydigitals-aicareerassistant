@@ -7,7 +7,7 @@ enforces a per-user asyncio.Lock so two scoring calls for the same user
 never run simultaneously.
 
 This module is instantiated only when enable_llm_traffic_controller=True
-in settings. It is dead code in this release — wired up in Release 4.
+in settings.
 
 Architecture:
   - asyncio.Queue holds pending (user_id, job_id) pairs
@@ -33,7 +33,8 @@ class LLMTrafficController:
     per-user serialisation.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, get_db_context_fn: Callable) -> None:
+        self._get_db_context = get_db_context_fn
         self._queue: asyncio.Queue[tuple[int, int]] = asyncio.Queue(maxsize=_QUEUE_MAX_SIZE)
         self._user_locks: dict[int, asyncio.Lock] = {}
         self._dispatch_task: asyncio.Task | None = None
@@ -133,14 +134,10 @@ class LLMTrafficController:
                 )
 
     async def _do_score(self, user_id: int, job_id: int) -> None:
-        """
-        Placeholder — replaced in Release 4 with the real score_single_job call.
-        Exists here so _score_with_lock is testable without the full scorer.
-        """
-        logger.debug(
-            "llm_traffic_controller: _do_score user_id=%d job_id=%d (stub)",
-            user_id, job_id,
-        )
+        """Open a DB session and call score_single_job for the given job."""
+        from app.pipeline.llm_scorer import score_single_job
+        async with self._get_db_context() as db:
+            await score_single_job(db, job_id=job_id, user_id=user_id)
 
 
 # Module-level singleton — created only when the feature flag is enabled.
@@ -153,10 +150,10 @@ def get_controller() -> LLMTrafficController | None:
     return _controller
 
 
-def _init_controller() -> LLMTrafficController:
+def _init_controller(get_db_context_fn: Callable) -> LLMTrafficController:
     """Create and return a new controller. Called once by scheduler.start()."""
     global _controller
-    _controller = LLMTrafficController()
+    _controller = LLMTrafficController(get_db_context_fn)
     return _controller
 
 

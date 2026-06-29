@@ -94,14 +94,14 @@ async def _startup_industry_backfill(get_db_context_fn) -> None:
         logger.exception("scheduler: startup backfill failed — will retry on next deploy")
 
 
-def _start_traffic_controller() -> None:
+def _start_traffic_controller(get_db_context_fn) -> None:
     """Start LLMTrafficController if feature flag is enabled."""
     if not get_settings().enable_llm_traffic_controller:
         logger.info("scheduler: LLM traffic controller disabled (enable_llm_traffic_controller=false)")
         return
     try:
         from app.shared.llm_traffic_controller import _init_controller
-        controller = _init_controller()
+        controller = _init_controller(get_db_context_fn)
         controller.start()
         logger.info("scheduler: LLM traffic controller started")
     except Exception:
@@ -156,7 +156,7 @@ def start(get_db_context_fn) -> None:
     _scheduler.start()
     logger.info("scheduler: started — scrape 05:00 SGT, refinement 05:30 SGT, suspension 06:00 SGT, job cleanup 04:00 SGT")
 
-    _start_traffic_controller()
+    _start_traffic_controller(get_db_context_fn)
 
     from app.pipeline.llm_scorer import run_scorer_loop
     _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))
