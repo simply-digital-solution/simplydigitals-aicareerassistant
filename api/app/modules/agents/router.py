@@ -1361,7 +1361,9 @@ async def bulk_rescore_jobs(
     if not owned_ids:
         raise HTTPException(404, "No owned jobs found")
 
-    await score_jobs_by_ids(db, owned_ids, user_id=current_user.id)
+    results = await score_jobs_by_ids(db, owned_ids, user_id=current_user.id)
+    scored_count = sum(1 for v in results.values() if v)
+    skipped_count = sum(1 for v in results.values() if not v)
 
     # Fetch and return updated rows
     owned_placeholders = ",".join(f":id{i}" for i in range(len(owned_ids)))
@@ -1382,7 +1384,7 @@ async def bulk_rescore_jobs(
         owned_params,
     )
     jobs = [dict(r) for r in rows.mappings().all()]
-    return {"jobs": jobs}
+    return {"jobs": jobs, "scored": scored_count, "skipped": skipped_count}
 
 
 @router.post("/research/jobs/{job_id}/archive", status_code=204)

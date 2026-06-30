@@ -21,9 +21,10 @@ vi.mock('../../api/client', () => ({
     patch: vi.fn().mockResolvedValue({}),
   },
   researchApi: {
-    getJobs:    vi.fn(),
-    archiveJob: vi.fn(),
-    rescoreJob: vi.fn(),
+    getJobs:         vi.fn(),
+    archiveJob:      vi.fn(),
+    rescoreJob:      vi.fn(),
+    bulkRescoreJobs: vi.fn(),
   },
   applicationsApi: {
     kanban:  vi.fn(),
@@ -598,6 +599,79 @@ describe('LatestJobs — Refresh button', () => {
 
     expect(await screen.findByText(/refreshing…/i)).toBeInTheDocument()
     resolve()
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('Bulk rescore — skipped jobs warning', () => {
+  it('shows no warning when all jobs are scored', async () => {
+    const job1 = makeJob({ id: 1 })
+    const job2 = makeJob({ id: 2 })
+    setupApiMocks([job1, job2])
+    vi.mocked(clientModule.researchApi.bulkRescoreJobs).mockResolvedValue({
+      data: { jobs: [job1, job2], scored: 2, skipped: 0 },
+    } as never)
+    wrap()
+
+    // Select both jobs
+    const checkboxes = await screen.findAllByRole('checkbox')
+    fireEvent.click(checkboxes[1])
+    fireEvent.click(checkboxes[2])
+
+    const rescoreBtn = await screen.findByRole('button', { name: /^rescore$/i })
+    fireEvent.click(rescoreBtn)
+
+    await waitFor(() => {
+      expect(screen.queryByText(/some jobs were skipped/i)).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows warning banner when some jobs are skipped due to daily limit', async () => {
+    const job1 = makeJob({ id: 1 })
+    const job2 = makeJob({ id: 2 })
+    setupApiMocks([job1, job2])
+    vi.mocked(clientModule.researchApi.bulkRescoreJobs).mockResolvedValue({
+      data: { jobs: [job1], scored: 1, skipped: 1 },
+    } as never)
+    wrap()
+
+    const checkboxes = await screen.findAllByRole('checkbox')
+    fireEvent.click(checkboxes[1])
+    fireEvent.click(checkboxes[2])
+
+    const rescoreBtn = await screen.findByRole('button', { name: /^rescore$/i })
+    fireEvent.click(rescoreBtn)
+
+    expect(await screen.findByText(/some jobs were skipped/i)).toBeInTheDocument()
+    expect(await screen.findByText(/1 job rescored.*1 skipped/i)).toBeInTheDocument()
+    expect(await screen.findByText(/scored automatically tomorrow/i)).toBeInTheDocument()
+  })
+
+  it('dismisses the warning banner on close', async () => {
+    const job1 = makeJob({ id: 1 })
+    const job2 = makeJob({ id: 2 })
+    setupApiMocks([job1, job2])
+    vi.mocked(clientModule.researchApi.bulkRescoreJobs).mockResolvedValue({
+      data: { jobs: [job1], scored: 1, skipped: 1 },
+    } as never)
+    wrap()
+
+    const checkboxes = await screen.findAllByRole('checkbox')
+    fireEvent.click(checkboxes[1])
+    fireEvent.click(checkboxes[2])
+
+    const rescoreBtn = await screen.findByRole('button', { name: /^rescore$/i })
+    fireEvent.click(rescoreBtn)
+
+    await screen.findByText(/some jobs were skipped/i)
+
+    const closeBtn = screen.getByRole('button', { name: /✕/i })
+    fireEvent.click(closeBtn)
+
+    await waitFor(() => {
+      expect(screen.queryByText(/some jobs were skipped/i)).not.toBeInTheDocument()
+    })
   })
 })
 

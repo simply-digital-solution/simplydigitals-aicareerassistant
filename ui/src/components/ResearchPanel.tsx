@@ -465,6 +465,7 @@ export default function ResearchPanel() {
   const [refreshing, setRefreshing] = useState(false)
   const [rescoringIds, setRescoringIds] = useState<Set<number>>(new Set())
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkRescoreSkipped, setBulkRescoreSkipped] = useState<{ scored: number; skipped: number } | null>(null)
 
   const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -533,13 +534,15 @@ export default function ResearchPanel() {
   })
 
   const bulkRescoreMutation = useMutation({
-    mutationFn: (ids: number[]) => researchApi.bulkRescoreJobs(ids).then(r => ({ ids, jobs: r.data.jobs })),
+    mutationFn: (ids: number[]) => researchApi.bulkRescoreJobs(ids).then(r => ({ ids, jobs: r.data.jobs, scored: r.data.scored, skipped: r.data.skipped })),
     onMutate: (ids) => {
+      setBulkRescoreSkipped(null)
       setRescoringIds(prev => new Set([...prev, ...ids]))
     },
-    onSuccess: ({ ids, jobs }) => {
+    onSuccess: ({ ids, jobs, scored, skipped }) => {
       setRescoringIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next })
       setSelectedIds(new Set())
+      if (skipped > 0) setBulkRescoreSkipped({ scored, skipped })
       const jobMap = Object.fromEntries(jobs.map(j => [j.id, j]))
       queryClient.setQueryData<StoredJobsResponse>(
         ['stored-jobs', page, filterRole, filterDays, filterScore],
@@ -549,6 +552,7 @@ export default function ResearchPanel() {
       )
     },
     onError: (_err, ids) => {
+      setBulkRescoreSkipped(null)
       setRescoringIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next })
     },
   })
@@ -588,6 +592,24 @@ export default function ResearchPanel() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
+      {/* ── Bulk rescore partial skip warning ── */}
+      {bulkRescoreSkipped && (
+        <div className="flex items-start justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
+          <div className="flex items-start gap-3">
+            <span className="text-amber-500 text-lg leading-none mt-0.5">⚠</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Some jobs were skipped</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                {bulkRescoreSkipped.scored} job{bulkRescoreSkipped.scored !== 1 ? 's' : ''} rescored,{' '}
+                {bulkRescoreSkipped.skipped} skipped — daily scoring limit reached.
+                Skipped jobs remain in the queue and will be scored automatically tomorrow.
+              </p>
+            </div>
+          </div>
+          <button onClick={() => setBulkRescoreSkipped(null)} className="text-amber-500 hover:text-amber-700 text-lg leading-none shrink-0">✕</button>
+        </div>
+      )}
+
       {/* ── Daily scoring usage indicator ── */}
       {scoringUsage && (
         scoringUsage.remaining === 0 ? (
