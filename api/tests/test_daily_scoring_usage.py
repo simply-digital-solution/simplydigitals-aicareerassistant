@@ -118,25 +118,17 @@ async def test_user_becomes_existing_after_first_scoring():
 
 @pytest.mark.asyncio
 async def test_score_next_batch_skips_when_limit_reached():
-    """Existing user at 50/50 → batch returns False immediately."""
+    """Existing user at 50/50 → CTE excludes them, batch SELECT returns empty, returns False."""
     from app.pipeline.llm_scorer import score_next_batch
 
-    job_row = MagicMock()
-    job_row.__getitem__ = lambda self, k: {
-        "user_id": 1, "jp_id": 10, "title": "Dev",
-        "company": "X", "url": "u", "description": "d", "inferred_industries": "[]"
-    }[k]
-    jobs_result = MagicMock()
-    jobs_result.mappings.return_value.all.return_value = [job_row]
+    # CTE filters out capped users at the SELECT level — _pick_next_job returns no row
+    empty_result = MagicMock()
+    empty_result.mappings.return_value.all.return_value = []
 
-    db = _make_db([
-        jobs_result,       # batch SELECT
-        _lifetime(100),    # _get_daily_limit: existing user → 50 limit
-        _row(50),          # _get_scorings_today: 50 scored today → at limit
-    ])
+    db = _make_db([empty_result])
 
     with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
-        mock_cfg.return_value = MagicMock(scorer_batch_size=10, new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        mock_cfg.return_value = MagicMock(scorer_batch_size=10, new_user_scoring_limit=250, max_scorings_per_user_per_day=50, enable_llm_traffic_controller=False)
         result = await score_next_batch(db)
 
     assert result is False
@@ -161,17 +153,11 @@ async def test_score_next_batch_new_user_higher_limit():
         scored_ids.extend([j["job_id"] for j in job_postings])
         return MagicMock(opportunities=[]), {"model": "test"}
 
-    db = AsyncMock(spec=AsyncSession)
-    call_count = 0
+    # CTE handles the limit check — just return the job row and feedback result
+    feedback_result = MagicMock()
+    feedback_result.mappings.return_value.all.return_value = []
 
-    async def smart_execute(sql, params=None):
-        nonlocal call_count
-        results = [jobs_result, _lifetime(0), _row(50)]  # 50 today but limit=250
-        r = results[call_count] if call_count < len(results) else MagicMock()
-        call_count += 1
-        return r
-
-    db.execute = smart_execute
+    db = _make_db([jobs_result, feedback_result] + [MagicMock()] * 10)
     db.commit = AsyncMock()
 
     with (
@@ -220,17 +206,10 @@ async def test_score_next_batch_scores_one_job_when_slots_remain():
         result.opportunities = [opp]
         return result, {"model": "test"}
 
-    db = AsyncMock(spec=AsyncSession)
-    call_count = 0
+    feedback_result = MagicMock()
+    feedback_result.mappings.return_value.all.return_value = []
 
-    async def smart_execute(sql, params=None):
-        nonlocal call_count
-        results = [jobs_result, _lifetime(100), _row(48)]  # existing user, 2 remaining
-        r = results[call_count] if call_count < len(results) else MagicMock()
-        call_count += 1
-        return r
-
-    db.execute = smart_execute
+    db = _make_db([jobs_result, feedback_result] + [MagicMock()] * 10)
     db.commit = AsyncMock()
 
     with (

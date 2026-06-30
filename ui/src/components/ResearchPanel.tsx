@@ -466,11 +466,13 @@ export default function ResearchPanel() {
   const [rescoringIds, setRescoringIds] = useState<Set<number>>(new Set())
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
   const params = new URLSearchParams({
     page: String(page),
     per_page: String(STORED_PAGE_SIZE),
     ...(filterRole ? { role: filterRole } : {}),
-    ...(filterDays > 0 ? { days: String(filterDays) } : {}),
+    ...(filterDays > 0 ? { days: String(filterDays), timezone: browserTimezone } : {}),
     ...(filterScore > 0 ? { min_score: String(filterScore) } : {}),
   })
 

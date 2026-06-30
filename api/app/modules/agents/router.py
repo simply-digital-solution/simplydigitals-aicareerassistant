@@ -1132,6 +1132,7 @@ async def get_stored_jobs(
     role: str = "",
     days: int = 0,
     min_score: float = 0.0,
+    timezone: str = "UTC",
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1141,6 +1142,7 @@ async def get_stored_jobs(
     Optionally filter by role title, recency (days), and minimum fit score.
     Jobs whose inferred_industries don't match the user's target_industries are excluded.
     Jobs with no inferred industries (empty list) are always shown.
+    The days filter uses the calendar day boundary in the user's browser timezone.
     """
     import json as _json
     offset = (page - 1) * per_page
@@ -1172,8 +1174,13 @@ async def get_stored_jobs(
         params["role"] = f"%{role}%"
 
     if days > 0:
-        ujp_where.append("jp.posted_at >= NOW() - INTERVAL '1 day' * :cutoff")
-        params["cutoff"] = days
+        # Compute midnight of (today - (days-1)) in the user's browser timezone
+        # e.g. days=1 → start of today SGT, days=7 → 7 calendar days ago at midnight SGT
+        ujp_where.append(
+            "jp.posted_at >= (DATE_TRUNC('day', NOW() AT TIME ZONE :tz) - INTERVAL '1 day' * :cutoff) AT TIME ZONE :tz"
+        )
+        params["tz"] = timezone
+        params["cutoff"] = days - 1
 
     if min_score > 0:
         ujp_where.append("ujp.fit_score >= :min_score")

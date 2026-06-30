@@ -293,7 +293,7 @@ export const authApi = {
 
 // Research (stored jobs) API
 export const researchApi = {
-  getJobs: (params: { page?: number; per_page?: number; role?: string; days?: number }) =>
+  getJobs: (params: { page?: number; per_page?: number; role?: string; days?: number; timezone?: string }) =>
     api.get<StoredJobsResponse>('/research/jobs', { params }),
   getSelectedJobs: () => api.get<SelectedJobsResponse>('/research/jobs/selected'),
   getAppliedJobs: () => api.get<AppliedJobsResponse>('/research/jobs/applied'),
