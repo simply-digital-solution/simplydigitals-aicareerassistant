@@ -757,6 +757,18 @@ async def test_loop_query_excludes_applied_or_advanced_status_jobs():
     assert "interviewing" in select_sql
 
 
+@pytest.mark.asyncio
+async def test_select_query_skips_blank_industries():
+    """The SELECT must exclude jobs with NULL or empty inferred_industries."""
+    db = _db_with_batch(job_rows=[])
+
+    await score_next_batch(db)
+
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "inferred_industries IS NOT NULL" in select_sql
+    assert "inferred_industries != '[]'" in select_sql
+
+
 # ---------------------------------------------------------------------------
 # Daily limit exclusion — capped users skipped in SELECT
 # ---------------------------------------------------------------------------

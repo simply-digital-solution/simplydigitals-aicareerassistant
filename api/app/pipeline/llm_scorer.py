@@ -144,6 +144,8 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
             JOIN user_limit ul ON ul.user_id = ujp.user_id
             WHERE u.scoring_suspended = false
               AND ul.scored_today < ul.daily_limit
+              AND jp.inferred_industries IS NOT NULL
+              AND jp.inferred_industries != '[]'
               AND (
                 -- New unscored job
                 (ujp.scored = false AND ujp.rescoring = false AND (

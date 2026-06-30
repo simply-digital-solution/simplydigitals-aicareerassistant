@@ -111,7 +111,12 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
                         (:uuid, :title, :company, :url, :location,
                          :description, :industries, :posted_at, :scraped_at)
                     ON CONFLICT (mcf_uuid) DO UPDATE SET
-                        inferred_industries = excluded.inferred_industries,
+                        inferred_industries = CASE
+                            WHEN job_postings.inferred_industries IS NULL
+                              OR job_postings.inferred_industries = '[]'
+                            THEN excluded.inferred_industries
+                            ELSE job_postings.inferred_industries
+                        END,
                         scraped_at          = excluded.scraped_at
                     RETURNING id
                 """),
