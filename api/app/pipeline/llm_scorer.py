@@ -161,7 +161,7 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
                   AND a.user_id = ujp.user_id
                   AND a.status IN ('applied', 'interviewing', 'offered', 'rejected', 'withdrawn')
               )
-            ORDER BY ujp.rescoring DESC, jp.posted_at ASC, jp.scraped_at ASC
+            ORDER BY ujp.rescoring DESC, jp.posted_at DESC, jp.scraped_at DESC
             LIMIT 1
         """),
         {},
