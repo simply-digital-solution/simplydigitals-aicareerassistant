@@ -573,8 +573,7 @@ describe('LatestJobs — pagination', () => {
 // ---------------------------------------------------------------------------
 
 describe('LatestJobs — Refresh button', () => {
-  it('calls POST /research/scrape on click', async () => {
-    vi.mocked(api.post).mockResolvedValue({ data: { inserted: 3 } })
+  it('does not call POST /research/scrape on click', async () => {
     setupApiMocks([])
     wrap()
 
@@ -582,14 +581,14 @@ describe('LatestJobs — Refresh button', () => {
     fireEvent.click(btn)
 
     await waitFor(() => {
-      expect(vi.mocked(api.post)).toHaveBeenCalledWith('/research/scrape', {})
+      expect(vi.mocked(api.post)).not.toHaveBeenCalledWith('/research/scrape', {})
     })
   })
 
-  it('shows "Scraping…" text while refresh is in progress', async () => {
+  it('shows "Refreshing…" text while refresh is in progress', async () => {
     let resolve!: () => void
-    vi.mocked(api.post).mockReturnValue(
-      new Promise<{ data: unknown }>(r => { resolve = () => r({ data: { inserted: 0 } }) }) as ReturnType<typeof api.post>
+    vi.mocked(api.get).mockReturnValueOnce(
+      new Promise<{ data: unknown }>(r => { resolve = () => r({ data: { jobs: [], total: 0, page: 1, per_page: 20 } }) }) as ReturnType<typeof api.get>
     )
     setupApiMocks([])
     wrap()
@@ -597,7 +596,7 @@ describe('LatestJobs — Refresh button', () => {
     const btn = await screen.findByRole('button', { name: /refresh/i })
     fireEvent.click(btn)
 
-    expect(await screen.findByText(/scraping…/i)).toBeInTheDocument()
+    expect(await screen.findByText(/refreshing…/i)).toBeInTheDocument()
     resolve()
   })
 })

@@ -573,7 +573,6 @@ export default function ResearchPanel() {
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await api.post('/research/scrape', {})
       await queryClient.invalidateQueries({ queryKey: ['stored-jobs'] })
     } finally {
       setRefreshing(false)
@@ -707,7 +706,7 @@ export default function ResearchPanel() {
               disabled={refreshing}
               className="text-xs bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
             >
-              {refreshing ? 'Scraping…' : '↻ Refresh'}
+              {refreshing ? 'Refreshing…' : '↻ Refresh'}
             </button>
           </div>
         </div>
