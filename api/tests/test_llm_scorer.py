@@ -4,13 +4,11 @@ Unit tests for api/app/pipeline/llm_scorer.py
 All DB and agent calls are mocked — no live database or LLM needed.
 
 DB execute() call sequence inside score_next_batch:
-  1. SELECT from user_job_postings JOIN job_postings (LIMIT 1)
-  2. SELECT lifetime SUM (_get_daily_limit)
-  3. SELECT daily_scoring_usage today (_get_scorings_today)
-  4. SELECT job_feedback (feedback examples)
-  5. UPDATE user_job_postings (score write, via _write_score)
-  6. UPDATE job_postings inferred_industries
-  7. INSERT daily_scoring_usage (increment counter)
+  1. SELECT from user_job_postings JOIN job_postings with daily-limit CTE (LIMIT 1)
+  2. SELECT job_feedback (feedback examples)
+  3. UPDATE user_job_postings (score write, via _write_score)
+  4. UPDATE job_postings inferred_industries
+  5. INSERT daily_scoring_usage (increment counter)
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -41,25 +39,19 @@ def _db_with_batch(job_rows=None, feedback_rows=None):
     """
     Return a mock AsyncSession for a batch of jobs.
     execute() side_effect sequence:
-      [0] batch job SELECT (returns jp_id, user_id, ...)
-      [1] lifetime SUM check (_get_daily_limit)
-      [2] daily scoring usage check today (_get_scorings_today)
-      [3] feedback SELECT
-      [4..N] UPDATE user_job_postings per job (score write)
+      [0] batch job SELECT with daily-limit CTE (returns jp_id, user_id, ...)
+      [1] feedback SELECT
+      [2..N] UPDATE user_job_postings per job (score write)
       [N+1..M] UPDATE job_postings inferred_industries
       [last] INSERT daily_scoring_usage increment
     """
     db = AsyncMock()
-    select_result    = _batch_select_result(job_rows or [])
-    lifetime_result  = MagicMock()
-    lifetime_result.fetchone.return_value = (100,)  # existing user → 50 limit
-    usage_result     = MagicMock()
-    usage_result.fetchone.return_value = (0,)
-    feedback_result  = _feedback_exec(feedback_rows)
-    update_result    = MagicMock()
+    select_result   = _batch_select_result(job_rows or [])
+    feedback_result = _feedback_exec(feedback_rows)
+    update_result   = MagicMock()
 
     # Provide enough update results for any batch size (2 updates per job + increment)
-    db.execute.side_effect = [select_result, lifetime_result, usage_result, feedback_result] + [update_result] * 40
+    db.execute.side_effect = [select_result, feedback_result] + [update_result] * 40
     return db
 
 
@@ -763,6 +755,52 @@ async def test_loop_query_excludes_applied_or_advanced_status_jobs():
     assert "NOT EXISTS" in select_sql
     assert "applied" in select_sql
     assert "interviewing" in select_sql
+
+
+# ---------------------------------------------------------------------------
+# Daily limit exclusion — capped users skipped in SELECT
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_select_query_excludes_users_at_daily_limit():
+    """The SELECT must filter out users whose scored_today >= daily_limit."""
+    db = _db_with_batch(job_rows=[])
+    await score_next_batch(db)
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "scored_today" in select_sql
+    assert "daily_limit" in select_sql
+    assert "user_limit" in select_sql
+
+
+@pytest.mark.asyncio
+async def test_select_query_passes_limit_params():
+    """The SELECT must be parameterised with new_user_limit and existing_user_limit."""
+    db = _db_with_batch(job_rows=[])
+
+    mock_settings = MagicMock()
+    mock_settings.enable_llm_traffic_controller = False
+    mock_settings.new_user_scoring_limit = 250
+    mock_settings.max_scorings_per_user_per_day = 50
+
+    with patch("app.pipeline.llm_scorer.get_settings", return_value=mock_settings):
+        await score_next_batch(db)
+
+    params = db.execute.call_args_list[0].args[1]
+    assert params["new_user_limit"] == 250
+    assert params["existing_user_limit"] == 50
+
+
+@pytest.mark.asyncio
+async def test_select_query_uses_cte_for_usage():
+    """The SELECT must use a CTE to compute per-user usage, not a separate query."""
+    db = _db_with_batch(job_rows=[])
+    await score_next_batch(db)
+    select_sql = db.execute.call_args_list[0].args[0].text
+    # CTE names expected
+    assert "user_usage" in select_sql
+    assert "daily_scoring_usage" in select_sql
+    # Only one DB call for the pick (no separate _get_daily_limit query)
+    assert db.execute.call_count == 1
 
 
 # ---------------------------------------------------------------------------

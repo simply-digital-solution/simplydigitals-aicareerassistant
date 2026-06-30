@@ -109,16 +109,38 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
     """
     SELECT the next job to score — shared by both the direct path and the
     controller-enqueue path. Returns a mapping dict or None if queue is empty.
+
+    Users who have reached their daily scoring limit are excluded so that
+    a capped user does not block other users' jobs from being picked.
     """
     rows = await db.execute(
         text("""
+            WITH user_usage AS (
+                SELECT user_id,
+                       COALESCE(SUM(jobs_scored) FILTER (WHERE date = CURRENT_DATE), 0) AS scored_today,
+                       COALESCE(SUM(jobs_scored), 0) AS lifetime_total
+                FROM daily_scoring_usage
+                GROUP BY user_id
+            ),
+            user_limit AS (
+                SELECT u.id AS user_id,
+                       CASE
+                           WHEN COALESCE(uu.lifetime_total, 0) = 0 THEN :new_user_limit
+                           ELSE :existing_user_limit
+                       END AS daily_limit,
+                       COALESCE(uu.scored_today, 0) AS scored_today
+                FROM users u
+                LEFT JOIN user_usage uu ON uu.user_id = u.id
+            )
             SELECT ujp.id AS ujp_id, ujp.user_id, jp.id AS jp_id,
                    jp.title, jp.company, jp.url,
                    jp.description, jp.inferred_industries
             FROM user_job_postings ujp
             JOIN job_postings jp ON jp.id = ujp.job_posting_id
             JOIN users u ON u.id = ujp.user_id
+            JOIN user_limit ul ON ul.user_id = ujp.user_id
             WHERE u.scoring_suspended = false
+              AND ul.scored_today < ul.daily_limit
               AND (
                 -- New unscored job
                 (ujp.scored = false AND ujp.rescoring = false AND (
@@ -139,7 +161,10 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
             ORDER BY ujp.rescoring DESC, jp.posted_at ASC, jp.scraped_at ASC
             LIMIT 1
         """),
-        {},
+        {
+            "new_user_limit":      get_settings().new_user_scoring_limit,
+            "existing_user_limit": get_settings().max_scorings_per_user_per_day,
+        },
     )
     job_rows = rows.mappings().all()
     return job_rows[0] if job_rows else None
@@ -164,13 +189,6 @@ async def score_next_batch(db: AsyncSession) -> bool:
     user_id = job_row["user_id"]
     jp_id   = job_row["jp_id"]
 
-    # Enforce daily scoring cap
-    daily_limit = await _get_daily_limit(db, user_id)
-    scored_today = await _get_scorings_today(db, user_id)
-    if scored_today >= daily_limit:
-        logger.info("llm_scorer: user_id=%d has reached daily scoring limit (%d)", user_id, daily_limit)
-        return False
-
     if get_settings().enable_llm_traffic_controller:
         # Controller path — enqueue and return; dispatcher handles the LLM call
         from app.shared.llm_traffic_controller import get_controller
@@ -189,8 +207,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
             logger.warning("llm_scorer: controller flag on but controller not initialised — falling back to direct path")
 
     # Direct path (flag off, or controller not available) — unchanged behaviour
-    logger.info("llm_scorer: scoring job_id=%d for user_id=%d (%d/%d used today)",
-                jp_id, user_id, scored_today, daily_limit)
+    logger.info("llm_scorer: scoring job_id=%d for user_id=%d", jp_id, user_id)
 
     profile = await _load_profile(db, user_id)
     feedback_examples = await _build_feedback_examples(db, user_id)
