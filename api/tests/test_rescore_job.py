@@ -6,16 +6,17 @@ Execute call sequence (success path):
   --- score_single_job starts ---
   [1]  job SELECT (returns jp_id, user_id, ...)
   [2]  application status check
-  [3]  lifetime SUM (_get_daily_limit)
-  [4]  daily scoring usage check today (_get_scorings_today)
-  [5]  rescoring=true UPDATE
-  [6]  feedback SELECT (_build_feedback_examples)
-  [7]  _write_score → UPDATE user_job_postings
-  [8]  UPDATE job_postings inferred_industries
-  [9]  _increment_scorings_today INSERT
+  [3]  rescoring=false check (race condition guard)
+  [4]  lifetime SUM (_get_daily_limit)
+  [5]  daily scoring usage check today (_get_scorings_today)
+  [6]  rescoring=true UPDATE
+  [7]  feedback SELECT (_build_feedback_examples)
+  [8]  _write_score → UPDATE user_job_postings
+  [9]  UPDATE job_postings inferred_industries
+  [10] _increment_scorings_today INSERT
   --- score_single_job done ---
-  [10] final SELECT for response
-Total: 11
+  [11] final SELECT for response
+Total: 12
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -53,31 +54,35 @@ def _db_with_job(found: bool = True):
     # [2] application status check (no advanced status)
     app_check = MagicMock()
     app_check.fetchone.return_value = None
-    # [3] lifetime SUM (_get_daily_limit) — existing user → 50 limit
+    # [3] rescoring=false check (race condition guard — not in progress)
+    rescoring_check = MagicMock()
+    rescoring_check.scalar.return_value = False
+    # [4] lifetime SUM (_get_daily_limit) — existing user → 50 limit
     lifetime_check = MagicMock()
     lifetime_check.fetchone.return_value = (100,)
-    # [4] daily scoring usage check today (0 = under limit)
+    # [5] daily scoring usage check today (0 = under limit)
     usage_check = MagicMock()
     usage_check.fetchone.return_value = (0,)
-    # [5] rescoring=true UPDATE
+    # [6] rescoring=true UPDATE
     rescoring_update = MagicMock()
-    # [6] feedback SELECT
+    # [7] feedback SELECT
     feedback_select = MagicMock()
     feedback_select.mappings.return_value.all.return_value = []
-    # [7] _write_score UPDATE user_job_postings
+    # [8] _write_score UPDATE user_job_postings
     score_update = MagicMock()
-    # [8] UPDATE job_postings inferred_industries
+    # [9] UPDATE job_postings inferred_industries
     ind_update = MagicMock()
-    # [9] _increment_scorings_today INSERT
+    # [10] _increment_scorings_today INSERT
     increment_result = MagicMock()
-    # [10] final SELECT for response
+    # [11] final SELECT for response
     final_select = MagicMock()
     final_select.mappings.return_value.first.return_value = {"id": 1} if found else None
 
     db.execute.side_effect = [
         select_result,
-        job_select, app_check, lifetime_check, usage_check, rescoring_update, feedback_select,
-        score_update, ind_update, increment_result, final_select,
+        job_select, app_check, rescoring_check, lifetime_check, usage_check,
+        rescoring_update, feedback_select, score_update, ind_update, increment_result,
+        final_select,
     ]
     return db
 
@@ -99,8 +104,8 @@ async def test_rescore_does_not_wipe_scores_before_call():
         await _call_rescore(job_id=1, db=db)
 
     db.commit.assert_called()
-    # 11 execute calls total — no pre-reset UPDATE before ownership check
-    assert db.execute.call_count == 11
+    # 12 execute calls total — no pre-reset UPDATE before ownership check
+    assert db.execute.call_count == 12
     # [1] is score_single_job's job SELECT, not a reset
     call1_sql = db.execute.call_args_list[1].args[0].text
     assert "SELECT" in call1_sql

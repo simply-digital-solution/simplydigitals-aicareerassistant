@@ -4,13 +4,14 @@ Unit tests for score_single_job() in llm_scorer.py
 Execute call sequence (success path, user_id provided):
   [0] job SELECT (returns jp_id, user_id, ...)
   [1] application status check SELECT
-  [2] lifetime SUM (_get_daily_limit)
-  [3] daily scoring usage today (_get_scorings_today)
-  [4] rescoring=true UPDATE
-  [5] feedback SELECT (_build_feedback_examples)
-  [6] _write_score → UPDATE user_job_postings (params: jid, uid, fit_score, ...)
-  [7] UPDATE job_postings inferred_industries (params: ind, id)
-  [8] _increment_scorings_today INSERT
+  [2] rescoring=false check SELECT (race condition guard)
+  [3] lifetime SUM (_get_daily_limit)
+  [4] daily scoring usage today (_get_scorings_today)
+  [5] rescoring=true UPDATE
+  [6] feedback SELECT (_build_feedback_examples)
+  [7] _write_score → UPDATE user_job_postings (params: jid, uid, fit_score, ...)
+  [8] UPDATE job_postings inferred_industries (params: ind, id)
+  [9] _increment_scorings_today INSERT
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -33,7 +34,7 @@ def _make_job_row(job_id=1, user_id=42):
     }
 
 
-def _make_db(job_row=None, advanced_status=False):
+def _make_db(job_row=None, advanced_status=False, already_rescoring=False):
     db = AsyncMock()
     # [0] job SELECT
     select_result = MagicMock()
@@ -41,26 +42,29 @@ def _make_db(job_row=None, advanced_status=False):
     # [1] application status check SELECT
     app_check = MagicMock()
     app_check.fetchone.return_value = (1,) if advanced_status else None
-    # [2] lifetime SUM (_get_daily_limit) — existing user → 50 limit
+    # [2] rescoring=false check SELECT (race condition guard)
+    rescoring_check = MagicMock()
+    rescoring_check.scalar.return_value = already_rescoring
+    # [3] lifetime SUM (_get_daily_limit) — existing user → 50 limit
     lifetime_result = MagicMock()
     lifetime_result.fetchone.return_value = (100,)
-    # [3] daily scoring usage SELECT today (_get_scorings_today, 0 = under limit)
+    # [4] daily scoring usage SELECT today (_get_scorings_today, 0 = under limit)
     usage_result = MagicMock()
     usage_result.fetchone.return_value = (0,)
-    # [4] rescoring=true UPDATE
+    # [5] rescoring=true UPDATE
     rescoring_update = MagicMock()
-    # [5] feedback SELECT
+    # [6] feedback SELECT
     feedback_result = MagicMock()
     feedback_result.mappings.return_value.all.return_value = []
-    # [6] _write_score UPDATE user_job_postings
+    # [7] _write_score UPDATE user_job_postings
     update_result = MagicMock()
-    # [7] UPDATE job_postings inferred_industries
+    # [8] UPDATE job_postings inferred_industries
     ind_update = MagicMock()
-    # [8] _increment_scorings_today INSERT
+    # [9] _increment_scorings_today INSERT
     increment_result = MagicMock()
     db.execute.side_effect = [
-        select_result, app_check, lifetime_result, usage_result, rescoring_update,
-        feedback_result, update_result, ind_update, increment_result,
+        select_result, app_check, rescoring_check, lifetime_result, usage_result,
+        rescoring_update, feedback_result, update_result, ind_update, increment_result,
     ]
     return db
 
@@ -119,11 +123,11 @@ async def test_successful_single_score():
 
     assert ok is True
     db.commit.assert_called()
-    # [4] is the rescoring=true UPDATE
-    rescoring_sql = db.execute.call_args_list[4].args[0].text
+    # [5] is the rescoring=true UPDATE
+    rescoring_sql = db.execute.call_args_list[5].args[0].text
     assert "rescoring=true" in rescoring_sql
-    # [6] is the _write_score UPDATE user_job_postings
-    update_params = db.execute.call_args_list[6].args[1]
+    # [7] is the _write_score UPDATE user_job_postings
+    update_params = db.execute.call_args_list[7].args[1]
     assert update_params["fit_score"] == 0.82
     assert update_params["jid"] == 1
 
@@ -145,11 +149,11 @@ async def test_agent_error_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    # Error UPDATE is the 7th execute call ([6])
-    update_params = db.execute.call_args_list[6].args[1]
+    # Error UPDATE is the 8th execute call ([7])
+    update_params = db.execute.call_args_list[7].args[1]
     assert "parse failed" in update_params["err"]
     # Must NOT reset scored/fit_score — only rescoring=false and score_error
-    update_sql = db.execute.call_args_list[6].args[0].text
+    update_sql = db.execute.call_args_list[7].args[0].text
     assert "rescoring=false" in update_sql
     assert "scored=false" not in update_sql
     assert "fit_score = NULL" not in update_sql
@@ -171,9 +175,9 @@ async def test_agent_exception_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    update_params = db.execute.call_args_list[6].args[1]
+    update_params = db.execute.call_args_list[7].args[1]
     assert "RuntimeError" in update_params["err"]
-    update_sql = db.execute.call_args_list[6].args[0].text
+    update_sql = db.execute.call_args_list[7].args[0].text
     assert "rescoring=false" in update_sql
     assert "scored=false" not in update_sql
 
@@ -194,7 +198,7 @@ async def test_missing_job_id_in_response_returns_false():
         ok = await score_single_job(db, job_id=1)
 
     assert ok is False
-    update_params = db.execute.call_args_list[6].args[1]
+    update_params = db.execute.call_args_list[7].args[1]
     assert "Missing" in update_params["err"]
 
 

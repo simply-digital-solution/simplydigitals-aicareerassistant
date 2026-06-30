@@ -365,6 +365,15 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
         logger.info("llm_scorer: skipping job_id=%d — application already in advanced status", job_id)
         return False
 
+    # Skip if already being scored — prevents duplicate LLM calls from rapid clicks
+    rescoring_check = await db.execute(
+        text("SELECT rescoring FROM user_job_postings WHERE job_posting_id=:jid AND user_id=:uid"),
+        {"jid": job_id, "uid": resolved_user_id},
+    )
+    if rescoring_check.scalar():
+        logger.info("llm_scorer: job_id=%d already rescoring for user_id=%d, skipping duplicate call", job_id, resolved_user_id)
+        return False
+
     # Enforce daily scoring cap
     daily_limit = await _get_daily_limit(db, resolved_user_id)
     scored_today = await _get_scorings_today(db, resolved_user_id)

@@ -240,11 +240,14 @@ async def test_score_single_job_blocked_at_limit():
         "jp_id": 1, "user_id": 1, "title": "Dev", "company": "X",
         "url": "u", "description": "d", "inferred_industries": "[]"
     }
+    rescoring_not_in_progress = MagicMock()
+    rescoring_not_in_progress.scalar.return_value = False
     db = _make_db([
-        job_row,        # job SELECT
-        _no_row(),      # app_check: no advanced application
-        _lifetime(100), # _get_daily_limit: existing user → 50
-        _row(50),       # _get_scorings_today: at limit
+        job_row,                    # job SELECT
+        _no_row(),                  # app_check: no advanced application
+        rescoring_not_in_progress,  # rescoring_check: not already in progress
+        _lifetime(100),             # _get_daily_limit: existing user → 50
+        _row(50),                   # _get_scorings_today: at limit
     ])
 
     with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
@@ -252,6 +255,72 @@ async def test_score_single_job_blocked_at_limit():
         result = await score_single_job(db, job_id=1)
 
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_score_single_job_skips_if_already_rescoring():
+    """score_single_job returns False immediately if rescoring=true — prevents duplicate LLM calls."""
+    from app.pipeline.llm_scorer import score_single_job
+
+    job_row = MagicMock()
+    job_row.mappings.return_value.first.return_value = {
+        "jp_id": 1, "user_id": 1, "title": "Dev", "company": "X",
+        "url": "u", "description": "d", "inferred_industries": "[]"
+    }
+    rescoring_in_progress = MagicMock()
+    rescoring_in_progress.scalar.return_value = True
+    db = _make_db([
+        job_row,               # job SELECT
+        _no_row(),             # app_check: no advanced application
+        rescoring_in_progress, # rescoring_check: already in progress
+    ])
+
+    with patch("app.pipeline.llm_scorer.get_settings") as mock_cfg:
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        result = await score_single_job(db, job_id=1)
+
+    assert result is False
+    # Daily limit check must NOT have been called (only 3 execute calls, not 5)
+    assert db.execute.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_score_single_job_proceeds_if_not_rescoring():
+    """score_single_job proceeds normally when rescoring=false."""
+    from app.pipeline.llm_scorer import score_single_job
+
+    job_row = MagicMock()
+    job_row.mappings.return_value.first.return_value = {
+        "jp_id": 1, "user_id": 1, "title": "Dev", "company": "X",
+        "url": "u", "description": "d", "inferred_industries": "[]"
+    }
+    rescoring_not_in_progress = MagicMock()
+    rescoring_not_in_progress.scalar.return_value = False
+    db = _make_db([
+        job_row,                    # job SELECT
+        _no_row(),                  # app_check: no advanced application
+        rescoring_not_in_progress,  # rescoring_check: not in progress
+        _lifetime(0),               # _get_daily_limit: new user → 250
+        _row(0),                    # _get_scorings_today: 0 used
+    ] + [MagicMock()] * 10)
+    db.commit = AsyncMock()
+
+    async def fake_agent(profile, job_postings, **kwargs):
+        return MagicMock(opportunities=[]), {"model": "test"}
+
+    with (
+        patch("app.pipeline.llm_scorer.get_settings") as mock_cfg,
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer._build_feedback_examples", AsyncMock(return_value="")),
+        patch("app.pipeline.llm_scorer.run_research_agent", fake_agent),
+        patch("app.pipeline.llm_scorer._increment_scorings_today", AsyncMock()),
+    ):
+        mock_cfg.return_value = MagicMock(new_user_scoring_limit=250, max_scorings_per_user_per_day=50)
+        result = await score_single_job(db, job_id=1)
+
+    # Proceeds past the rescoring check — returns False only because agent returned no opportunities
+    assert result is False
+    assert db.execute.call_count >= 3  # got past all guards
 
 
 # ---------------------------------------------------------------------------
