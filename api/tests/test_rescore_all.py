@@ -77,6 +77,22 @@ async def test_only_unarchived_queried():
 
 
 # ---------------------------------------------------------------------------
+# Query uses user_job_postings (not job_postings which has no user_id column)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_select_queries_user_job_postings():
+    db = _make_db(job_ids=[1])
+    with patch("app.pipeline.llm_scorer.score_jobs_by_ids", AsyncMock(return_value={1: True})):
+        await _call_rescore_all(db)
+
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "user_job_postings" in select_sql
+    assert "job_posting_id" in select_sql
+    assert "FROM job_postings" not in select_sql
+
+
+# ---------------------------------------------------------------------------
 # Jobs are sent in batches of scorer_batch_size, not all at once
 # ---------------------------------------------------------------------------
 

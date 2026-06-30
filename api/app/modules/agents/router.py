@@ -1784,7 +1784,7 @@ async def rescore_all_jobs(
     from app.shared.config import get_settings
 
     rows = await db.execute(
-        text("SELECT id FROM job_postings WHERE user_id = :uid AND archived = false"),
+        text("SELECT job_posting_id FROM user_job_postings WHERE user_id = :uid AND archived = false"),
         {"uid": current_user.id},
     )
     all_ids = [r[0] for r in rows.fetchall()]
