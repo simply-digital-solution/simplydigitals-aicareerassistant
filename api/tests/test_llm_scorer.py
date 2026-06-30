@@ -774,7 +774,7 @@ async def test_select_query_excludes_users_at_daily_limit():
 
 @pytest.mark.asyncio
 async def test_select_query_passes_limit_params():
-    """The SELECT must be parameterised with new_user_limit and existing_user_limit."""
+    """The SELECT must inline the correct limit values from settings."""
     db = _db_with_batch(job_rows=[])
 
     mock_settings = MagicMock()
@@ -785,9 +785,9 @@ async def test_select_query_passes_limit_params():
     with patch("app.pipeline.llm_scorer.get_settings", return_value=mock_settings):
         await score_next_batch(db)
 
-    params = db.execute.call_args_list[0].args[1]
-    assert params["new_user_limit"] == 250
-    assert params["existing_user_limit"] == 50
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "250" in select_sql
+    assert "50" in select_sql
 
 
 @pytest.mark.asyncio

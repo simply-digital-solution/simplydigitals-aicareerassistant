@@ -113,8 +113,11 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
     Users who have reached their daily scoring limit are excluded so that
     a capped user does not block other users' jobs from being picked.
     """
+    settings = get_settings()
+    new_user_limit      = int(settings.new_user_scoring_limit)
+    existing_user_limit = int(settings.max_scorings_per_user_per_day)
     rows = await db.execute(
-        text("""
+        text(f"""
             WITH user_usage AS (
                 SELECT user_id,
                        COALESCE(SUM(jobs_scored) FILTER (WHERE date = CURRENT_DATE), 0) AS scored_today,
@@ -125,8 +128,8 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
             user_limit AS (
                 SELECT u.id AS user_id,
                        CASE
-                           WHEN COALESCE(uu.lifetime_total, 0) = 0 THEN :new_user_limit
-                           ELSE :existing_user_limit
+                           WHEN COALESCE(uu.lifetime_total, 0) = 0 THEN {new_user_limit}
+                           ELSE {existing_user_limit}
                        END AS daily_limit,
                        COALESCE(uu.scored_today, 0) AS scored_today
                 FROM users u
@@ -161,10 +164,7 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
             ORDER BY ujp.rescoring DESC, jp.posted_at ASC, jp.scraped_at ASC
             LIMIT 1
         """),
-        {
-            "new_user_limit":      get_settings().new_user_scoring_limit,
-            "existing_user_limit": get_settings().max_scorings_per_user_per_day,
-        },
+        {},
     )
     job_rows = rows.mappings().all()
     return job_rows[0] if job_rows else None
