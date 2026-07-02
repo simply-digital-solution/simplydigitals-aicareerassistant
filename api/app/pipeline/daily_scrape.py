@@ -204,3 +204,11 @@ async def scrape_for_all_users(get_db_context) -> None:
         elapsed,
         {f"user_{uid}": count for uid, count in summary.items()},
     )
+
+    from app.pipeline.industry_backfill import backfill_industries
+    try:
+        async with get_db_context() as db:
+            classified = await backfill_industries(db)
+        logger.info("scrape_for_all_users: industry backfill complete — %d job(s) classified", classified)
+    except Exception:
+        logger.exception("scrape_for_all_users: industry backfill failed — scorer will skip unclassified jobs")

@@ -9,7 +9,7 @@ Per-job execute() call sequence (after profile select):
   2. INSERT INTO user_job_postings ... ON CONFLICT DO NOTHING RETURNING id → .fetchone() returns (id,) or None
 """
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, call
 import pytest
 
 from app.pipeline.daily_scrape import scrape_for_user, scrape_for_all_users
@@ -349,3 +349,33 @@ async def test_insert_uses_boolean_false_for_scored():
     sql = str(insert_call.args[0])
     assert "user_job_postings" in sql
     assert "false" in sql.lower()
+
+
+# ---------------------------------------------------------------------------
+# scrape_for_all_users — industry backfill runs after scrape completes
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_industry_backfill_called_after_scrape():
+    get_db_context = _make_get_db_context([1])
+
+    with (
+        patch("app.pipeline.daily_scrape.scrape_for_user", AsyncMock(return_value=3)),
+        patch("app.pipeline.industry_backfill.backfill_industries", AsyncMock(return_value=3)) as mock_backfill,
+    ):
+        await scrape_for_all_users(get_db_context)
+
+    mock_backfill.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_industry_backfill_failure_does_not_abort_scrape():
+    """A backfill crash must not propagate — scrape result is already committed."""
+    get_db_context = _make_get_db_context([1])
+
+    with (
+        patch("app.pipeline.daily_scrape.scrape_for_user", AsyncMock(return_value=2)),
+        patch("app.pipeline.industry_backfill.backfill_industries", AsyncMock(side_effect=RuntimeError("gemini down"))),
+    ):
+        # Should not raise
+        await scrape_for_all_users(get_db_context)
