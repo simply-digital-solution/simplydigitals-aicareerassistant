@@ -77,6 +77,23 @@ async def _count_unclassified_jobs(db) -> int:
     return row.scalar() or 0
 
 
+async def _startup_reset_in_progress(get_db_context_fn) -> None:
+    """Reset any stale in_progress rows left by a crashed/restarted container."""
+    try:
+        async with get_db_context_fn() as db:
+            result = await db.execute(
+                text("UPDATE user_job_postings SET scoring_status='idle' WHERE scoring_status='in_progress'")
+            )
+            await db.commit()
+            count = result.rowcount
+        if count:
+            logger.info("scheduler: reset %d stale in_progress row(s) to idle", count)
+        else:
+            logger.info("scheduler: no stale in_progress rows found")
+    except Exception:
+        logger.exception("scheduler: startup in_progress reset failed")
+
+
 async def _startup_industry_backfill(get_db_context_fn) -> None:
     """Run industry backfill at startup if any active jobs are unclassified."""
     try:
@@ -161,6 +178,9 @@ def start(get_db_context_fn) -> None:
     from app.pipeline.llm_scorer import run_scorer_loop
     _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))
     logger.info("scheduler: LLM scorer loop started")
+
+    asyncio.create_task(_startup_reset_in_progress(get_db_context_fn))
+    logger.info("scheduler: startup in_progress reset task queued")
 
     asyncio.create_task(_startup_industry_backfill(get_db_context_fn))
     logger.info("scheduler: startup industry backfill task queued")

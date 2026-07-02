@@ -30,12 +30,12 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob & { application_
     url: 'https://www.mycareersfuture.gov.sg/job/abc', location: 'Singapore',
     inferred_industries: JSON.stringify(['Technology & Software']),
     posted_at: '2026-06-10T10:00:00Z', scraped_at: '2026-06-11T07:00:00Z',
-    scored: true, fit_score: 0.82,
+    scoring_status: 'completed' as const, fit_score: 0.82,
     reasons: JSON.stringify(['Python skills match']),
     risks: JSON.stringify(['No cloud experience']),
     key_keywords: JSON.stringify(['Python', 'Spark']),
     scoring_breakdown: null, recommendation: null, score_error: null,
-    scored_at: '2026-06-11T08:00:00Z', scored_by_model: null, rescoring: false,
+    scored_at: '2026-06-11T08:00:00Z', scored_by_model: null,
     archived: false, application_id: 10,
     ...overrides,
   }
@@ -156,13 +156,13 @@ describe('SelectedJobsPanel — archive', () => {
 
 describe('SelectedJobsPanel — re-score', () => {
   it('renders re-score button on a scored card', async () => {
-    setupMocks([makeJob({ scored: true, fit_score: 0.82 })])
+    setupMocks([makeJob({ scoring_status: 'completed', fit_score: 0.82 })])
     wrap()
     expect(await screen.findByRole('button', { name: /re-score/i })).toBeInTheDocument()
   })
 
   it('clicking re-score calls rescoreJob', async () => {
-    setupMocks([makeJob({ id: 7, scored: true, fit_score: 0.75 })])
+    setupMocks([makeJob({ id: 7, scoring_status: 'completed', fit_score: 0.75 })])
     wrap()
     const btn = await screen.findByRole('button', { name: /re-score/i })
     fireEvent.click(btn)

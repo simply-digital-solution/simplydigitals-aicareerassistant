@@ -43,12 +43,12 @@ function makeJob(overrides: Partial<InterviewingJob> = {}): InterviewingJob {
     url: 'https://www.mycareersfuture.gov.sg/job/abc', location: 'Singapore',
     inferred_industries: JSON.stringify(['Technology']),
     posted_at: '2026-06-01T10:00:00Z', scraped_at: '2026-06-02T07:00:00Z',
-    scored: true, fit_score: 0.85,
+    scoring_status: 'completed' as const, fit_score: 0.85,
     reasons: JSON.stringify(['Strong match']),
     risks: JSON.stringify(['No cloud exp']),
     key_keywords: JSON.stringify(['Python']),
     scoring_breakdown: null, recommendation: null, score_error: null,
-    scored_at: '2026-06-02T08:00:00Z', scored_by_model: null, rescoring: false,
+    scored_at: '2026-06-02T08:00:00Z', scored_by_model: null,
     archived: false,
     application_id: 20,
     application_status: 'interviewing',
@@ -145,7 +145,7 @@ describe('InterviewJobsPanel', () => {
 
   it('does not show Scoring… label for unscored jobs in readOnly mode', async () => {
     vi.mocked(clientModule.researchApi.getInterviewingJobs).mockResolvedValue(
-      { data: { total: 1, jobs: [makeJob({ scored: false, fit_score: null })] } } as never
+      { data: { total: 1, jobs: [makeJob({ scoring_status: 'idle', fit_score: null })] } } as never
     )
     wrap()
     await screen.findByText('Software Engineer')

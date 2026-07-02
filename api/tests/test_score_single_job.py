@@ -123,9 +123,9 @@ async def test_successful_single_score():
 
     assert ok is True
     db.commit.assert_called()
-    # [5] is the rescoring=true UPDATE
+    # [5] is the scoring_status='in_progress' UPDATE
     rescoring_sql = db.execute.call_args_list[5].args[0].text
-    assert "rescoring=true" in rescoring_sql
+    assert "scoring_status='in_progress'" in rescoring_sql
     # [7] is the _write_score UPDATE user_job_postings
     update_params = db.execute.call_args_list[7].args[1]
     assert update_params["fit_score"] == 0.82
@@ -152,11 +152,10 @@ async def test_agent_error_returns_false():
     # Error UPDATE is the 8th execute call ([7])
     update_params = db.execute.call_args_list[7].args[1]
     assert "parse failed" in update_params["err"]
-    # Must NOT reset scored/fit_score — only rescoring=false and score_error
+    # Must NOT reset fit_score — only scoring_status='failed' and score_error
     update_sql = db.execute.call_args_list[7].args[0].text
-    assert "rescoring=false" in update_sql
-    assert "scored=false" not in update_sql
-    assert "fit_score = NULL" not in update_sql
+    assert "scoring_status='failed'" in update_sql
+    assert "fit_score" not in update_sql
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +177,8 @@ async def test_agent_exception_returns_false():
     update_params = db.execute.call_args_list[7].args[1]
     assert "RuntimeError" in update_params["err"]
     update_sql = db.execute.call_args_list[7].args[0].text
-    assert "rescoring=false" in update_sql
-    assert "scored=false" not in update_sql
+    assert "scoring_status='failed'" in update_sql
+    assert "fit_score" not in update_sql
 
 
 # ---------------------------------------------------------------------------

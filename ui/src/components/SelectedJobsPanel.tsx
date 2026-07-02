@@ -155,7 +155,7 @@ export default function SelectedJobsPanel() {
                       onFeedback={handleFeedback}
                       onArchive={(id) => archiveMutation.mutate(id)}
                       onRescore={(id) => rescoreMutation.mutate(id)}
-                      rescoring={rescoringIds.has(job.id) || !!job.rescoring}
+                      rescoring={rescoringIds.has(job.id) || job.scoring_status === 'in_progress'}
                     />
                   </div>
                 </div>

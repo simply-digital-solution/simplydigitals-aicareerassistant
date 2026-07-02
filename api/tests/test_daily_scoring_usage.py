@@ -259,7 +259,7 @@ async def test_score_single_job_blocked_at_limit():
 
 @pytest.mark.asyncio
 async def test_score_single_job_skips_if_already_rescoring():
-    """score_single_job returns False immediately if rescoring=true — prevents duplicate LLM calls."""
+    """score_single_job returns False immediately if scoring_status='in_progress' — prevents duplicate LLM calls."""
     from app.pipeline.llm_scorer import score_single_job
 
     job_row = MagicMock()
@@ -268,7 +268,7 @@ async def test_score_single_job_skips_if_already_rescoring():
         "url": "u", "description": "d", "inferred_industries": "[]"
     }
     rescoring_in_progress = MagicMock()
-    rescoring_in_progress.scalar.return_value = True
+    rescoring_in_progress.scalar.return_value = "in_progress"
     db = _make_db([
         job_row,               # job SELECT
         _no_row(),             # app_check: no advanced application

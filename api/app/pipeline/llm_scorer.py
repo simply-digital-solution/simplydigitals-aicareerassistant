@@ -148,14 +148,17 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
               AND jp.inferred_industries != '[]'
               AND (
                 -- New unscored job
-                (ujp.scored = false AND ujp.rescoring = false AND (
+                (ujp.scoring_status = 'idle' AND (
                   ujp.score_error IS NULL
                   OR ujp.scored_at < NOW() - INTERVAL '30 minutes'
                   OR ujp.scored_at IS NULL
                 ))
                 OR
+                -- Failed job retry after 30 min cooldown
+                (ujp.scoring_status = 'failed' AND ujp.scored_at < NOW() - INTERVAL '30 minutes')
+                OR
                 -- Pending rescore (card stays visible with spinner)
-                (ujp.scored = true AND ujp.rescoring = true)
+                (ujp.scoring_status = 'in_progress')
               )
               AND NOT EXISTS (
                 SELECT 1 FROM applications a
@@ -163,7 +166,7 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
                   AND a.user_id = ujp.user_id
                   AND a.status IN ('applied', 'interviewing', 'offered', 'rejected', 'withdrawn')
               )
-            ORDER BY ujp.rescoring DESC, jp.posted_at DESC, jp.scraped_at DESC
+            ORDER BY (ujp.scoring_status = 'in_progress') DESC, jp.posted_at DESC, jp.scraped_at DESC
             LIMIT 1
         """),
         {},
@@ -240,7 +243,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: job_id=%d failed after %.1fs: %s", jp_id, time.monotonic() - t_start, error_msg)
         await db.execute(
-            text("UPDATE user_job_postings SET scored=false, rescoring=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scoring_status='failed', score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": error_msg, "now": now_utc(), "jid": jp_id, "uid": user_id},
         )
         await db.commit()
@@ -250,7 +253,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         error_msg = result.error
         logger.warning("llm_scorer: agent error for job_id=%d: %s", jp_id, error_msg)
         await db.execute(
-            text("UPDATE user_job_postings SET scored=false, rescoring=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scoring_status='failed', score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": error_msg, "now": now_utc(), "jid": jp_id, "uid": user_id},
         )
         await db.commit()
@@ -262,7 +265,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
     if opp is None:
         logger.warning("llm_scorer: job_id=%d missing from LLM response", jp_id)
         await db.execute(
-            text("UPDATE user_job_postings SET scored=false, rescoring=false, score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scoring_status='failed', score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": "Missing from LLM response", "now": now_utc(), "jid": jp_id, "uid": user_id},
         )
         await db.commit()
@@ -284,8 +287,7 @@ async def _write_score(db: AsyncSession, job_posting_id: int, user_id: int, opp,
     await db.execute(
         text("""
             UPDATE user_job_postings SET
-                scored            = true,
-                rescoring         = false,
+                scoring_status    = 'completed',
                 fit_score         = :fit_score,
                 reasons           = :reasons,
                 risks             = :risks,
@@ -367,11 +369,11 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
 
     # Skip if already being scored — prevents duplicate LLM calls from rapid clicks
     rescoring_check = await db.execute(
-        text("SELECT rescoring FROM user_job_postings WHERE job_posting_id=:jid AND user_id=:uid"),
+        text("SELECT scoring_status FROM user_job_postings WHERE job_posting_id=:jid AND user_id=:uid"),
         {"jid": job_id, "uid": resolved_user_id},
     )
-    if rescoring_check.scalar():
-        logger.info("llm_scorer: job_id=%d already rescoring for user_id=%d, skipping duplicate call", job_id, resolved_user_id)
+    if rescoring_check.scalar() == "in_progress":
+        logger.info("llm_scorer: job_id=%d already in_progress for user_id=%d, skipping duplicate call", job_id, resolved_user_id)
         return False
 
     # Enforce daily scoring cap
@@ -385,9 +387,9 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
     logger.info("llm_scorer: scoring single job_id=%d for user_id=%d (%d/%d used today)",
                 job_id, resolved_user_id, scored_today, daily_limit)
 
-    # Mark in-progress — old score stays visible until new one arrives
+    # Mark in_progress — old score stays visible until new one arrives
     await db.execute(
-        text("UPDATE user_job_postings SET rescoring=true, score_error=NULL WHERE job_posting_id=:jid AND user_id=:uid"),
+        text("UPDATE user_job_postings SET scoring_status='in_progress', score_error=NULL WHERE job_posting_id=:jid AND user_id=:uid"),
         {"jid": job_id, "uid": resolved_user_id},
     )
     await db.commit()
@@ -422,7 +424,7 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("llm_scorer: single job_id=%d failed: %s", job_id, error_msg)
         await db.execute(
-            text("UPDATE user_job_postings SET rescoring=false, score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scoring_status='failed', score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": error_msg, "jid": job_id, "uid": resolved_user_id},
         )
         await db.commit()
@@ -431,7 +433,7 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
     if isinstance(result, AgentError):
         logger.warning("llm_scorer: single job_id=%d agent error: %s", job_id, result.error)
         await db.execute(
-            text("UPDATE user_job_postings SET rescoring=false, score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scoring_status='failed', score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": result.error, "jid": job_id, "uid": resolved_user_id},
         )
         await db.commit()
@@ -443,7 +445,7 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
     if opp is None:
         logger.warning("llm_scorer: job_id=%d missing from single response", job_id)
         await db.execute(
-            text("UPDATE user_job_postings SET rescoring=false, score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
+            text("UPDATE user_job_postings SET scoring_status='failed', score_error=:err WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": "Missing from LLM response", "jid": job_id, "uid": resolved_user_id},
         )
         await db.commit()

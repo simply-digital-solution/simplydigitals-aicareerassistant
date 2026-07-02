@@ -407,7 +407,7 @@ class UserJobPosting(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     job_posting_id = Column(Integer, ForeignKey("job_postings.id"), nullable=False, index=True)
-    scored = Column(Boolean, default=False, nullable=False, index=True)
+    scoring_status = Column(String(20), nullable=False, default="idle")  # idle | in_progress | completed | failed
     fit_score = Column(Float)
     reasons = Column(Text)                      # JSON array
     risks = Column(Text)                        # JSON array
@@ -416,7 +416,6 @@ class UserJobPosting(Base):
     score_error = Column(Text)
     scored_at = Column(DateTime(timezone=True))
     recommendation = Column(Text)
-    rescoring = Column(Boolean, default=False, nullable=False)
     scored_by_model = Column(String(100))
     archived = Column(Boolean, default=False, nullable=False, index=True)
 

@@ -1154,7 +1154,7 @@ async def get_stored_jobs(
     ujp_where = [
         "ujp.user_id = :uid",
         "ujp.archived = false",
-        "(ujp.scored = true OR ujp.rescoring = true)",
+        "ujp.scoring_status IN ('completed', 'in_progress')",
         "jp.id NOT IN (SELECT job_posting_id FROM applications WHERE user_id = :uid AND job_posting_id IS NOT NULL)",
     ]
     params: dict = {"uid": current_user.id, "limit": per_page, "offset": offset}
@@ -1203,9 +1203,9 @@ async def get_stored_jobs(
         text(f"""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
-                   ujp.scored_at, ujp.scored_by_model, ujp.rescoring
+                   ujp.scored_at, ujp.scored_by_model
             FROM user_job_postings ujp
             JOIN job_postings jp ON jp.id = ujp.job_posting_id
             WHERE {where_sql}
@@ -1231,7 +1231,7 @@ async def get_selected_jobs(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model, ujp.archived,
                    a.id AS application_id
@@ -1260,7 +1260,7 @@ async def get_applied_jobs(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model, ujp.archived,
                    a.id AS application_id, a.applied_at
@@ -1288,7 +1288,7 @@ async def get_interviewing_jobs(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model, ujp.archived,
                    a.id AS application_id, a.status AS application_status, a.applied_at,
@@ -1374,9 +1374,9 @@ async def bulk_rescore_jobs(
         text(f"""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
-                   ujp.scored_at, ujp.scored_by_model, ujp.rescoring
+                   ujp.scored_at, ujp.scored_by_model
             FROM job_postings jp
             JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             WHERE jp.id IN ({owned_placeholders})
@@ -1429,9 +1429,9 @@ async def rescore_job(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
                    jp.inferred_industries, jp.posted_at, jp.scraped_at,
-                   ujp.scored, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
+                   ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
-                   ujp.scored_at, ujp.scored_by_model, ujp.rescoring
+                   ujp.scored_at, ujp.scored_by_model
             FROM job_postings jp
             JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             WHERE jp.id = :id

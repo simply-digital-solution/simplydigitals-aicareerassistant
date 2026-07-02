@@ -144,13 +144,13 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {!readOnly && !!job.scored && job.fit_score !== null
+          {!readOnly && job.scoring_status === 'completed' && job.fit_score !== null
             ? <FitBadge score={job.fit_score} />
-            : !readOnly && !rescoring && !job.rescoring && (job.score_error || (!!job.scored && job.fit_score === null))
+            : !readOnly && !rescoring && job.scoring_status === 'failed'
             ? <span className="text-xs text-red-400 italic" title={job.score_error ?? undefined}>
                 ⚠ Not yet scored
               </span>
-            : !readOnly && !rescoring && !job.rescoring
+            : !readOnly && !rescoring && job.scoring_status === 'idle'
             ? <span className="text-xs text-gray-400 italic">Scoring…</span>
             : null
           }
@@ -197,7 +197,7 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
               <path fillRule="evenodd" d="M3 7h14v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Zm5 3a1 1 0 0 0 0 2h4a1 1 0 1 0 0-2H8Z" clipRule="evenodd" />
             </svg>
           </button>}
-          {!readOnly && (!!job.scored || !!job.score_error || rescoring) && (
+          {!readOnly && (job.scoring_status !== 'idle' || !!job.score_error || rescoring) && (
             <button
               title="Re-score"
               onClick={() => onRescore(job.id)}
@@ -216,16 +216,16 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           )}
         </div>
       </div>
-      {(rescoring || !!job.rescoring) && (
+      {(rescoring || job.scoring_status === 'in_progress') && (
         <p className="text-xs text-indigo-400 italic animate-pulse mt-1">Rescoring…</p>
       )}
-      {!readOnly && !rescoring && !job.rescoring && job.score_error && job.fit_score !== null && (
+      {!readOnly && !rescoring && job.scoring_status !== 'in_progress' && job.score_error && job.fit_score !== null && (
         <p className="text-xs text-amber-600 mt-1" title={job.score_error}>
           ⚠ Last rescore failed — previous score shown.{' '}
           <button className="underline" onClick={() => onRescore(job.id)}>Try again</button>
         </p>
       )}
-      {!readOnly && !rescoring && !job.rescoring && job.score_error && job.fit_score === null && (
+      {!readOnly && !rescoring && job.scoring_status !== 'in_progress' && job.score_error && job.fit_score === null && (
         <p className="text-xs text-red-500 mt-1" title={job.score_error}>
           ⚠ Scoring failed —{' '}
           <button className="underline" onClick={() => onRescore(job.id)}>try again</button>
@@ -282,7 +282,7 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
         </div>
       )}
 
-      {!!job.scored && (reasons.length > 0 || risks.length > 0 || breakdown.length > 0) && (
+      {job.scoring_status === 'completed' && (reasons.length > 0 || risks.length > 0 || breakdown.length > 0) && (
         <>
           <button onClick={() => setOpen(v => !v)} className="text-xs text-gray-400 hover:text-gray-600">
             {open ? 'Hide details ▲' : 'Show details ▼'}
@@ -824,7 +824,7 @@ export default function ResearchPanel() {
                 onArchive={(id) => archiveMutation.mutate(id)}
                 onSave={(j) => saveMutation.mutate(j)}
                 onRescore={(id) => rescoreMutation.mutate(id)}
-                rescoring={rescoringIds.has(job.id) || !!job.rescoring}
+                rescoring={rescoringIds.has(job.id) || job.scoring_status === 'in_progress'}
                 selected={selectedIds.has(job.id)}
                 onToggleSelect={id => setSelectedIds(prev => {
                   const next = new Set(prev)

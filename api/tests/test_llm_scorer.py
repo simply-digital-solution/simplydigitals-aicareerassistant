@@ -221,7 +221,7 @@ async def test_missing_job_id_marked_as_failed():
     error_calls = _find_error_calls(db)
     assert len(error_calls) == 1
     assert "Missing" in error_calls[0].args[1]["err"]
-    assert "rescoring=false" in error_calls[0].args[0].text
+    assert "scoring_status='failed'" in error_calls[0].args[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -245,8 +245,7 @@ async def test_agent_exception_marks_job_failed():
     error_calls = _find_error_calls(db)
     assert len(error_calls) == 1
     assert "RuntimeError" in error_calls[0].args[1]["err"]
-    assert "scored=false" in error_calls[0].args[0].text
-    assert "rescoring=false" in error_calls[0].args[0].text
+    assert "scoring_status='failed'" in error_calls[0].args[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +270,7 @@ async def test_agent_error_result_marks_job_failed():
     error_calls = _find_error_calls(db)
     assert len(error_calls) == 1
     assert error_calls[0].args[1]["err"] == "parse failed"
-    assert "rescoring=false" in error_calls[0].args[0].text
+    assert "scoring_status='failed'" in error_calls[0].args[0].text
 
 
 # ---------------------------------------------------------------------------
@@ -733,15 +732,15 @@ async def test_loop_query_includes_errored_jobs_with_old_scored_at():
 
 @pytest.mark.asyncio
 async def test_loop_query_picks_up_pending_rescores():
-    """Jobs with scored=true AND rescoring=true (pending rescore) must be picked up by the loop."""
+    """Jobs with scoring_status='in_progress' (pending rescore) must be picked up by the loop."""
     db = _db_with_batch(job_rows=[])
 
     await score_next_batch(db)
 
     select_sql = db.execute.call_args_list[0].args[0].text
     # Both new unscored jobs and pending rescores are included
-    assert "scored = false AND ujp.rescoring = false" in select_sql
-    assert "scored = true AND ujp.rescoring = true" in select_sql
+    assert "scoring_status = 'idle'" in select_sql
+    assert "scoring_status = 'in_progress'" in select_sql
 
 
 @pytest.mark.asyncio
