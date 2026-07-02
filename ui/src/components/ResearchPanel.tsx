@@ -111,8 +111,9 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
     setTimeout(() => setSaved(false), 2000)
   }
 
+  const dateFormat: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }
   const postedLabel = job.posted_at
-    ? new Date(job.posted_at).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })
+    ? new Date(job.posted_at).toLocaleDateString(undefined, dateFormat)
     : null
 
   return (
@@ -138,8 +139,14 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           {feedback?.relevance === 'not_relevant' && feedback.reason && (
             <p className="text-xs text-red-500 mt-0.5">👎 {feedback.reason}</p>
           )}
-          {job.scored_by_model && (
-            <p className="text-xs text-gray-400 mt-0.5">scored by {job.scored_by_model}</p>
+          {(job.scored_by_model || job.scored_at) && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              {job.scored_at && (
+                <span>scored {new Date(job.scored_at).toLocaleDateString(undefined, dateFormat)}</span>
+              )}
+              {job.scored_by_model && job.scored_at && <span> · </span>}
+              {job.scored_by_model && <span>{job.scored_by_model}</span>}
+            </p>
           )}
           </div>
         </div>
