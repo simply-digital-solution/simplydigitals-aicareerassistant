@@ -202,3 +202,26 @@ async def test_selected_count_zero_when_no_selected_applications():
     result = await get_dashboard_stats(current_user=_make_user(), db=db)
 
     assert all(e["count"] == 0 for e in result["selected_by_day"])
+
+
+@pytest.mark.asyncio
+async def test_scored_by_day_query_uses_scoring_status_completed():
+    """
+    Regression: scored_by_day must filter by scoring_status='completed', not scored=true.
+    The 'scored' boolean column was dropped in migration 031; any reference to it breaks stats.
+    """
+    from app.modules.stats.router import get_dashboard_stats
+
+    db = _make_db([[], [], [], [], []])
+    await get_dashboard_stats(current_user=_make_user(), db=db)
+
+    first_call_sql = str(db.execute.call_args_list[0].args[0])
+    assert "scoring_status" in first_call_sql, (
+        "scored_by_day query must reference scoring_status (not the dropped 'scored' column)"
+    )
+    assert "completed" in first_call_sql, (
+        "scored_by_day query must filter scoring_status = 'completed'"
+    )
+    assert "scored = true" not in first_call_sql and "scored=true" not in first_call_sql, (
+        "scored_by_day must not reference the dropped 'scored' boolean column"
+    )

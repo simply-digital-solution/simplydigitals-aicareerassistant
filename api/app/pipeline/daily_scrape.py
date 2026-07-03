@@ -141,8 +141,8 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
             # Step 2: create user_job_postings row (unscored) if not yet exists
             ujp_row = await db.execute(
                 text("""
-                    INSERT INTO user_job_postings (user_id, job_posting_id, scored)
-                    VALUES (:uid, :jid, false)
+                    INSERT INTO user_job_postings (user_id, job_posting_id, scoring_status)
+                    VALUES (:uid, :jid, 'idle')
                     ON CONFLICT (user_id, job_posting_id) DO NOTHING
                     RETURNING id
                 """),

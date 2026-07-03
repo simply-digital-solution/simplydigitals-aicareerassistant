@@ -53,7 +53,7 @@ async def get_dashboard_stats(
     r1 = await db.execute(text("""
         SELECT date(scored_at) AS day, count(*) AS count
         FROM user_job_postings
-        WHERE user_id = :uid AND scored = true AND scored_at >= :since
+        WHERE user_id = :uid AND scoring_status = 'completed' AND scored_at >= :since
         GROUP BY day ORDER BY day
     """), {"uid": uid, "since": since})
     scored_by_day = _fill_days(

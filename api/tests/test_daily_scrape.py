@@ -330,8 +330,8 @@ async def test_scrape_for_all_users_uses_separate_sessions():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_insert_uses_boolean_false_for_scored():
-    """scored column in user_job_postings must be inserted as boolean false."""
+async def test_insert_uses_idle_scoring_status():
+    """New rows in user_job_postings must be inserted with scoring_status='idle'."""
     profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
     db = AsyncMock()
     db.execute.side_effect = [
@@ -348,7 +348,8 @@ async def test_insert_uses_boolean_false_for_scored():
     insert_call = db.execute.call_args_list[2]
     sql = str(insert_call.args[0])
     assert "user_job_postings" in sql
-    assert "false" in sql.lower()
+    assert "scoring_status" in sql
+    assert "idle" in sql
 
 
 # ---------------------------------------------------------------------------
