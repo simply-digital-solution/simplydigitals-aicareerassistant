@@ -22,7 +22,7 @@ from app.modules.agents.router import _filter_by_industry
 logger = logging.getLogger(__name__)
 
 
-async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
+async def scrape_for_user(user_id: int, db: AsyncSession, shutdown_event=None) -> int:
     """
     Scrape MCF for a single user's target titles and insert new job rows.
     Returns the number of new rows inserted.
@@ -51,6 +51,11 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
     now = now_utc()
 
     for title in target_titles:
+        if shutdown_event and shutdown_event.is_set():
+            logger.warning(
+                "scrape_for_user: user_id=%d shutdown signal — stopping before title=%r", user_id, title
+            )
+            break
         t_title_start = time.monotonic()
         logger.info("scrape_for_user: user_id=%d fetching MCF for title=%r", user_id, title)
         try:
@@ -168,7 +173,7 @@ async def scrape_for_user(user_id: int, db: AsyncSession) -> int:
     return inserted
 
 
-async def scrape_for_all_users(get_db_context) -> None:
+async def scrape_for_all_users(get_db_context, shutdown_event=None) -> None:
     """Called by the scheduler — scrapes for every user who has a profile.
 
     Each user gets its own DB session so a failure for one user does not
@@ -188,9 +193,12 @@ async def scrape_for_all_users(get_db_context) -> None:
 
     summary: dict[int, int] = {}
     for uid in user_ids:
+        if shutdown_event and shutdown_event.is_set():
+            logger.warning("scrape_for_all_users: shutdown signal — stopping before user_id=%d", uid)
+            break
         try:
             async with get_db_context() as db:
-                summary[uid] = await scrape_for_user(uid, db)
+                summary[uid] = await scrape_for_user(uid, db, shutdown_event=shutdown_event)
         except Exception as exc:
             logger.error(
                 "scrape_for_all_users: user_id=%d failed: %s",

@@ -477,13 +477,18 @@ async def score_jobs_by_ids(db: AsyncSession, job_ids: list[int], user_id: int |
     return results
 
 
-async def run_scorer_loop(get_db_fn) -> None:
+async def run_scorer_loop(get_db_fn, shutdown_event: asyncio.Event) -> None:
     """
     Infinite loop — call score_next_batch() until queue is empty, then sleep.
     get_db_fn is a callable that returns an async context manager yielding a DB session.
+
+    Exits cleanly when shutdown_event is set. The current scoring job (if any)
+    runs to completion before the loop checks the event, so no DB row is left
+    stranded mid-write. The sleep between jobs is interruptible so a shutdown
+    during idle time exits immediately rather than waiting up to 5 minutes.
     """
     logger.info("llm_scorer: loop started")
-    while True:
+    while not shutdown_event.is_set():
         try:
             async with get_db_fn() as db:
                 had_work = await score_next_batch(db)
@@ -492,4 +497,10 @@ async def run_scorer_loop(get_db_fn) -> None:
             logger.error("llm_scorer: unexpected error: %s", exc)
             sleep_secs = SLEEP_BETWEEN_BATCHES
 
-        await asyncio.sleep(sleep_secs)
+        # Interruptible sleep: wakes immediately if shutdown is signalled
+        try:
+            await asyncio.wait_for(shutdown_event.wait(), timeout=sleep_secs)
+        except asyncio.TimeoutError:
+            pass
+
+    logger.info("llm_scorer: shutdown signal received — loop exiting cleanly")

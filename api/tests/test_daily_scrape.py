@@ -289,7 +289,7 @@ async def test_scrape_for_all_users_continues_on_error():
     get_db_context = _make_get_db_context([1, 2])
     call_count = 0
 
-    async def _scrape(uid, _db):
+    async def _scrape(uid, _db, **kwargs):
         nonlocal call_count
         call_count += 1
         if uid == 1:
@@ -313,7 +313,7 @@ async def test_scrape_for_all_users_uses_separate_sessions():
     sessions_seen: list = []
     get_db_context = _make_get_db_context([1, 2])
 
-    async def _capture_session(uid, db):
+    async def _capture_session(uid, db, **kwargs):
         sessions_seen.append(db)
         return 0
 
@@ -380,3 +380,65 @@ async def test_industry_backfill_failure_does_not_abort_scrape():
     ):
         # Should not raise
         await scrape_for_all_users(get_db_context)
+
+
+# ---------------------------------------------------------------------------
+# Graceful shutdown — scrape_for_all_users stops between users
+# ---------------------------------------------------------------------------
+
+import asyncio as _asyncio
+
+
+@pytest.mark.asyncio
+async def test_scrape_for_all_users_stops_between_users_on_shutdown():
+    """
+    When shutdown_event is set before the second user's turn,
+    scrape_for_user must not be called for that user.
+    """
+    event = _asyncio.Event()
+    get_db_context = _make_get_db_context([1, 2])
+    called_user_ids: list[int] = []
+
+    async def _capture(uid, db, shutdown_event=None):
+        called_user_ids.append(uid)
+        # Signal shutdown after first user — second user must be skipped
+        event.set()
+        return 1
+
+    with patch("app.pipeline.daily_scrape.scrape_for_user", side_effect=_capture):
+        await scrape_for_all_users(get_db_context, shutdown_event=event)
+
+    assert called_user_ids == [1], f"only user 1 should run before shutdown, got {called_user_ids}"
+
+
+@pytest.mark.asyncio
+async def test_scrape_for_user_stops_between_titles_on_shutdown():
+    """
+    When shutdown_event is set before the second title iteration,
+    the MCF scraper must not be called for that title.
+    """
+    import json as _json
+    event = _asyncio.Event()
+
+    profile = _make_profile(target_titles=["Data Engineer", "ML Engineer"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _jp_insert_exec(42),
+        _ujp_insert_exec(True),
+    ]
+
+    fetch_count = 0
+
+    async def _mock_scrape(query, max_results):
+        nonlocal fetch_count
+        fetch_count += 1
+        # Signal shutdown after first title fetch — second title must be skipped
+        event.set()
+        return [_make_job()]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", side_effect=_mock_scrape):
+        from app.pipeline.daily_scrape import scrape_for_user
+        await scrape_for_user(user_id=1, db=db, shutdown_event=event)
+
+    assert fetch_count == 1, f"only first title should be fetched before shutdown, got {fetch_count}"

@@ -22,13 +22,16 @@ logger = logging.getLogger(__name__)
 
 _scheduler: AsyncIOScheduler | None = None
 _scorer_task: asyncio.Task | None = None
+_shutdown_event: asyncio.Event | None = None
+
+STOP_TIMEOUT = 90  # seconds to wait for in-flight work before hard-cancel
 
 
 async def _run_daily_scrape() -> None:
     from app.shared.database import get_db_context
     from app.pipeline.daily_scrape import scrape_for_all_users
     logger.info("scheduler: daily scrape triggered at %s", __import__('datetime').datetime.now().isoformat(timespec='seconds'))
-    await scrape_for_all_users(get_db_context)
+    await scrape_for_all_users(get_db_context, shutdown_event=_shutdown_event)
     if _scheduler:
         job = _scheduler.get_job("daily_scrape")
         if job and job.next_run_time:
@@ -139,8 +142,9 @@ def _stop_traffic_controller() -> None:
 
 def start(get_db_context_fn) -> None:
     """Start the scheduler and scorer loop. Call once from app lifespan."""
-    global _scheduler, _scorer_task
+    global _scheduler, _scorer_task, _shutdown_event
 
+    _shutdown_event = asyncio.Event()
     _scheduler = AsyncIOScheduler()
     _scheduler.add_job(
         _run_daily_scrape,
@@ -176,7 +180,7 @@ def start(get_db_context_fn) -> None:
     _start_traffic_controller(get_db_context_fn)
 
     from app.pipeline.llm_scorer import run_scorer_loop
-    _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn))
+    _scorer_task = asyncio.create_task(run_scorer_loop(get_db_context_fn, _shutdown_event))
     logger.info("scheduler: LLM scorer loop started")
 
     asyncio.create_task(_startup_reset_in_progress(get_db_context_fn))
@@ -186,14 +190,37 @@ def start(get_db_context_fn) -> None:
     logger.info("scheduler: startup industry backfill task queued")
 
 
-def stop() -> None:
-    """Graceful shutdown — call from app lifespan teardown."""
-    global _scheduler, _scorer_task
+async def stop() -> None:
+    """Graceful shutdown — call from app lifespan teardown.
+
+    Signals the scorer loop and scrape runner to stop at their next natural
+    checkpoint, then waits up to STOP_TIMEOUT seconds for in-flight work to
+    finish before hard-cancelling.
+    """
+    global _scheduler, _scorer_task, _shutdown_event
+
     if _scheduler:
         _scheduler.shutdown(wait=False)
         _scheduler = None
+
+    if _shutdown_event:
+        _shutdown_event.set()
+
     if _scorer_task:
-        _scorer_task.cancel()
+        try:
+            await asyncio.wait_for(_scorer_task, timeout=STOP_TIMEOUT)
+            logger.info("scheduler: scorer loop exited cleanly")
+        except asyncio.TimeoutError:
+            logger.warning("scheduler: scorer loop did not finish within %ds — cancelling", STOP_TIMEOUT)
+            _scorer_task.cancel()
+            try:
+                await _scorer_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        except asyncio.CancelledError:
+            pass
         _scorer_task = None
+
+    _shutdown_event = None
     _stop_traffic_controller()
     logger.info("scheduler: stopped")

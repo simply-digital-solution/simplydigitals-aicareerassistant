@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
         from app.pipeline.scheduler import start, stop
         start(get_db_context)
         yield
-        stop()
+        await stop()
     else:
         yield
 
