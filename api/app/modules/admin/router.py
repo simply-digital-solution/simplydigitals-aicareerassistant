@@ -245,13 +245,13 @@ async def list_users(
             u.email,
             u.created_at,
             u.scoring_suspended,
-            MAX(ar.started_at)          AS last_active,
+            u.last_seen_at              AS last_active,
             COUNT(ar.id)                AS total_llm_requests,
             COUNT(DISTINCT ujp.id)      AS total_jobs
         FROM users u
         LEFT JOIN agent_runs ar ON ar.user_id = u.id
         LEFT JOIN user_job_postings ujp ON ujp.user_id = u.id
-        GROUP BY u.id
+        GROUP BY u.id, u.last_seen_at
         ORDER BY last_active DESC NULLS LAST
     """))
     result = []

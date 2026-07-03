@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.shared.database import get_db
 from app.shared.models import User
+from app.shared.sql_compat import now_utc
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -21,4 +22,10 @@ async def get_current_user(
         db.add(user)
         await db.commit()
         await db.refresh(user)
+
+    await db.execute(
+        text("UPDATE users SET last_seen_at = :now WHERE id = :uid"),
+        {"now": now_utc(), "uid": user.id},
+    )
+    await db.commit()
     return user

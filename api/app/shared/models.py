@@ -23,6 +23,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_now)
     scoring_suspended = Column(Boolean, default=False, nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
 
     applications = relationship("Application", back_populates="user", lazy="dynamic")
     profile = relationship("Profile", back_populates="user", uselist=False)
