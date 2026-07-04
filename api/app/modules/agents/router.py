@@ -1365,6 +1365,9 @@ async def bulk_rescore_jobs(
     scored_count = sum(1 for v in results.values() if v)
     skipped_count = sum(1 for v in results.values() if not v)
 
+    # Expire session state so the SELECT below reads committed data, not cached rows
+    await db.commit()
+
     # Fetch and return updated rows
     owned_placeholders = ",".join(f":id{i}" for i in range(len(owned_ids)))
     owned_params: dict = {"uid": current_user.id}
@@ -1424,6 +1427,9 @@ async def rescore_job(
         raise HTTPException(404, "Job not found")
 
     await score_single_job(db, job_id, user_id=current_user.id)
+
+    # Expire session state so the SELECT reads committed data, not cached rows
+    await db.commit()
 
     row = await db.execute(
         text("""
