@@ -1209,7 +1209,7 @@ async def get_stored_jobs(
             FROM user_job_postings ujp
             JOIN job_postings jp ON jp.id = ujp.job_posting_id
             WHERE {where_sql}
-            ORDER BY jp.posted_at DESC, ujp.created_at DESC
+            ORDER BY jp.posted_at DESC, jp.scraped_at DESC
             LIMIT :limit OFFSET :offset
         """),
         params,
