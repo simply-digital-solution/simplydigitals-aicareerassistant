@@ -205,3 +205,99 @@ async def test_upload_updates_existing_file():
     assert file_id == "existing_file_id"
     mock_client.patch.assert_called_once()
     mock_client.post.assert_not_called()  # no new file created
+
+
+# ---------------------------------------------------------------------------
+# refresh_access_token — invalid_grant handling
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_refresh_token_invalid_grant_raises_revoked_exception():
+    """400 invalid_grant must raise GoogleTokenRevokedException, not HTTPStatusError."""
+    mock_response = MagicMock()
+    mock_response.status_code = 400
+    mock_response.json.return_value = {
+        "error": "invalid_grant",
+        "error_description": "Token has been expired or revoked.",
+    }
+
+    with patch("app.shared.google_drive.get_settings") as mock_settings, \
+         patch("httpx.AsyncClient") as mock_client_cls:
+        s = MagicMock()
+        s.google_client_id = "cid"
+        s.google_client_secret = "secret"
+        mock_settings.return_value = s
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_cls.return_value = mock_client
+
+        from app.shared.google_drive import refresh_access_token, GoogleTokenRevokedException
+        with pytest.raises(GoogleTokenRevokedException) as exc_info:
+            await refresh_access_token("stale-refresh-token")
+
+    assert "revoked" in str(exc_info.value).lower() or "expired" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_other_400_raises_http_status_error():
+    """400 errors that are not invalid_grant should raise HTTPStatusError with body details."""
+    import httpx
+
+    mock_response = MagicMock()
+    mock_response.status_code = 400
+    mock_response.json.return_value = {
+        "error": "invalid_client",
+        "error_description": "The OAuth client was not found.",
+    }
+    mock_response.request = MagicMock()
+
+    with patch("app.shared.google_drive.get_settings") as mock_settings, \
+         patch("httpx.AsyncClient") as mock_client_cls:
+        s = MagicMock()
+        s.google_client_id = "cid"
+        s.google_client_secret = "secret"
+        mock_settings.return_value = s
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_cls.return_value = mock_client
+
+        from app.shared.google_drive import refresh_access_token, GoogleTokenRevokedException
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await refresh_access_token("some-token")
+
+    assert "invalid_client" in str(exc_info.value)
+    assert "OAuth client was not found" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_success_returns_tokens():
+    """200 response must return token dict."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"access_token": "new_acc", "expires_in": 3600}
+
+    with patch("app.shared.google_drive.get_settings") as mock_settings, \
+         patch("httpx.AsyncClient") as mock_client_cls:
+        s = MagicMock()
+        s.google_client_id = "cid"
+        s.google_client_secret = "secret"
+        mock_settings.return_value = s
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_cls.return_value = mock_client
+
+        from app.shared.google_drive import refresh_access_token
+        result = await refresh_access_token("valid-refresh-token")
+
+    assert result["access_token"] == "new_acc"
+    assert result["expires_in"] == 3600

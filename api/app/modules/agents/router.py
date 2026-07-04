@@ -687,6 +687,7 @@ async def interview_from_job(
         drive_link: str | None = None
         drive_error: str | None = None
         try:
+            from app.shared.google_drive import GoogleTokenRevokedException
             docx_bytes = build_interview_pack_docx(result, company_name, job_title)
             pdf_bytes, conv_token_data = await convert_docx_to_pdf_bytes(
                 access_token=prof["google_access_token"],
@@ -735,6 +736,14 @@ async def interview_from_job(
                  "app_id": request.application_id, "uid": current_user.id},
             )
             await db.commit()
+        except GoogleTokenRevokedException as exc:
+            logger.warning("interview_from_job: Google token revoked — clearing tokens user_id=%d: %s", current_user.id, exc)
+            await db.execute(
+                text("UPDATE profiles SET google_access_token=NULL, google_refresh_token=NULL, google_token_expiry=NULL WHERE user_id=:uid"),
+                {"uid": current_user.id},
+            )
+            await db.commit()
+            drive_error = "Google Drive access was revoked. Please reconnect Drive in your profile settings."
         except Exception as exc:
             logger.error("interview_from_job: Drive upload failed — %s", exc, exc_info=True)
             drive_error = str(exc)
@@ -1580,6 +1589,7 @@ async def generate_resume(
     drive_link: str | None = None
 
     try:
+        from app.shared.google_drive import GoogleTokenRevokedException
         docx_bytes = build_docx_bytes(result)
         # Convert .docx → PDF via Drive API (import as Google Doc, export PDF, delete temp)
         pdf_bytes, conv_token_data = await convert_docx_to_pdf_bytes(
@@ -1638,6 +1648,17 @@ async def generate_resume(
             current_user.id, job_id, drive_file_id,
         )
 
+    except GoogleTokenRevokedException as exc:
+        logger.warning(
+            "generate_resume: Google token revoked — clearing tokens user_id=%d job_id=%d: %s",
+            current_user.id, job_id, exc,
+        )
+        await db.execute(
+            text("UPDATE profiles SET google_access_token=NULL, google_refresh_token=NULL, google_token_expiry=NULL WHERE user_id=:uid"),
+            {"uid": current_user.id},
+        )
+        await db.commit()
+        drive_error = "Google Drive access was revoked. Please reconnect Drive in your profile settings."
     except Exception as exc:
         logger.error(
             "generate_resume: Drive upload failed — user_id=%d job_id=%d: %s",
@@ -1711,6 +1732,7 @@ async def retry_drive_upload(
     docx_filename = f"Resume_{company_slug}.docx"
     pdf_filename  = f"Resume_{company_slug}.pdf"
 
+    from app.shared.google_drive import GoogleTokenRevokedException
     conv_token_data: dict | None = None
     try:
         docx_bytes = build_docx_bytes(resume)
@@ -1736,12 +1758,23 @@ async def retry_drive_upload(
             file_bytes=pdf_bytes,
             existing_file_id=gr["drive_file_id"],
         )
+    except GoogleTokenRevokedException as exc:
+        logger.warning(
+            "retry_drive_upload: Google token revoked — clearing tokens user_id=%d job_id=%d: %s",
+            current_user.id, job_id, exc,
+        )
+        await db.execute(
+            text("UPDATE profiles SET google_access_token=NULL, google_refresh_token=NULL, google_token_expiry=NULL WHERE user_id=:uid"),
+            {"uid": current_user.id},
+        )
+        await db.commit()
+        raise HTTPException(422, "Google Drive access was revoked. Please reconnect Drive in your profile settings.") from exc
     except Exception as exc:
         logger.error(
             "retry_drive_upload: failed — user_id=%d job_id=%d: %s",
             current_user.id, job_id, exc, exc_info=True,
         )
-        raise HTTPException(502, f"Google Drive upload failed: {exc}")
+        raise HTTPException(502, f"Google Drive upload failed: {exc}") from exc
 
     now = now_utc()
 

@@ -24,6 +24,10 @@ import httpx
 
 from app.shared.config import get_settings
 
+
+class GoogleTokenRevokedException(Exception):
+    """Raised when Google rejects a refresh token (invalid_grant)."""
+
 _SCOPES = "https://www.googleapis.com/auth/drive.file"
 _AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -69,6 +73,7 @@ async def refresh_access_token(refresh_token: str) -> dict:
     """Get a new access token using the stored refresh token.
 
     Returns dict with keys: access_token, expires_in.
+    Raises GoogleTokenRevokedException on invalid_grant (token revoked/expired).
     """
     settings = get_settings()
     async with httpx.AsyncClient() as client:
@@ -78,6 +83,20 @@ async def refresh_access_token(refresh_token: str) -> dict:
             "client_secret": settings.google_client_secret,
             "grant_type": "refresh_token",
         })
+        if resp.status_code == 400:
+            body = resp.json()
+            error_code = body.get("error", "unknown")
+            error_desc = body.get("error_description", "")
+            if error_code == "invalid_grant":
+                raise GoogleTokenRevokedException(
+                    f"Google refresh token revoked or expired: {error_desc}"
+                )
+            # Other 400 errors — log body and raise normally
+            raise httpx.HTTPStatusError(
+                f"Token endpoint 400: {error_code} — {error_desc}",
+                request=resp.request,
+                response=resp,
+            )
         resp.raise_for_status()
         return resp.json()
 
