@@ -33,8 +33,9 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      api: ${{ steps.filter.outputs.api }}
-      ui:  ${{ steps.filter.outputs.ui }}
+      api:     ${{ steps.filter.outputs.api }}
+      ui:      ${{ steps.filter.outputs.ui }}
+      website: ${{ steps.filter.outputs.website }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,6 +53,9 @@ jobs:
             ui:
               - 'ui/**'
               - '!ui/**.md'
+            website:
+              - 'website/**'
+              - '!website/setup-aws.sh'
 
   # ── Validate required secrets (runs on pull request only) ────────────────
   validate-secrets:
@@ -144,6 +148,21 @@ jobs:
       CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
       PROD_API_URL:               ${{ secrets.PROD_API_URL }}
       VITE_HCAPTCHA_SITE_KEY:     ${{ secrets.VITE_HCAPTCHA_SITE_KEY }}
+
+  # ── Website Pipeline ─────────────────────────────────────────────────────
+  website:
+    name: Website Pipeline
+    needs: detect
+    if: needs.detect.outputs.website == 'true' || startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/website-ci.yml
+    with:
+      run_deploy: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') }}
+    secrets:
+      AWS_ACCESS_KEY_ID:                  ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY:              ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION:                         ${{ secrets.AWS_REGION }}
+      WEBSITE_S3_BUCKET:                  ${{ secrets.WEBSITE_S3_BUCKET }}
+      WEBSITE_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.WEBSITE_CLOUDFRONT_DISTRIBUTION_ID }}
 
   # ── Post-Deploy Integration Tests ────────────────────────────────────────
   post-deploy-tests:
