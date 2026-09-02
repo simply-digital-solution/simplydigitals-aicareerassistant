@@ -68,6 +68,7 @@ class ProfileUpdate(BaseModel):
     salary_floor: int | None = None
     salary_currency: str | None = None
     excluded_companies: str | None = None    # JSON array string
+    watched_companies: str | None = None     # JSON array string of {name, url}
     years_experience: int | None = None
     education: str | None = None             # JSON array of {degree, institution, year}
     certifications: str | None = None        # JSON array of {name, issuer, issued_date, expiry_date}
@@ -87,6 +88,7 @@ class ProfileResponse(BaseModel):
     salary_floor: int | None
     salary_currency: str | None
     excluded_companies: str | None
+    watched_companies: str | None
     role_fit_json: str | None
     seniority_level: str | None
     target_industries: str | None

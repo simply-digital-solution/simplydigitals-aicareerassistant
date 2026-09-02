@@ -51,6 +51,7 @@ class Profile(Base):
     salary_floor = Column(Integer)                          # minimum acceptable salary
     salary_currency = Column(String(10), default="USD")
     excluded_companies = Column(Text)                       # JSON array
+    watched_companies = Column(Text)                        # JSON array of {name, url}
     role_fit_json = Column(Text)                            # last RoleFitOutput as JSON
     seniority_level = Column(String(50))                    # kept for backward compat, no longer primary
     target_titles = Column(Text)                            # JSON array of inferred target job titles
