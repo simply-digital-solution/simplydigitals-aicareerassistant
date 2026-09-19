@@ -50,6 +50,28 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _parse_workday_posted_on(posted_on: str) -> str | None:
+    """
+    Convert Workday's relative posting text ("Posted Today", "Posted 9 Days
+    Ago") into an ISO date. Returns None for anything else (e.g. "Posted
+    30+ Days Ago" has no exact day count) rather than guessing.
+    """
+    if not posted_on:
+        return None
+    text = posted_on.strip().lower()
+    if text == "posted today":
+        days_ago = 0
+    else:
+        match = re.match(r"posted (\d+) days? ago$", text)
+        if not match:
+            return None
+        days_ago = int(match.group(1))
+
+    from datetime import timedelta
+    posted_date = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    return posted_date.date().isoformat()
+
+
 def _strip_html(raw_html: str) -> str:
     # Greenhouse's `content` field is HTML-entity-escaped HTML (e.g. "&lt;p&gt;"),
     # so entities must be decoded before tags can be recognized and stripped.
@@ -130,4 +152,104 @@ async def scrape_greenhouse(careers_url: str, company_name: str) -> list[dict]:
         })
 
     logger.info("Greenhouse: board_token=%r → built %d job dicts", board_token, len(jobs))
+    return jobs
+
+
+# ---------------------------------------------------------------------------
+# Workday — undocumented internal JSON API (no public API exists).
+# The same endpoint the career site's own JavaScript calls; no auth required.
+# ---------------------------------------------------------------------------
+
+
+def _workday_tenant_site_host(careers_url: str) -> tuple[str, str, str] | None:
+    """
+    Extract (host, tenant, site) from a Workday careers URL, e.g.
+    https://uobgroup.wd3.myworkdayjobs.com/UOBExternal
+      -> ("uobgroup.wd3.myworkdayjobs.com", "uobgroup", "UOBExternal")
+    """
+    parsed = urlparse(careers_url)
+    host = parsed.hostname
+    if not host:
+        return None
+    tenant = host.split(".")[0]
+    site = parsed.path.strip("/").split("/")[0]
+    if not tenant or not site:
+        return None
+    return host, tenant, site
+
+
+async def scrape_workday(
+    careers_url: str,
+    company_name: str,
+    query: str = "",
+    max_results: int = 20,
+) -> list[dict]:
+    """
+    Fetch job listings for a company from Workday's internal jobs API,
+    filtered by `query` (passed as Workday's own search text) and capped
+    at `max_results` most-recent matches, then fetch each match's full
+    description from the job detail endpoint.
+
+    Returns [] on any failure — callers scrape many companies in a loop
+    and one bad watchlist entry must not abort the rest.
+    """
+    parsed = _workday_tenant_site_host(careers_url)
+    if not parsed:
+        logger.warning("Workday: could not extract tenant/site from url=%r", careers_url)
+        return []
+    host, tenant, site = parsed
+
+    list_url = f"https://{host}/wday/cxs/{tenant}/{site}/jobs"
+    payload = {"limit": min(max_results, 20), "offset": 0, "searchText": query}
+    logger.info("Workday: POST %s query=%r", list_url, query)
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(list_url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.warning("Workday: list request failed for host=%r query=%r: %s", host, query, e)
+        return []
+
+    raw_postings = data.get("jobPostings")
+    if not isinstance(raw_postings, list):
+        logger.warning("Workday: unexpected response shape for host=%r", host)
+        return []
+
+    jobs = []
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        for item in raw_postings[:max_results]:
+            external_path = item.get("externalPath", "")
+            title = item.get("title", "")
+            if not external_path or not title:
+                continue
+
+            job_url = f"https://{host}/{site}{external_path}"
+            description = ""
+            try:
+                detail_url = f"https://{host}/wday/cxs/{tenant}/{site}{external_path}"
+                detail_resp = await client.get(detail_url)
+                detail_resp.raise_for_status()
+                detail_data = detail_resp.json()
+                raw_description = (detail_data.get("jobPostingInfo") or {}).get("jobDescription", "")
+                description = _strip_html(raw_description)
+            except Exception as e:
+                logger.warning("Workday: detail request failed for path=%r: %s", external_path, e)
+                # keep the job with an empty description rather than dropping it —
+                # the listing itself (title, location) is still real, usable data
+
+            jobs.append({
+                "title": title,
+                "company": company_name,
+                "url": job_url,
+                "location": item.get("locationsText", ""),
+                "description": description,
+                "inferred_industries": [],
+                "source": "workday",
+                "scraped_at": _now_iso(),
+                "posted_at": _parse_workday_posted_on(item.get("postedOn", "")),
+            })
+
+    logger.info("Workday: host=%r query=%r → built %d job dicts", host, query, len(jobs))
     return jobs
