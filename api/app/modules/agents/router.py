@@ -1925,6 +1925,17 @@ async def trigger_scrape(
     return {"inserted": inserted}
 
 
+@router.post("/research/scrape-watchlist")
+async def trigger_watchlist_scrape(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """On-demand scrape of the current user's watched companies — same as the daily job but immediate."""
+    from app.pipeline.daily_scrape import scrape_watchlist_for_user
+    inserted = await scrape_watchlist_for_user(current_user.id, db)
+    return {"inserted": inserted}
+
+
 @router.get("/research/feedback")
 async def get_job_feedback(
     current_user = Depends(get_current_user),

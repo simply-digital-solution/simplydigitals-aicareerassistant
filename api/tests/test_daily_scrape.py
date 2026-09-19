@@ -12,7 +12,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch, call
 import pytest
 
-from app.pipeline.daily_scrape import scrape_for_user, scrape_for_all_users
+from app.pipeline.daily_scrape import scrape_for_user, scrape_for_all_users, scrape_watchlist_for_user
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +278,35 @@ async def test_scrape_for_all_users_calls_each_user():
         await scrape_for_all_users(get_db_context)
 
     assert mock_scrape.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_scrape_for_all_users_also_scrapes_watchlist():
+    get_db_context = _make_get_db_context([1, 2])
+
+    with patch("app.pipeline.daily_scrape.scrape_for_user", AsyncMock(return_value=5)), \
+         patch("app.pipeline.daily_scrape.scrape_watchlist_for_user",
+               AsyncMock(return_value=0)) as mock_watchlist:
+        await scrape_for_all_users(get_db_context)
+
+    assert mock_watchlist.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_watchlist_scrape_failure_does_not_abort_other_users():
+    get_db_context = _make_get_db_context([1, 2])
+
+    async def _watchlist_scrape(uid, _db):
+        if uid == 1:
+            raise RuntimeError("boom")
+        return 0
+
+    with patch("app.pipeline.daily_scrape.scrape_for_user", AsyncMock(return_value=0)), \
+         patch("app.pipeline.daily_scrape.scrape_watchlist_for_user",
+               side_effect=_watchlist_scrape) as mock_watchlist:
+        await scrape_for_all_users(get_db_context)
+
+    assert mock_watchlist.call_count == 2
 
 
 # ---------------------------------------------------------------------------
