@@ -90,6 +90,7 @@ export interface StoredJob {
   inferred_industries: string | null   // JSON string from DB
   posted_at: string | null
   scraped_at: string
+  source: string | null
   scoring_status: 'idle' | 'in_progress' | 'completed' | 'failed'
   fit_score: number | null
   reasons: string | null               // JSON string from DB

@@ -280,6 +280,67 @@ async def test_long_url_derived_uuid_is_truncated_to_100_chars():
 
 
 # ---------------------------------------------------------------------------
+# source column — defaults to "mycareersfuture", passes through scraper's
+# own value otherwise, and is never overwritten on a conflict-update.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_source_defaults_to_mycareersfuture_when_absent():
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
+    from datetime import datetime, timezone
+
+    db = AsyncMock()
+    db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
+
+    job = _make_job()  # no "source" key — mirrors scrape_mycareersfuture()'s dicts
+
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+
+    insert_call = db.execute.call_args_list[0]
+    assert insert_call.args[1]["source"] == "mycareersfuture"
+
+
+@pytest.mark.asyncio
+async def test_source_passes_through_scraper_value():
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
+    from datetime import datetime, timezone
+
+    db = AsyncMock()
+    db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
+
+    job = _make_job()
+    job["source"] = "workday"
+
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+
+    insert_call = db.execute.call_args_list[0]
+    assert insert_call.args[1]["source"] == "workday"
+
+
+@pytest.mark.asyncio
+async def test_source_not_overwritten_in_conflict_update_clause():
+    """
+    A job's original source shouldn't change on rescrape — verify the SQL's
+    ON CONFLICT DO UPDATE clause never assigns source, regardless of the
+    value passed as a bind parameter.
+    """
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
+    from datetime import datetime, timezone
+
+    db = AsyncMock()
+    db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
+
+    job = _make_job()
+    job["source"] = "greenhouse"
+
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+
+    insert_sql = db.execute.call_args_list[0].args[0].text
+    update_clause = insert_sql.split("DO UPDATE SET", 1)[1].split("RETURNING", 1)[0]
+    assert "source" not in update_clause
+
+
+# ---------------------------------------------------------------------------
 # Helpers for scrape_for_all_users (get_db_context-based)
 # ---------------------------------------------------------------------------
 

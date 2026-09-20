@@ -394,6 +394,7 @@ class JobPosting(Base):
     inferred_industries = Column(Text)          # JSON array
     posted_at = Column(DateTime(timezone=True))
     scraped_at = Column(DateTime(timezone=True), default=_now, nullable=False)
+    source = Column(String(50))                 # "mycareersfuture" | "greenhouse" | "workday" | ...
 
     user_job_postings = relationship("UserJobPosting", back_populates="job_posting", lazy="dynamic")
 

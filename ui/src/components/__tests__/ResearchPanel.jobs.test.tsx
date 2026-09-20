@@ -48,6 +48,7 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob {
     inferred_industries:  JSON.stringify(['Technology & Software']),
     posted_at:            '2026-06-10T10:00:00Z',
     scraped_at:           '2026-06-11T07:00:00Z',
+    source:               'mycareersfuture',
     scoring_status:       'completed' as const,
     fit_score:            0.82,
     reasons:              JSON.stringify(['Python skills match']),
@@ -165,6 +166,19 @@ describe('LatestJobs — job card', () => {
     setupApiMocks([makeJob({ scoring_status: 'idle', fit_score: null })])
     wrap()
     expect(await screen.findByText(/scoring…/i)).toBeInTheDocument()
+  })
+
+  it('shows a Watchlist badge for jobs sourced from a company scraper', async () => {
+    setupApiMocks([makeJob({ source: 'workday' })])
+    wrap()
+    expect(await screen.findByText('Watchlist')).toBeInTheDocument()
+  })
+
+  it('does not show a Watchlist badge for MyCareersFuture jobs', async () => {
+    setupApiMocks([makeJob({ source: 'mycareersfuture' })])
+    wrap()
+    await screen.findByText('ACME Corp')
+    expect(screen.queryByText('Watchlist')).not.toBeInTheDocument()
   })
 
   it('renders industry tags', async () => {

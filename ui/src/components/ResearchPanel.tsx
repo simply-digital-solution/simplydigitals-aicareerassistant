@@ -135,6 +135,11 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           <p className="text-sm text-gray-500">
             {job.company}
             {postedLabel && <span className="ml-2 text-xs text-gray-400">· {postedLabel}</span>}
+            {job.source && job.source !== 'mycareersfuture' && (
+              <span className="ml-2 text-xs font-medium px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">
+                Watchlist
+              </span>
+            )}
           </p>
           {feedback?.relevance === 'not_relevant' && feedback.reason && (
             <p className="text-xs text-red-500 mt-0.5">👎 {feedback.reason}</p>

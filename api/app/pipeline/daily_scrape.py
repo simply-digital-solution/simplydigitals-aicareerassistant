@@ -68,10 +68,10 @@ async def _insert_jobs_for_user(
             text("""
                 INSERT INTO job_postings
                     (mcf_uuid, title, company, url, location,
-                     description, inferred_industries, posted_at, scraped_at)
+                     description, inferred_industries, posted_at, scraped_at, source)
                 VALUES
                     (:uuid, :title, :company, :url, :location,
-                     :description, :industries, :posted_at, :scraped_at)
+                     :description, :industries, :posted_at, :scraped_at, :source)
                 ON CONFLICT (mcf_uuid) DO UPDATE SET
                     inferred_industries = CASE
                         WHEN job_postings.inferred_industries IS NULL
@@ -92,6 +92,7 @@ async def _insert_jobs_for_user(
                 "industries":  industries_json,
                 "posted_at":   posted_at,
                 "scraped_at":  now,
+                "source":      job.get("source", "mycareersfuture"),
             },
         )
         jp_id_row = jp_row.fetchone()

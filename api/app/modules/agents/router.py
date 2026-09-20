@@ -1211,7 +1211,7 @@ async def get_stored_jobs(
     rows = await db.execute(
         text(f"""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
-                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at, jp.source,
                    ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model
@@ -1239,7 +1239,7 @@ async def get_selected_jobs(
     rows = await db.execute(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
-                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at, jp.source,
                    ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model, ujp.archived,
@@ -1268,7 +1268,7 @@ async def get_applied_jobs(
     rows = await db.execute(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
-                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at, jp.source,
                    ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model, ujp.archived,
@@ -1296,7 +1296,7 @@ async def get_interviewing_jobs(
     rows = await db.execute(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
-                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at, jp.source,
                    ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model, ujp.archived,
@@ -1385,7 +1385,7 @@ async def bulk_rescore_jobs(
     rows = await db.execute(
         text(f"""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
-                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at, jp.source,
                    ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model
@@ -1443,7 +1443,7 @@ async def rescore_job(
     row = await db.execute(
         text("""
             SELECT jp.id, jp.mcf_uuid, jp.title, jp.company, jp.url, jp.location,
-                   jp.inferred_industries, jp.posted_at, jp.scraped_at,
+                   jp.inferred_industries, jp.posted_at, jp.scraped_at, jp.source,
                    ujp.scoring_status, ujp.fit_score, ujp.reasons, ujp.risks, ujp.key_keywords,
                    ujp.scoring_breakdown, ujp.recommendation, ujp.score_error,
                    ujp.scored_at, ujp.scored_by_model

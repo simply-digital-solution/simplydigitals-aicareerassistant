@@ -30,6 +30,7 @@ function makeJob(overrides: Partial<StoredJob> = {}): StoredJob & { application_
     url: 'https://www.mycareersfuture.gov.sg/job/abc', location: 'Singapore',
     inferred_industries: JSON.stringify(['Technology & Software']),
     posted_at: '2026-06-10T10:00:00Z', scraped_at: '2026-06-11T07:00:00Z',
+    source: 'mycareersfuture',
     scoring_status: 'completed' as const, fit_score: 0.82,
     reasons: JSON.stringify(['Python skills match']),
     risks: JSON.stringify(['No cloud experience']),
