@@ -52,7 +52,11 @@ async def _insert_jobs_for_user(
     skipped = 0
 
     for job in jobs:
-        uuid = job.get("url", "").rstrip("/").split("/")[-1]
+        # Prefer an explicit external_id (set by scrapers whose URLs embed
+        # the full job title, e.g. Workday) — the URL's last path segment
+        # alone can exceed job_postings.mcf_uuid's varchar(100) limit.
+        uuid = job.get("external_id") or job.get("url", "").rstrip("/").split("/")[-1]
+        uuid = uuid[:100]
         if not uuid:
             skipped += 1
             continue

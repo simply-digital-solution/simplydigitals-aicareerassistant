@@ -241,6 +241,45 @@ async def test_job_with_empty_url_is_skipped():
 
 
 # ---------------------------------------------------------------------------
+# Dedup key derivation — external_id preferred over URL-derived uuid,
+# and truncated to fit job_postings.mcf_uuid's varchar(100) limit.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_external_id_preferred_over_url_derived_uuid():
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
+    from datetime import datetime, timezone
+
+    db = AsyncMock()
+    db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
+
+    job = _make_job(url="https://example.com/job/short-slug")
+    job["external_id"] = "workday:acme:JR12345"
+
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+
+    insert_call = db.execute.call_args_list[0]
+    assert insert_call.args[1]["uuid"] == "workday:acme:JR12345"
+
+
+@pytest.mark.asyncio
+async def test_long_url_derived_uuid_is_truncated_to_100_chars():
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
+    from datetime import datetime, timezone
+
+    db = AsyncMock()
+    db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
+
+    long_slug = "a" * 150
+    job = _make_job(url=f"https://example.com/job/{long_slug}")
+
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+
+    insert_call = db.execute.call_args_list[0]
+    assert len(insert_call.args[1]["uuid"]) == 100
+
+
+# ---------------------------------------------------------------------------
 # Helpers for scrape_for_all_users (get_db_context-based)
 # ---------------------------------------------------------------------------
 

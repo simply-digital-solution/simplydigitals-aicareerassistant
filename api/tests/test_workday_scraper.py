@@ -43,10 +43,48 @@ async def test_parses_jobs_into_common_shape():
     assert job["title"] == "Senior Engineer"
     assert job["company"] == "Acme Corp"
     assert job["url"] == "https://acme.wd3.myworkdayjobs.com/AcmeExternal/job/Singapore/Senior-Engineer_JR12345"
+    assert job["external_id"] == "workday:acme:JR12345"
     assert job["location"] == "Singapore"
     assert job["description"] == "Build things."
     assert job["source"] == "workday"
     assert job["inferred_industries"] == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_external_id_stays_under_100_chars_even_for_long_title_slugs():
+    """
+    Regression test: externalPath embeds the full job title and can exceed
+    100 chars, but job_postings.mcf_uuid is varchar(100) — the dedup key
+    must be derived from the short requisition id, not the full path.
+    """
+    long_path = (
+        "/job/Central-Region-City-Area/"
+        "Senior-Officer--Production-Support-Analyst--Compliance--"
+        "Group-Infrastructure---Platform-Services_JR89227"
+    )
+    assert len(long_path) > 100  # sanity check that this reproduces the real failure
+
+    respx.post(_LIST_URL).mock(return_value=httpx.Response(200, json={
+        "total": 1,
+        "jobPostings": [
+            {
+                "title": "Senior Officer, Production Support Analyst, Compliance",
+                "externalPath": long_path,
+                "locationsText": "Central Region (City Area)",
+                "postedOn": "Posted Today",
+            },
+        ],
+    }))
+    respx.get(f"{_LIST_URL.rsplit('/jobs', 1)[0]}{long_path}").mock(
+        return_value=httpx.Response(200, json={"jobPostingInfo": {"jobDescription": ""}})
+    )
+
+    jobs = await scrape_workday(_CAREERS_URL, "Acme Corp")
+
+    assert len(jobs) == 1
+    assert len(jobs[0]["external_id"]) <= 100
+    assert jobs[0]["external_id"] == "workday:acme:JR89227"
 
 
 @pytest.mark.asyncio

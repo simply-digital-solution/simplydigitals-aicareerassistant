@@ -226,6 +226,11 @@ async def scrape_workday(
                 continue
 
             job_url = f"https://{host}/{site}{external_path}"
+            # externalPath embeds the full job title (can run well past 100
+            # chars); the requisition id after the last "_" is short, stable,
+            # and unique per tenant — use that as the dedup key instead.
+            requisition_id = external_path.rsplit("_", 1)[-1] if "_" in external_path else external_path
+            external_id = f"workday:{tenant}:{requisition_id}"[:100]
             description = ""
             try:
                 detail_url = f"https://{host}/wday/cxs/{tenant}/{site}{external_path}"
@@ -243,6 +248,7 @@ async def scrape_workday(
                 "title": title,
                 "company": company_name,
                 "url": job_url,
+                "external_id": external_id,
                 "location": item.get("locationsText", ""),
                 "description": description,
                 "inferred_industries": [],
