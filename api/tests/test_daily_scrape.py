@@ -190,20 +190,10 @@ async def test_scraper_error_is_handled():
 # scrape_for_user — eFinancialCareers results are merged in alongside MCF
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
-async def test_efc_jobs_merged_in_alongside_mcf():
-    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
-    db = AsyncMock()
-    db.execute.side_effect = [
-        _profile_exec(profile),
-        _jp_insert_exec(1), _ujp_insert_exec(True),   # MCF job
-        _jp_insert_exec(2), _ujp_insert_exec(True),   # eFC job
-    ]
-
-    mcf_job = _make_job(url="https://www.mycareersfuture.gov.sg/job/abc", mcf_uuid="abc")
-    efc_job = {
-        "url": "https://www.efinancialcareers.sg/jobs-x.id999",
-        "external_id": "efinancialcareers:999",
+def _make_efc_job(external_id="efinancialcareers:999", url="https://www.efinancialcareers.sg/jobs-x.id999"):
+    return {
+        "url": url,
+        "external_id": external_id,
         "title": "Delivery Manager",
         "company": "Some Bank",
         "location": "Singapore",
@@ -213,11 +203,54 @@ async def test_efc_jobs_merged_in_alongside_mcf():
         "source": "efinancialcareers",
     }
 
+
+@pytest.mark.asyncio
+async def test_efc_jobs_merged_in_alongside_mcf():
+    """
+    scrape_for_user queries eFinancialCareers once per _EFC_LOCATIONS entry
+    — mock a distinct job per call so each produces a real new insert,
+    rather than all calls returning the same job (which would legitimately
+    dedupe via ON CONFLICT after the first).
+    """
+    from app.pipeline.daily_scrape import _EFC_LOCATIONS
+    num_locations = len(_EFC_LOCATIONS)
+
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _jp_insert_exec(1), _ujp_insert_exec(True),   # MCF job
+    ] + [x for i in range(num_locations) for x in (_jp_insert_exec(100 + i), _ujp_insert_exec(True))]
+
+    mcf_job = _make_job(url="https://www.mycareersfuture.gov.sg/job/abc", mcf_uuid="abc")
+    efc_jobs_by_location = [
+        _make_efc_job(external_id=f"efinancialcareers:{i}", url=f"https://www.efinancialcareers.sg/jobs-x.id{i}")
+        for i in range(num_locations)
+    ]
+
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[mcf_job])), \
-         patch("app.pipeline.daily_scrape.scrape_efinancialcareers", AsyncMock(return_value=[efc_job])):
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers",
+               AsyncMock(side_effect=lambda **kwargs: [efc_jobs_by_location.pop(0)])):
         inserted = await scrape_for_user(user_id=1, db=db)
 
-    assert inserted == 2
+    assert inserted == 1 + num_locations
+
+
+@pytest.mark.asyncio
+async def test_efc_queried_once_per_configured_location():
+    from app.pipeline.daily_scrape import _EFC_LOCATIONS
+
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.return_value = _profile_exec(profile)
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[])), \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers",
+               AsyncMock(return_value=[])) as mock_efc:
+        await scrape_for_user(user_id=1, db=db)
+
+    queried_locations = {c.kwargs["location"] for c in mock_efc.call_args_list}
+    assert queried_locations == set(_EFC_LOCATIONS.keys())
 
 
 @pytest.mark.asyncio
@@ -239,6 +272,14 @@ async def test_efc_failure_does_not_abort_mcf_results():
 
 @pytest.mark.asyncio
 async def test_mcf_failure_does_not_prevent_efc_results():
+    """
+    Only the first location call returns a job — keeps this test's DB mock
+    to a single insert pair, since full multi-location coverage is already
+    exercised by test_efc_jobs_merged_in_alongside_mcf.
+    """
+    from app.pipeline.daily_scrape import _EFC_LOCATIONS
+    num_locations = len(_EFC_LOCATIONS)
+
     profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
     db = AsyncMock()
     db.execute.side_effect = [
@@ -246,21 +287,12 @@ async def test_mcf_failure_does_not_prevent_efc_results():
         _jp_insert_exec(1), _ujp_insert_exec(True),
     ]
 
-    efc_job = {
-        "url": "https://www.efinancialcareers.sg/jobs-x.id999",
-        "external_id": "efinancialcareers:999",
-        "title": "Delivery Manager",
-        "company": "Some Bank",
-        "location": "Singapore",
-        "description": "Lead delivery",
-        "inferred_industries": [],
-        "posted_at": None,
-        "source": "efinancialcareers",
-    }
+    efc_results = [[_make_efc_job()]] + [[]] * (num_locations - 1)
 
     with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
                AsyncMock(side_effect=RuntimeError("MCF down"))), \
-         patch("app.pipeline.daily_scrape.scrape_efinancialcareers", AsyncMock(return_value=[efc_job])):
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers",
+               AsyncMock(side_effect=lambda **kwargs: efc_results.pop(0))):
         inserted = await scrape_for_user(user_id=1, db=db)
 
     assert inserted == 1

@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 
-from app.pipeline.scraper import scrape_efinancialcareers
+from app.pipeline.scraper import scrape_efinancialcareers, _EFC_LOCATIONS
 
 _SEARCH_URL = "https://job-search-ui.efinancialcareers.com/v1/efc/jobs/search"
 
@@ -88,6 +88,40 @@ async def test_sends_full_location_scoping_params():
     assert sent_params.get("location") == "Singapore"
     assert "latitude" in sent_params
     assert "longitude" in sent_params
+
+
+@pytest.mark.parametrize("location_key", list(_EFC_LOCATIONS.keys()))
+@pytest.mark.asyncio
+@respx.mock
+async def test_each_configured_location_sends_its_own_coordinates(location_key):
+    """
+    Every entry in _EFC_LOCATIONS was verified live against the real API
+    before being added (Singapore, UAE, Qatar, Saudi Arabia, Bahrain) —
+    this guards that scrape_efinancialcareers actually sends the specific
+    location's own country code and coordinates, not a copy-paste mistake
+    reusing another country's values.
+    """
+    route = respx.get(_SEARCH_URL).mock(return_value=httpx.Response(200, json={"data": []}))
+
+    await scrape_efinancialcareers("Manager", location=location_key)
+
+    sent_params = dict(route.calls[0].request.url.params)
+    expected = _EFC_LOCATIONS[location_key]
+    assert sent_params.get("countryCode2") == expected["countryCode2"]
+    assert sent_params.get("location") == expected["location"]
+    assert float(sent_params.get("latitude")) == expected["latitude"]
+    assert float(sent_params.get("longitude")) == expected["longitude"]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_unknown_location_returns_empty_without_request():
+    """No route registered — if the code tried a real request despite the
+    unknown location, respx would raise rather than let it escape to the
+    network."""
+    jobs = await scrape_efinancialcareers("Manager", location="atlantis")
+
+    assert jobs == []
 
 
 @pytest.mark.asyncio

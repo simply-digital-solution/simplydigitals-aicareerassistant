@@ -351,7 +351,7 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
 
 
 # ---------------------------------------------------------------------------
-# eFinancialCareers — finance/banking job aggregator, Singapore.
+# eFinancialCareers — finance/banking job aggregator, multi-country.
 # No official search API; this is the undocumented internal endpoint the
 # site's own frontend calls (found via its embedded API URL, verified live).
 # ---------------------------------------------------------------------------
@@ -359,32 +359,61 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
 _EFC_SEARCH_BASE = "https://job-search-ui.efinancialcareers.com/v1/efc/jobs/search"
 _EFC_SITE_BASE = "https://www.efinancialcareers.sg"
 
+# countryCode2=SG alone does NOT scope results to a country — verified live
+# that a plain query with only countryCode2 returns jobs globally (Qatar,
+# the US, India, etc). Each entry's locationPrecision + latitude/longitude +
+# location must be sent together (the parameter set the site's own
+# "jobs in <country>" pages actually send) — every entry here was verified
+# live against the real API before being added.
+_EFC_LOCATIONS: dict[str, dict] = {
+    "singapore": {
+        "location": "Singapore", "countryCode2": "SG",
+        "latitude": 1.35208, "longitude": 103.81983, "currencyCode": "SGD",
+    },
+    "uae": {
+        "location": "Dubai", "countryCode2": "AE",
+        "latitude": 25.2048, "longitude": 55.2708, "currencyCode": "USD",
+    },
+    "qatar": {
+        "location": "Doha", "countryCode2": "QA",
+        "latitude": 25.2854, "longitude": 51.5310, "currencyCode": "USD",
+    },
+    "saudi_arabia": {
+        "location": "Riyadh", "countryCode2": "SA",
+        "latitude": 24.7136, "longitude": 46.6753, "currencyCode": "USD",
+    },
+    "bahrain": {
+        "location": "Manama", "countryCode2": "BH",
+        "latitude": 26.2285, "longitude": 50.5860, "currencyCode": "USD",
+    },
+}
 
-async def scrape_efinancialcareers(query: str, max_results: int = 20) -> list[dict]:
-    """
-    Search eFinancialCareers (Singapore) by keyword. The `q` param is the
-    real keyword filter — note the site's own HTML embeds a misleading
-    `keywords` param on an unrelated endpoint that does NOT filter; verified
-    live that only `q` on job-search-ui actually narrows results.
 
-    countryCode2=SG alone does NOT scope results to Singapore — verified
-    live that a plain query with only countryCode2 returns jobs from Qatar,
-    the US, India, etc. Location scoping requires locationPrecision +
-    latitude/longitude + location together (the parameter set the site's
-    own "jobs in Singapore" page actually sends).
+async def scrape_efinancialcareers(query: str, max_results: int = 20, location: str = "singapore") -> list[dict]:
     """
+    Search eFinancialCareers by keyword, scoped to one country from
+    _EFC_LOCATIONS. The `q` param is the real keyword filter — note the
+    site's own HTML embeds a misleading `keywords` param on an unrelated
+    endpoint that does NOT filter; verified live that only `q` on
+    job-search-ui actually narrows results.
+    """
+    loc = _EFC_LOCATIONS.get(location)
+    if not loc:
+        logger.warning("eFC: unknown location=%r, skipping", location)
+        return []
+
     params = {
         "q": query,
         "locationPrecision": "Country",
-        "latitude": 1.35208,
-        "longitude": 103.81983,
-        "location": "Singapore",
-        "countryCode2": "SG",
+        "latitude": loc["latitude"],
+        "longitude": loc["longitude"],
+        "location": loc["location"],
+        "countryCode2": loc["countryCode2"],
         "radius": 50,
         "radiusUnit": "mi",
         "page": 1,
         "pageSize": min(max_results, 100),
-        "currencyCode": "SGD",
+        "currencyCode": loc["currencyCode"],
         "culture": "en",
     }
     logger.info("eFC: GET %s params=%s", _EFC_SEARCH_BASE, params)
@@ -394,7 +423,7 @@ async def scrape_efinancialcareers(query: str, max_results: int = 20) -> list[di
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
-        logger.warning("eFC: request failed for query=%r: %s", query, e)
+        logger.warning("eFC: request failed for query=%r location=%r: %s", query, location, e)
         return []
 
     raw_jobs = data.get("data")
@@ -411,7 +440,7 @@ async def scrape_efinancialcareers(query: str, max_results: int = 20) -> list[di
             continue
 
         job_url = f"{_EFC_SITE_BASE}{details_path}"
-        location = (item.get("jobLocation") or {}).get("displayName", "")
+        job_location = (item.get("jobLocation") or {}).get("displayName", "")
         description = item.get("description") or item.get("summary") or ""
 
         jobs.append({
@@ -419,7 +448,7 @@ async def scrape_efinancialcareers(query: str, max_results: int = 20) -> list[di
             "company": item.get("companyName", ""),
             "url": job_url,
             "external_id": f"efinancialcareers:{job_id}",
-            "location": location,
+            "location": job_location,
             "description": description,
             "inferred_industries": [],
             "source": "efinancialcareers",
