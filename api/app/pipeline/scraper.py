@@ -351,6 +351,87 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
 
 
 # ---------------------------------------------------------------------------
+# eFinancialCareers — finance/banking job aggregator, Singapore.
+# No official search API; this is the undocumented internal endpoint the
+# site's own frontend calls (found via its embedded API URL, verified live).
+# ---------------------------------------------------------------------------
+
+_EFC_SEARCH_BASE = "https://job-search-ui.efinancialcareers.com/v1/efc/jobs/search"
+_EFC_SITE_BASE = "https://www.efinancialcareers.sg"
+
+
+async def scrape_efinancialcareers(query: str, max_results: int = 20) -> list[dict]:
+    """
+    Search eFinancialCareers (Singapore) by keyword. The `q` param is the
+    real keyword filter — note the site's own HTML embeds a misleading
+    `keywords` param on an unrelated endpoint that does NOT filter; verified
+    live that only `q` on job-search-ui actually narrows results.
+
+    countryCode2=SG alone does NOT scope results to Singapore — verified
+    live that a plain query with only countryCode2 returns jobs from Qatar,
+    the US, India, etc. Location scoping requires locationPrecision +
+    latitude/longitude + location together (the parameter set the site's
+    own "jobs in Singapore" page actually sends).
+    """
+    params = {
+        "q": query,
+        "locationPrecision": "Country",
+        "latitude": 1.35208,
+        "longitude": 103.81983,
+        "location": "Singapore",
+        "countryCode2": "SG",
+        "radius": 50,
+        "radiusUnit": "mi",
+        "page": 1,
+        "pageSize": min(max_results, 100),
+        "currencyCode": "SGD",
+        "culture": "en",
+    }
+    logger.info("eFC: GET %s params=%s", _EFC_SEARCH_BASE, params)
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(_EFC_SEARCH_BASE, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.warning("eFC: request failed for query=%r: %s", query, e)
+        return []
+
+    raw_jobs = data.get("data")
+    if not isinstance(raw_jobs, list):
+        logger.warning("eFC: unexpected response shape for query=%r", query)
+        return []
+
+    jobs = []
+    for item in raw_jobs[:max_results]:
+        job_id = item.get("jobId") or item.get("id")
+        details_path = item.get("detailsPageUrl", "")
+        title = item.get("title", "")
+        if not job_id or not details_path or not title:
+            continue
+
+        job_url = f"{_EFC_SITE_BASE}{details_path}"
+        location = (item.get("jobLocation") or {}).get("displayName", "")
+        description = item.get("description") or item.get("summary") or ""
+
+        jobs.append({
+            "title": title,
+            "company": item.get("companyName", ""),
+            "url": job_url,
+            "external_id": f"efinancialcareers:{job_id}",
+            "location": location,
+            "description": description,
+            "inferred_industries": [],
+            "source": "efinancialcareers",
+            "scraped_at": _now_iso(),
+            "posted_at": item.get("postedDate"),
+        })
+
+    logger.info("eFC: query=%r → built %d job dicts", query, len(jobs))
+    return jobs
+
+
+# ---------------------------------------------------------------------------
 # Adzuna (free REST API — needs ADZUNA_APP_ID + ADZUNA_APP_KEY)
 # Sign up free at https://developer.adzuna.com
 # ---------------------------------------------------------------------------

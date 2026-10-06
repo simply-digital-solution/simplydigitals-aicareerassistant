@@ -15,6 +15,18 @@ import pytest
 from app.pipeline.daily_scrape import scrape_for_user, scrape_for_all_users, scrape_watchlist_for_user
 
 
+@pytest.fixture(autouse=True)
+def _no_efc_by_default():
+    """
+    scrape_for_user() also queries eFinancialCareers alongside MCF. Patch it
+    to return [] by default so existing MCF-focused tests aren't affected
+    and none of them make a real network call; tests that care about eFC
+    behavior override this patch explicitly.
+    """
+    with patch("app.pipeline.daily_scrape.scrape_efinancialcareers", AsyncMock(return_value=[])):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -172,6 +184,86 @@ async def test_scraper_error_is_handled():
         inserted = await scrape_for_user(user_id=1, db=db)
 
     assert inserted == 0
+
+
+# ---------------------------------------------------------------------------
+# scrape_for_user — eFinancialCareers results are merged in alongside MCF
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_efc_jobs_merged_in_alongside_mcf():
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _jp_insert_exec(1), _ujp_insert_exec(True),   # MCF job
+        _jp_insert_exec(2), _ujp_insert_exec(True),   # eFC job
+    ]
+
+    mcf_job = _make_job(url="https://www.mycareersfuture.gov.sg/job/abc", mcf_uuid="abc")
+    efc_job = {
+        "url": "https://www.efinancialcareers.sg/jobs-x.id999",
+        "external_id": "efinancialcareers:999",
+        "title": "Delivery Manager",
+        "company": "Some Bank",
+        "location": "Singapore",
+        "description": "Lead delivery",
+        "inferred_industries": [],
+        "posted_at": None,
+        "source": "efinancialcareers",
+    }
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[mcf_job])), \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers", AsyncMock(return_value=[efc_job])):
+        inserted = await scrape_for_user(user_id=1, db=db)
+
+    assert inserted == 2
+
+
+@pytest.mark.asyncio
+async def test_efc_failure_does_not_abort_mcf_results():
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _jp_insert_exec(1), _ujp_insert_exec(True),
+    ]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[_make_job()])), \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers",
+               AsyncMock(side_effect=RuntimeError("eFC down"))):
+        inserted = await scrape_for_user(user_id=1, db=db)
+
+    assert inserted == 1
+
+
+@pytest.mark.asyncio
+async def test_mcf_failure_does_not_prevent_efc_results():
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _jp_insert_exec(1), _ujp_insert_exec(True),
+    ]
+
+    efc_job = {
+        "url": "https://www.efinancialcareers.sg/jobs-x.id999",
+        "external_id": "efinancialcareers:999",
+        "title": "Delivery Manager",
+        "company": "Some Bank",
+        "location": "Singapore",
+        "description": "Lead delivery",
+        "inferred_industries": [],
+        "posted_at": None,
+        "source": "efinancialcareers",
+    }
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
+               AsyncMock(side_effect=RuntimeError("MCF down"))), \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers", AsyncMock(return_value=[efc_job])):
+        inserted = await scrape_for_user(user_id=1, db=db)
+
+    assert inserted == 1
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ from app.shared.sql_compat import now_utc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 
-from app.pipeline.scraper import scrape_mycareersfuture
+from app.pipeline.scraper import scrape_mycareersfuture, scrape_efinancialcareers
 from app.pipeline.ats_scrapers import detect_ats_platform, scrape_greenhouse, scrape_workday
 from app.shared.models import Profile
 from app.modules.agents.router import _filter_by_industry
@@ -158,11 +158,17 @@ async def scrape_for_user(user_id: int, db: AsyncSession, shutdown_event=None) -
             jobs = await scrape_mycareersfuture(query=title, max_results=100)
         except Exception as exc:
             logger.warning("scrape_for_user: user_id=%d MCF fetch failed for title=%r: %s", user_id, title, exc)
-            continue
+            jobs = []
+
+        try:
+            efc_jobs = await scrape_efinancialcareers(query=title, max_results=50)
+            jobs += efc_jobs
+        except Exception as exc:
+            logger.warning("scrape_for_user: user_id=%d eFC fetch failed for title=%r: %s", user_id, title, exc)
 
         fetched = len(jobs)
         logger.info(
-            "scrape_for_user: user_id=%d title=%r MCF returned %d jobs in %.2fs",
+            "scrape_for_user: user_id=%d title=%r MCF+eFC returned %d jobs in %.2fs",
             user_id, title, fetched, time.monotonic() - t_title_start,
         )
 
