@@ -386,6 +386,10 @@ _EFC_LOCATIONS: dict[str, dict] = {
         "location": "Manama", "countryCode2": "BH",
         "latitude": 26.2285, "longitude": 50.5860, "currencyCode": "USD",
     },
+    "australia": {
+        "location": "Sydney", "countryCode2": "AU",
+        "latitude": -33.8688, "longitude": 151.2093, "currencyCode": "AUD",
+    },
 }
 
 
