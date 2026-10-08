@@ -1916,12 +1916,19 @@ async def get_generated_resume(
 
 @router.post("/research/scrape")
 async def trigger_scrape(
+    sources: str | None = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """On-demand scrape for the current user — same as the daily job but immediate."""
+    """
+    On-demand scrape for the current user — same as the daily job but
+    immediate. `sources` optionally restricts which aggregators run, as a
+    comma-separated list (e.g. "mycareersfuture" or
+    "mycareersfuture,efinancialcareers"); omitted runs all of them.
+    """
     from app.pipeline.daily_scrape import scrape_for_user
-    inserted = await scrape_for_user(current_user.id, db)
+    source_set = {s.strip() for s in sources.split(",") if s.strip()} if sources else None
+    inserted = await scrape_for_user(current_user.id, db, sources=source_set)
     return {"inserted": inserted}
 
 

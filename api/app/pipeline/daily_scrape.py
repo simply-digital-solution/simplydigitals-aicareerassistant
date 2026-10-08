@@ -118,11 +118,21 @@ async def _insert_jobs_for_user(
     return inserted, skipped
 
 
-async def scrape_for_user(user_id: int, db: AsyncSession, shutdown_event=None) -> int:
+_ALL_AGGREGATOR_SOURCES = frozenset({"mycareersfuture", "efinancialcareers"})
+
+
+async def scrape_for_user(
+    user_id: int, db: AsyncSession, shutdown_event=None, sources: set[str] | None = None,
+) -> int:
     """
-    Scrape MCF for a single user's target titles and insert new job rows.
-    Returns the number of new rows inserted.
+    Scrape job aggregators for a single user's target titles and insert new
+    job rows. Returns the number of new rows inserted.
+
+    `sources` restricts which aggregators run — e.g. {"mycareersfuture"} to
+    skip eFinancialCareers. None (the default) runs all of them, matching
+    the existing daily-scheduler behavior.
     """
+    active_sources = sources if sources is not None else _ALL_AGGREGATOR_SOURCES
     t_user_start = time.monotonic()
 
     result = await db.execute(select(Profile).where(Profile.user_id == user_id))
@@ -153,22 +163,25 @@ async def scrape_for_user(user_id: int, db: AsyncSession, shutdown_event=None) -
             )
             break
         t_title_start = time.monotonic()
-        logger.info("scrape_for_user: user_id=%d fetching MCF for title=%r", user_id, title)
-        try:
-            jobs = await scrape_mycareersfuture(query=title, max_results=100)
-        except Exception as exc:
-            logger.warning("scrape_for_user: user_id=%d MCF fetch failed for title=%r: %s", user_id, title, exc)
-            jobs = []
+        jobs = []
 
-        for efc_location in _EFC_LOCATIONS:
+        if "mycareersfuture" in active_sources:
+            logger.info("scrape_for_user: user_id=%d fetching MCF for title=%r", user_id, title)
             try:
-                efc_jobs = await scrape_efinancialcareers(query=title, max_results=50, location=efc_location)
-                jobs += efc_jobs
+                jobs += await scrape_mycareersfuture(query=title, max_results=100)
             except Exception as exc:
-                logger.warning(
-                    "scrape_for_user: user_id=%d eFC fetch failed for title=%r location=%r: %s",
-                    user_id, title, efc_location, exc,
-                )
+                logger.warning("scrape_for_user: user_id=%d MCF fetch failed for title=%r: %s", user_id, title, exc)
+
+        if "efinancialcareers" in active_sources:
+            for efc_location in _EFC_LOCATIONS:
+                try:
+                    efc_jobs = await scrape_efinancialcareers(query=title, max_results=50, location=efc_location)
+                    jobs += efc_jobs
+                except Exception as exc:
+                    logger.warning(
+                        "scrape_for_user: user_id=%d eFC fetch failed for title=%r location=%r: %s",
+                        user_id, title, efc_location, exc,
+                    )
 
         fetched = len(jobs)
         logger.info(

@@ -253,6 +253,79 @@ async def test_efc_queried_once_per_configured_location():
     assert queried_locations == set(_EFC_LOCATIONS.keys())
 
 
+# ---------------------------------------------------------------------------
+# scrape_for_user — sources parameter restricts which aggregators run
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_sources_mcf_only_skips_efc_entirely():
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile), _jp_insert_exec(1), _ujp_insert_exec(True)]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[_make_job()])) as mock_mcf, \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers", AsyncMock(return_value=[])) as mock_efc:
+        inserted = await scrape_for_user(user_id=1, db=db, sources={"mycareersfuture"})
+
+    mock_mcf.assert_called_once()
+    mock_efc.assert_not_called()
+    assert inserted == 1
+
+
+@pytest.mark.asyncio
+async def test_sources_efc_only_skips_mcf_entirely():
+    from app.pipeline.daily_scrape import _EFC_LOCATIONS
+    num_locations = len(_EFC_LOCATIONS)
+
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile)] + \
+        [x for i in range(num_locations) for x in (_jp_insert_exec(100 + i), _ujp_insert_exec(True))]
+
+    efc_jobs_by_location = [
+        _make_efc_job(external_id=f"efinancialcareers:{i}", url=f"https://www.efinancialcareers.sg/jobs-x.id{i}")
+        for i in range(num_locations)
+    ]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[])) as mock_mcf, \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers",
+               AsyncMock(side_effect=lambda **kwargs: [efc_jobs_by_location.pop(0)])):
+        inserted = await scrape_for_user(user_id=1, db=db, sources={"efinancialcareers"})
+
+    mock_mcf.assert_not_called()
+    assert inserted == num_locations
+
+
+@pytest.mark.asyncio
+async def test_sources_none_runs_both_same_as_before():
+    """Omitting sources must preserve today's behavior exactly — the daily
+    scheduler calls scrape_for_user without this argument."""
+    from app.pipeline.daily_scrape import _EFC_LOCATIONS
+    num_locations = len(_EFC_LOCATIONS)
+
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _jp_insert_exec(1), _ujp_insert_exec(True),
+    ] + [x for i in range(num_locations) for x in (_jp_insert_exec(100 + i), _ujp_insert_exec(True))]
+
+    mcf_job = _make_job(url="https://www.mycareersfuture.gov.sg/job/abc", mcf_uuid="abc")
+    efc_jobs_by_location = [
+        _make_efc_job(external_id=f"efinancialcareers:{i}", url=f"https://www.efinancialcareers.sg/jobs-x.id{i}")
+        for i in range(num_locations)
+    ]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[mcf_job])) as mock_mcf, \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers",
+               AsyncMock(side_effect=lambda **kwargs: [efc_jobs_by_location.pop(0)])) as mock_efc:
+        inserted = await scrape_for_user(user_id=1, db=db)
+
+    mock_mcf.assert_called_once()
+    assert mock_efc.call_count == num_locations
+    assert inserted == 1 + num_locations
+
+
 @pytest.mark.asyncio
 async def test_efc_failure_does_not_abort_mcf_results():
     profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
