@@ -3,18 +3,22 @@
 #
 # Usage:
 #   cd api
-#   ./scripts/scrape_and_score.sh <user-email> [backend-url] [sources]
+#   ./scripts/scrape_and_score.sh <user-email> [backend-url] [sources] [efc_locations]
 #
 # backend-url defaults to http://localhost:8001 (this project's current local dev port).
 # sources optionally restricts which aggregators run, comma-separated
 # (e.g. "mycareersfuture" or "mycareersfuture,efinancialcareers");
 # omitted runs all of them.
+# efc_locations optionally restricts which eFinancialCareers countries are
+# searched, comma-separated (e.g. "singapore"); omitted searches all
+# configured ones. Ignored unless efinancialcareers is in sources.
 
 set -euo pipefail
 
-USER_EMAIL="${1:?Usage: scrape_and_score.sh <user-email> [backend-url] [sources]}"
+USER_EMAIL="${1:?Usage: scrape_and_score.sh <user-email> [backend-url] [sources] [efc_locations]}"
 BACKEND_URL="${2:-http://localhost:8001}"
 SOURCES="${3:-}"
+EFC_LOCATIONS="${4:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 API_DIR="$(dirname "$SCRIPT_DIR")"
@@ -27,8 +31,15 @@ if ! curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/docs" | grep -q "^200$
 fi
 
 SCRAPE_URL="$BACKEND_URL/api/v1/research/scrape"
+QUERY=""
 if [ -n "$SOURCES" ]; then
-  SCRAPE_URL="${SCRAPE_URL}?sources=${SOURCES}"
+  QUERY="sources=${SOURCES}"
+fi
+if [ -n "$EFC_LOCATIONS" ]; then
+  QUERY="${QUERY:+${QUERY}&}efc_locations=${EFC_LOCATIONS}"
+fi
+if [ -n "$QUERY" ]; then
+  SCRAPE_URL="${SCRAPE_URL}?${QUERY}"
 fi
 
 echo "== Scraping ($([ -n "$SOURCES" ] && echo "$SOURCES" || echo "all sources")) for $USER_EMAIL =="

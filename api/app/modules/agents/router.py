@@ -1917,6 +1917,7 @@ async def get_generated_resume(
 @router.post("/research/scrape")
 async def trigger_scrape(
     sources: str | None = None,
+    efc_locations: str | None = None,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1925,10 +1926,13 @@ async def trigger_scrape(
     immediate. `sources` optionally restricts which aggregators run, as a
     comma-separated list (e.g. "mycareersfuture" or
     "mycareersfuture,efinancialcareers"); omitted runs all of them.
+    `efc_locations` optionally restricts which eFinancialCareers countries
+    are searched (e.g. "singapore"); omitted searches all configured ones.
     """
     from app.pipeline.daily_scrape import scrape_for_user
     source_set = {s.strip() for s in sources.split(",") if s.strip()} if sources else None
-    inserted = await scrape_for_user(current_user.id, db, sources=source_set)
+    efc_location_set = {s.strip() for s in efc_locations.split(",") if s.strip()} if efc_locations else None
+    inserted = await scrape_for_user(current_user.id, db, sources=source_set, efc_locations=efc_location_set)
     return {"inserted": inserted}
 
 

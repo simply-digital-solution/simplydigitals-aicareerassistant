@@ -297,6 +297,51 @@ async def test_sources_efc_only_skips_mcf_entirely():
 
 
 @pytest.mark.asyncio
+async def test_efc_locations_restricts_to_given_set():
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile), _jp_insert_exec(1), _ujp_insert_exec(True)]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[])), \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers",
+               AsyncMock(return_value=[_make_efc_job()])) as mock_efc:
+        inserted = await scrape_for_user(
+            user_id=1, db=db, sources={"efinancialcareers"}, efc_locations={"singapore"},
+        )
+
+    mock_efc.assert_called_once()
+    assert mock_efc.call_args.kwargs["location"] == "singapore"
+    assert inserted == 1
+
+
+@pytest.mark.asyncio
+async def test_efc_locations_none_searches_all_configured_same_as_before():
+    """Omitting efc_locations must preserve today's behavior exactly — the
+    daily scheduler calls scrape_for_user without this argument."""
+    from app.pipeline.daily_scrape import _EFC_LOCATIONS
+    num_locations = len(_EFC_LOCATIONS)
+
+    profile = _make_profile(target_titles=["Delivery Manager"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile)] + \
+        [x for i in range(num_locations) for x in (_jp_insert_exec(100 + i), _ujp_insert_exec(True))]
+
+    efc_jobs_by_location = [
+        _make_efc_job(external_id=f"efinancialcareers:{i}", url=f"https://www.efinancialcareers.sg/jobs-x.id{i}")
+        for i in range(num_locations)
+    ]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", AsyncMock(return_value=[])), \
+         patch("app.pipeline.daily_scrape.scrape_efinancialcareers",
+               AsyncMock(side_effect=lambda **kwargs: [efc_jobs_by_location.pop(0)])) as mock_efc:
+        inserted = await scrape_for_user(user_id=1, db=db, sources={"efinancialcareers"})
+
+    queried_locations = {c.kwargs["location"] for c in mock_efc.call_args_list}
+    assert queried_locations == set(_EFC_LOCATIONS.keys())
+    assert inserted == num_locations
+
+
+@pytest.mark.asyncio
 async def test_sources_none_runs_both_same_as_before():
     """Omitting sources must preserve today's behavior exactly — the daily
     scheduler calls scrape_for_user without this argument."""

@@ -122,7 +122,11 @@ _ALL_AGGREGATOR_SOURCES = frozenset({"mycareersfuture", "efinancialcareers"})
 
 
 async def scrape_for_user(
-    user_id: int, db: AsyncSession, shutdown_event=None, sources: set[str] | None = None,
+    user_id: int,
+    db: AsyncSession,
+    shutdown_event=None,
+    sources: set[str] | None = None,
+    efc_locations: set[str] | None = None,
 ) -> int:
     """
     Scrape job aggregators for a single user's target titles and insert new
@@ -131,8 +135,14 @@ async def scrape_for_user(
     `sources` restricts which aggregators run — e.g. {"mycareersfuture"} to
     skip eFinancialCareers. None (the default) runs all of them, matching
     the existing daily-scheduler behavior.
+
+    `efc_locations` restricts which eFinancialCareers countries are
+    searched (keys of _EFC_LOCATIONS, e.g. {"singapore"}) — ignored if
+    eFinancialCareers isn't in `sources`. None (the default) searches all
+    configured locations, matching the existing daily-scheduler behavior.
     """
     active_sources = sources if sources is not None else _ALL_AGGREGATOR_SOURCES
+    active_efc_locations = efc_locations if efc_locations is not None else set(_EFC_LOCATIONS.keys())
     t_user_start = time.monotonic()
 
     result = await db.execute(select(Profile).where(Profile.user_id == user_id))
@@ -173,7 +183,7 @@ async def scrape_for_user(
                 logger.warning("scrape_for_user: user_id=%d MCF fetch failed for title=%r: %s", user_id, title, exc)
 
         if "efinancialcareers" in active_sources:
-            for efc_location in _EFC_LOCATIONS:
+            for efc_location in active_efc_locations:
                 try:
                     efc_jobs = await scrape_efinancialcareers(query=title, max_results=50, location=efc_location)
                     jobs += efc_jobs

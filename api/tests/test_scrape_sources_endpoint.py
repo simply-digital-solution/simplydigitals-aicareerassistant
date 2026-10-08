@@ -50,3 +50,27 @@ def test_multiple_sources_parsed_into_set(client):
 
     assert resp.status_code == 200
     assert mock_scrape.call_args.kwargs["sources"] == {"mycareersfuture", "efinancialcareers"}
+
+
+def test_no_efc_locations_param_passes_none(client):
+    with patch("app.pipeline.daily_scrape.scrape_for_user", AsyncMock(return_value=0)) as mock_scrape:
+        resp = client.post("/api/v1/research/scrape?sources=efinancialcareers")
+
+    assert resp.status_code == 200
+    assert mock_scrape.call_args.kwargs["efc_locations"] is None
+
+
+def test_single_efc_location_parsed_into_set(client):
+    with patch("app.pipeline.daily_scrape.scrape_for_user", AsyncMock(return_value=0)) as mock_scrape:
+        resp = client.post("/api/v1/research/scrape?sources=efinancialcareers&efc_locations=singapore")
+
+    assert resp.status_code == 200
+    assert mock_scrape.call_args.kwargs["efc_locations"] == {"singapore"}
+
+
+def test_multiple_efc_locations_parsed_into_set(client):
+    with patch("app.pipeline.daily_scrape.scrape_for_user", AsyncMock(return_value=0)) as mock_scrape:
+        resp = client.post("/api/v1/research/scrape?sources=efinancialcareers&efc_locations=singapore,uae")
+
+    assert resp.status_code == 200
+    assert mock_scrape.call_args.kwargs["efc_locations"] == {"singapore", "uae"}
