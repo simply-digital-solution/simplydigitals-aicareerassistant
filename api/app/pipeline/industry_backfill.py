@@ -90,6 +90,7 @@ async def backfill_industries(db: AsyncSession) -> int:
                 user_message=user_message,
                 output_schema=IndustryClassifierOutput,
                 request_type="industry_backfill",
+                db=db,
             )
         except Exception as exc:
             logger.error("PIPELINE_ERROR: industry_backfill batch %s failed: %s", job_ids, exc)

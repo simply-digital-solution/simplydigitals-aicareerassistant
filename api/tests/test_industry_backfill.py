@@ -79,6 +79,28 @@ async def test_single_job_classified():
 
 
 # ---------------------------------------------------------------------------
+# run_agent() is called with db= so classification usage gets logged to
+# llm_usage_logs (BaseLLMClient._persist_usage only inserts if db is not None)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_run_agent_called_with_db_for_usage_logging():
+    db = _make_db([_make_job_row(job_id=1)])
+
+    classification = _make_classification(1, ["Technology & Software"])
+    result = _make_result([classification])
+
+    mock_llm = AsyncMock()
+    mock_llm.run_agent = AsyncMock(return_value=(result, {}))
+
+    with patch("app.pipeline.industry_backfill.get_classifier_client", return_value=mock_llm):
+        await backfill_industries(db)
+
+    mock_llm.run_agent.assert_called_once()
+    assert mock_llm.run_agent.call_args.kwargs["db"] is db
+
+
+# ---------------------------------------------------------------------------
 # Multiple jobs — all classified
 # ---------------------------------------------------------------------------
 
