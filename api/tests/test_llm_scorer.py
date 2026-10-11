@@ -248,6 +248,27 @@ async def test_agent_exception_marks_job_failed():
     assert "scoring_status='failed'" in error_calls[0].args[0].text
 
 
+@pytest.mark.asyncio
+async def test_agent_exception_logs_pipeline_error_marker(caplog):
+    """
+    scrape_and_score.sh greps subprocess output for "PIPELINE_ERROR:" to
+    surface failures in its summary — this marker must appear on a real
+    scoring failure so it isn't silently buried in verbose logs.
+    """
+    row = _make_job_row(job_id=1)
+    db  = _db_with_batch([row])
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent",
+              AsyncMock(side_effect=RuntimeError("LLM timed out"))),
+        caplog.at_level("ERROR"),
+    ):
+        await score_next_batch(db)
+
+    assert "PIPELINE_ERROR:" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Agent returns AgentError → job marked failed
 # ---------------------------------------------------------------------------

@@ -92,11 +92,11 @@ async def backfill_industries(db: AsyncSession) -> int:
                 request_type="industry_backfill",
             )
         except Exception as exc:
-            logger.error("industry_backfill: batch %s failed: %s", job_ids, exc)
+            logger.error("PIPELINE_ERROR: industry_backfill batch %s failed: %s", job_ids, exc)
             continue
 
         if isinstance(result, AgentError):
-            logger.warning("industry_backfill: batch %s agent error: %s", job_ids, result.error)
+            logger.error("PIPELINE_ERROR: industry_backfill batch %s agent error: %s", job_ids, result.error)
             continue
 
         classified = {c.job_id: c.industries for c in result.classifications}

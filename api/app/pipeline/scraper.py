@@ -283,7 +283,7 @@ async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
-        logger.warning("MCF: request failed for query=%r: %s", query, e)
+        logger.error("PIPELINE_ERROR: MCF request failed for query=%r: %s", query, e)
         return []
 
     total_available = data.get("total", "unknown")
@@ -427,7 +427,7 @@ async def scrape_efinancialcareers(query: str, max_results: int = 20, location: 
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
-        logger.warning("eFC: request failed for query=%r location=%r: %s", query, location, e)
+        logger.error("PIPELINE_ERROR: eFC request failed for query=%r location=%r: %s", query, location, e)
         return []
 
     raw_jobs = data.get("data")

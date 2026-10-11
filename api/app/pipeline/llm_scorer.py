@@ -315,7 +315,10 @@ async def score_next_batch(db: AsyncSession) -> bool:
         logger.info("llm_scorer: LLM call completed in %.1fs", time.monotonic() - t_start)
     except Exception as exc:
         error_msg = f"{type(exc).__name__}: {exc}"
-        logger.error("llm_scorer: job_id=%d failed after %.1fs: %s", jp_id, time.monotonic() - t_start, error_msg)
+        logger.error(
+            "PIPELINE_ERROR: llm_scorer job_id=%d failed after %.1fs: %s",
+            jp_id, time.monotonic() - t_start, error_msg,
+        )
         await db.execute(
             text("UPDATE user_job_postings SET scoring_status='failed', score_error=:err, scored_at=:now WHERE job_posting_id=:jid AND user_id=:uid"),
             {"err": error_msg, "now": now_utc(), "jid": jp_id, "uid": user_id},

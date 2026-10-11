@@ -13,7 +13,12 @@
 # searched, comma-separated (e.g. "singapore"); omitted searches all
 # configured ones. Ignored unless efinancialcareers is in sources.
 
-set -euo pipefail
+# Note: scrape failures happen inside the running backend process, so they
+# land in the backend's own server log, not in this script's output — the
+# curl call below only ever sees the final JSON response. Only the
+# classify and score steps run as direct subprocesses of this script, so
+# only those two are checked here for PIPELINE_ERROR: lines.
+set -uo pipefail
 
 USER_EMAIL="${1:?Usage: scrape_and_score.sh <user-email> [backend-url] [sources] [efc_locations]}"
 BACKEND_URL="${2:-http://localhost:8001}"
@@ -48,11 +53,22 @@ SCRAPE_RESULT=$(curl -s -X POST \
   -H "Content-Type: application/json" \
   "$SCRAPE_URL")
 echo "$SCRAPE_RESULT"
+echo "(scrape failures, if any, land in the backend server's own log — not visible here)"
 
 echo "== Classifying industries for newly scraped jobs =="
-poetry run python -m app.pipeline.industry_backfill
+CLASSIFY_OUTPUT=$(poetry run python -m app.pipeline.industry_backfill 2>&1)
+echo "$CLASSIFY_OUTPUT"
 
 echo "== Scoring idle jobs =="
-poetry run python -m scripts.score_idle_jobs
+SCORE_OUTPUT=$(poetry run python -m scripts.score_idle_jobs 2>&1)
+echo "$SCORE_OUTPUT"
 
 echo "== Done =="
+
+ERROR_LINES=$(printf '%s\n%s\n' "$CLASSIFY_OUTPUT" "$SCORE_OUTPUT" | grep "PIPELINE_ERROR:" || true)
+if [ -n "$ERROR_LINES" ]; then
+  echo ""
+  echo "== Errors =="
+  echo "$ERROR_LINES"
+  exit 1
+fi

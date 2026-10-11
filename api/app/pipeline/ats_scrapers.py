@@ -120,7 +120,7 @@ async def scrape_greenhouse(careers_url: str, company_name: str) -> list[dict]:
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
-        logger.warning("Greenhouse: request failed for board_token=%r: %s", board_token, e)
+        logger.error("PIPELINE_ERROR: Greenhouse request failed for board_token=%r: %s", board_token, e)
         return []
 
     raw_jobs = data.get("jobs")
@@ -209,7 +209,7 @@ async def scrape_workday(
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
-        logger.warning("Workday: list request failed for host=%r query=%r: %s", host, query, e)
+        logger.error("PIPELINE_ERROR: Workday list request failed for host=%r query=%r: %s", host, query, e)
         return []
 
     raw_postings = data.get("jobPostings")

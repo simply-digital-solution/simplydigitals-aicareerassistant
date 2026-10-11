@@ -109,6 +109,17 @@ async def test_list_request_failure_returns_empty():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_list_request_failure_logs_pipeline_error_marker(caplog):
+    respx.post(_LIST_URL).mock(return_value=httpx.Response(500))
+
+    with caplog.at_level("ERROR"):
+        await scrape_workday(_CAREERS_URL, "Acme Corp")
+
+    assert "PIPELINE_ERROR:" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_malformed_list_response_returns_empty():
     respx.post(_LIST_URL).mock(return_value=httpx.Response(200, json={"unexpected": "shape"}))
 

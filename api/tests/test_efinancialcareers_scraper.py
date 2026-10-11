@@ -146,6 +146,22 @@ async def test_request_failure_returns_empty():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_request_failure_logs_pipeline_error_marker(caplog):
+    """
+    scrape_and_score.sh greps subprocess output for "PIPELINE_ERROR:" to
+    surface failures in its summary — this marker must appear on a real
+    request failure so it isn't silently buried in verbose logs.
+    """
+    respx.get(_SEARCH_URL).mock(return_value=httpx.Response(500))
+
+    with caplog.at_level("ERROR"):
+        await scrape_efinancialcareers("Project Manager")
+
+    assert "PIPELINE_ERROR:" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_malformed_response_returns_empty():
     respx.get(_SEARCH_URL).mock(return_value=httpx.Response(200, json={"unexpected": "shape"}))
 

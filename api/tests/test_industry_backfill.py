@@ -148,6 +148,26 @@ async def test_agent_error_skips_batch():
     assert db.execute.call_count == 1
 
 
+@pytest.mark.asyncio
+async def test_agent_error_logs_pipeline_error_marker(caplog):
+    """
+    scrape_and_score.sh greps subprocess output for "PIPELINE_ERROR:" to
+    surface failures in its summary — this marker must appear on a real
+    classification failure so it isn't silently buried in verbose logs.
+    """
+    from app.shared.schemas import AgentError
+    db = _make_db([_make_job_row(job_id=1)])
+
+    mock_llm = AsyncMock()
+    mock_llm.run_agent = AsyncMock(return_value=(AgentError(error="parse failed"), {}))
+
+    with patch("app.pipeline.industry_backfill.get_llm_client", return_value=mock_llm), \
+         caplog.at_level("ERROR"):
+        await backfill_industries(db)
+
+    assert "PIPELINE_ERROR:" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Agent raises exception — batch skipped, no updates
 # ---------------------------------------------------------------------------
@@ -164,6 +184,20 @@ async def test_agent_exception_skips_batch():
 
     assert count == 0
     assert db.execute.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_agent_exception_logs_pipeline_error_marker(caplog):
+    db = _make_db([_make_job_row(job_id=1)])
+
+    mock_llm = AsyncMock()
+    mock_llm.run_agent = AsyncMock(side_effect=RuntimeError("timeout"))
+
+    with patch("app.pipeline.industry_backfill.get_llm_client", return_value=mock_llm), \
+         caplog.at_level("ERROR"):
+        await backfill_industries(db)
+
+    assert "PIPELINE_ERROR:" in caplog.text
 
 
 # ---------------------------------------------------------------------------

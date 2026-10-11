@@ -64,6 +64,17 @@ async def test_unknown_board_token_404_returns_empty():
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_request_failure_logs_pipeline_error_marker(caplog):
+    respx.get(_API_URL).mock(return_value=httpx.Response(404))
+
+    with caplog.at_level("ERROR"):
+        await scrape_greenhouse("https://boards.greenhouse.io/acme", "Acme Corp")
+
+    assert "PIPELINE_ERROR:" in caplog.text
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_malformed_response_returns_empty():
     respx.get(_API_URL).mock(return_value=httpx.Response(200, json={"unexpected": "shape"}))
 
