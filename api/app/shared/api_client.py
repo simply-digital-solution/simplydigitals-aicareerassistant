@@ -477,6 +477,116 @@ class GeminiClient(BaseLLMClient):
 
 
 # ------------------------------------------------------------------
+# Anthropic provider
+# ------------------------------------------------------------------
+
+class AnthropicClient(BaseLLMClient):
+    """
+    Anthropic Claude provider. Unlike GeminiClient/OllamaClient, the model
+    is passed in at construction rather than read from a single settings
+    field — callers create one instance per task (e.g. Haiku for
+    classification, Sonnet for scoring) rather than sharing one global model.
+
+    The system prompt is sent with cache_control so repeated identical
+    system prompts (e.g. the classifier/scorer prompt, unchanged across
+    every call) are cached server-side — real cache token counts are
+    reported back in the usage dict, unlike Gemini/Ollama which have no
+    caching mechanism and always report 0.
+    """
+
+    def __init__(self, model: str):
+        import anthropic
+
+        settings = get_settings()
+        self._model = model
+        self._api_key = settings.anthropic_api_key
+        self._max_corrections = settings.max_self_corrections
+        self._client = anthropic.AsyncAnthropic(api_key=self._api_key)
+
+    async def _call(
+        self,
+        messages: list[dict],
+        stream_callback: Optional[callable] = None,
+        *,
+        user_id: Optional[int] = None,
+        job_posting_id: Optional[int] = None,
+        request_type: str = "unknown",
+        db: Optional[AsyncSession] = None,
+    ) -> tuple[str, dict]:
+        import anthropic
+
+        # run_agent() always sends [{"role": "system", ...}, {"role": "user", ...}],
+        # and appends further user/assistant turns for reflexion retries.
+        # Anthropic takes `system` as a separate top-level param, not a
+        # message with role "system" — split it out, cache the rest as-is.
+        system_blocks: list[dict] = []
+        api_messages: list[dict] = []
+        for m in messages:
+            if m["role"] == "system":
+                system_blocks.append({
+                    "type": "text",
+                    "text": m["content"],
+                    "cache_control": {"type": "ephemeral"},
+                })
+            else:
+                api_messages.append({"role": m["role"], "content": m["content"]})
+
+        requested_at = datetime.now(timezone.utc)
+
+        import logging
+        _log = logging.getLogger(__name__)
+        try:
+            response = await self._client.messages.create(
+                model=self._model,
+                max_tokens=8192,
+                system=system_blocks,
+                messages=api_messages,
+            )
+        except anthropic.RateLimitError as e:
+            _log.warning("AnthropicClient: rate limited for model=%s: %s", self._model, e)
+            raise
+        except anthropic.APIStatusError as e:
+            _log.warning("AnthropicClient: API error (%s) for model=%s: %s", e.status_code, self._model, e)
+            raise
+        except anthropic.APIConnectionError as e:
+            _log.warning("AnthropicClient: connection error for model=%s: %s", self._model, e)
+            raise
+
+        full_text = "".join(
+            block.text for block in response.content if block.type == "text"
+        )
+
+        usage = response.usage
+        input_tokens = usage.input_tokens
+        output_tokens = usage.output_tokens
+        cache_read_tokens = usage.cache_read_input_tokens or 0
+        cache_creation_tokens = usage.cache_creation_input_tokens or 0
+
+        responded_at = datetime.now(timezone.utc)
+
+        if stream_callback is not None:
+            await stream_callback(full_text)
+
+        await self._persist_usage(
+            user_id=user_id,
+            job_posting_id=job_posting_id,
+            request_type=request_type,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            requested_at=requested_at,
+            responded_at=responded_at,
+            db=db,
+        )
+
+        return full_text, {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_creation_tokens": cache_creation_tokens,
+        }
+
+
+# ------------------------------------------------------------------
 # Module-level helpers
 # ------------------------------------------------------------------
 

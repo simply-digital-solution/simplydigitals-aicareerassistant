@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash-lite"
     gemini_fallback_model: str = "gemini-2.5-flash"
 
+    # Anthropic — optional, used per-task (e.g. classification/scoring) rather
+    # than as the single global provider; unused until a caller opts in.
+    anthropic_api_key: str = ""
+    anthropic_haiku_model: str = "claude-haiku-5-5"
+    anthropic_sonnet_model: str = "claude-sonnet-5-5"
+
     # Ollama — local dev only, not used in production
     specialist_model: str = "deepseek-r1:7b"
 
