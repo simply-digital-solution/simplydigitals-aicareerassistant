@@ -640,3 +640,44 @@ def get_llm_client() -> BaseLLMClient:
         else:
             _client = OllamaClient()
     return _client
+
+
+# Separate singletons from the global `_client` above — these are opt-in
+# per-task overrides, not a replacement for get_llm_client(). Every other
+# caller (resume generation, interview prep, profile extraction, the
+# non-scoring research agent path, ...) keeps using get_llm_client()
+# untouched.
+_classifier_client: Optional[BaseLLMClient] = None
+_scorer_client: Optional[BaseLLMClient] = None
+
+
+def get_classifier_client() -> BaseLLMClient:
+    """
+    Returns an AnthropicClient on Haiku for industry classification if
+    ANTHROPIC_API_KEY is set, else falls back to get_llm_client() (Gemini/
+    Ollama) — safe to deploy before an Anthropic key is configured anywhere.
+    """
+    global _classifier_client
+    if _classifier_client is None:
+        settings = get_settings()
+        if settings.anthropic_api_key:
+            _classifier_client = AnthropicClient(model=settings.anthropic_haiku_model)
+        else:
+            _classifier_client = get_llm_client()
+    return _classifier_client
+
+
+def get_scorer_client() -> BaseLLMClient:
+    """
+    Returns an AnthropicClient on Sonnet for job-fit scoring if
+    ANTHROPIC_API_KEY is set, else falls back to get_llm_client() (Gemini/
+    Ollama) — safe to deploy before an Anthropic key is configured anywhere.
+    """
+    global _scorer_client
+    if _scorer_client is None:
+        settings = get_settings()
+        if settings.anthropic_api_key:
+            _scorer_client = AnthropicClient(model=settings.anthropic_sonnet_model)
+        else:
+            _scorer_client = get_llm_client()
+    return _scorer_client

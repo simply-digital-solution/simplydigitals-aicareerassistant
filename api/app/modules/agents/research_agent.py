@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.api_client import get_llm_client
+from app.shared.api_client import get_llm_client, get_scorer_client
 from app.shared.schemas import ResearchOutput, AgentError
 
 PROMPT_FILE = Path(__file__).parents[4] / "prompts" / "research.md"
@@ -103,7 +103,11 @@ async def run_research_agent(
 
     Returns (ResearchOutput | AgentError, run_metadata).
     """
-    client = get_llm_client()
+    # Scoring (request_type="scoring", the llm_scorer.py path) uses its own
+    # client so it can run on a different model than the rest of the
+    # research agent (e.g. the chat/search research flow, request_type
+    # default "research") without affecting it.
+    client = get_scorer_client() if request_type == "scoring" else get_llm_client()
     system_prompt = _load_system_prompt()
     user_message = _build_user_message(
         profile, job_postings, search_filters or {}, feedback_examples, full_description
