@@ -723,6 +723,33 @@ async def test_insert_uses_idle_scoring_status():
     assert "idle" in sql
 
 
+@pytest.mark.asyncio
+async def test_insert_relies_on_db_default_for_created_at():
+    """
+    user_job_postings.created_at has a server_default=now() (see migration
+    802cae45901c) — the INSERT must not pass an explicit value, so every
+    row genuinely reflects the DB's own insert time rather than
+    app-server clock drift.
+    """
+    profile = _make_profile(target_titles=["Data Engineer"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _profile_exec(profile),
+        _jp_insert_exec(42),
+        _ujp_insert_exec(True),
+    ]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
+               AsyncMock(return_value=[_make_job()])):
+        await scrape_for_user(user_id=1, db=db)
+
+    insert_call = db.execute.call_args_list[2]
+    sql = str(insert_call.args[0])
+    params = insert_call.args[1]
+    assert "created_at" not in sql
+    assert "created_at" not in params
+
+
 # ---------------------------------------------------------------------------
 # scrape_for_all_users — industry backfill runs after scrape completes
 # ---------------------------------------------------------------------------

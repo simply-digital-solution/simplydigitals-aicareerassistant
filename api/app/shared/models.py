@@ -421,6 +421,7 @@ class UserJobPosting(Base):
     recommendation = Column(Text)
     scored_by_model = Column(String(100))
     archived = Column(Boolean, default=False, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=_now, nullable=False)
 
     user = relationship("User")
     job_posting = relationship("JobPosting", back_populates="user_job_postings")
