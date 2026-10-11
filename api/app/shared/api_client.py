@@ -669,7 +669,7 @@ def get_classifier_client() -> BaseLLMClient:
 
 def get_scorer_client() -> BaseLLMClient:
     """
-    Returns an AnthropicClient on Sonnet for job-fit scoring if
+    Returns an AnthropicClient on Haiku for job-fit scoring if
     ANTHROPIC_API_KEY is set, else falls back to get_llm_client() (Gemini/
     Ollama) — safe to deploy before an Anthropic key is configured anywhere.
     """
@@ -677,7 +677,7 @@ def get_scorer_client() -> BaseLLMClient:
     if _scorer_client is None:
         settings = get_settings()
         if settings.anthropic_api_key:
-            _scorer_client = AnthropicClient(model=settings.anthropic_sonnet_model)
+            _scorer_client = AnthropicClient(model=settings.anthropic_haiku_model)
         else:
             _scorer_client = get_llm_client()
     return _scorer_client

@@ -69,7 +69,7 @@ def test_classifier_client_is_cached_across_calls():
 # get_scorer_client()
 # ---------------------------------------------------------------------------
 
-def test_scorer_client_uses_anthropic_sonnet_when_key_set():
+def test_scorer_client_uses_anthropic_haiku_when_key_set():
     _reset_singletons()
     settings = _mock_settings(anthropic_key="sk-ant-test")
 
@@ -77,7 +77,7 @@ def test_scorer_client_uses_anthropic_sonnet_when_key_set():
         client = api_client.get_scorer_client()
 
     assert isinstance(client, AnthropicClient)
-    assert client._model == "claude-sonnet-5-5"
+    assert client._model == "claude-haiku-5-5"
     _reset_singletons()
 
 
@@ -93,9 +93,9 @@ def test_scorer_client_falls_back_to_llm_client_when_no_anthropic_key():
 
 
 def test_classifier_and_scorer_are_independent_instances():
-    """Even both on Anthropic, classifier (Haiku) and scorer (Sonnet) must
-    be separate client instances with different models — not one shared
-    singleton, unlike get_llm_client()."""
+    """classifier and scorer must be separate client instances/singletons —
+    not one shared object, unlike get_llm_client() — even though both
+    currently run on the same Haiku model."""
     _reset_singletons()
     settings = _mock_settings(anthropic_key="sk-ant-test")
 
@@ -104,5 +104,4 @@ def test_classifier_and_scorer_are_independent_instances():
         scorer = api_client.get_scorer_client()
 
     assert classifier is not scorer
-    assert classifier._model != scorer._model
     _reset_singletons()
