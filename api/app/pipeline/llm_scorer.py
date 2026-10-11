@@ -216,10 +216,24 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
             JOIN job_postings jp ON jp.id = ujp.job_posting_id
             JOIN users u ON u.id = ujp.user_id
             JOIN user_limit ul ON ul.user_id = ujp.user_id
+            LEFT JOIN profiles p ON p.user_id = ujp.user_id
             WHERE u.scoring_suspended = false
               AND ul.scored_today < ul.daily_limit
               AND jp.inferred_industries IS NOT NULL
               AND jp.inferred_industries != '[]'
+              -- Skip jobs that don't match the user's target industries — mirrors
+              -- the dashboard listing filter in router.py's list_jobs endpoint, so
+              -- we don't spend an LLM call scoring a job the user will never see.
+              AND (
+                p.target_industries IS NULL
+                OR p.target_industries = '[]'
+                OR EXISTS (
+                    SELECT 1 FROM json_array_elements_text(jp.inferred_industries::json) AS inf
+                    WHERE inf IN (
+                        SELECT value FROM json_array_elements_text(p.target_industries::json)
+                    )
+                )
+              )
               AND (
                 -- New unscored job
                 (ujp.scoring_status = 'idle' AND (

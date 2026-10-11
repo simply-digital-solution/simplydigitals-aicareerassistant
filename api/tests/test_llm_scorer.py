@@ -813,6 +813,26 @@ async def test_select_query_skips_blank_industries():
     assert "inferred_industries != '[]'" in select_sql
 
 
+@pytest.mark.asyncio
+async def test_select_query_filters_by_target_industries():
+    """
+    The SELECT must skip jobs whose inferred_industries don't match the
+    user's profile.target_industries — mirrors the dashboard listing filter
+    in router.py so we don't spend an LLM call scoring a job the user will
+    never see. Users with no target_industries set must stay unaffected.
+    """
+    db = _db_with_batch(job_rows=[])
+
+    await score_next_batch(db)
+
+    select_sql = db.execute.call_args_list[0].args[0].text
+    assert "profiles" in select_sql
+    assert "target_industries" in select_sql
+    # No-filter-configured escape hatch must be present
+    assert "target_industries IS NULL" in select_sql
+    assert "target_industries = '[]'" in select_sql
+
+
 # ---------------------------------------------------------------------------
 # Daily limit exclusion — capped users skipped in SELECT
 # ---------------------------------------------------------------------------
