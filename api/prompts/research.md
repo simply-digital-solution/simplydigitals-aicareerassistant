@@ -48,6 +48,7 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 
 ### reasons and risks
 - Write all reasons and risks in second person, addressing the candidate directly as "you" / "your". Never use "the candidate", "he", "she", or "they".
+- Each item in `reasons` and `risks` must be ONE sentence, maximum ~25 words. Do not write multi-sentence or multi-clause items.
 - `reasons`: 1–5 items — specific reasons this role fits you. Each reason must reference a concrete skill, experience, or achievement from your profile matched to a specific JD requirement. Do not pad with weak reasons.
 - `risks`: 1–5 items — specific, actionable concerns you must address if you apply. Each risk must name the exact skill, certification, domain, or experience gap from the JD and what you are missing. Do NOT write meta-observations like "outside your domain" (already captured in fit_score) or "overqualified" (not actionable). Focus only on gaps you could address in a cover letter, interview, or by acquiring a skill.
 
@@ -55,13 +56,12 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 - 3–5 ATS keywords from the JD the candidate should include in a tailored resume.
 
 ### scoring_breakdown — CRITICAL INSTRUCTIONS
-- Extract every meaningful, distinct requirement from the JD as its own row.
-- Copy the requirement text verbatim or near-verbatim from the JD — do not paraphrase into generic terms.
+- List AT MOST 8 rows — the most decision-relevant requirements only. Prioritize: all hard gates first, then the strongest matches and the most critical gaps. Do not exhaustively enumerate every minor requirement.
 - If two requirements have different match levels, they MUST be separate rows. Do not group them.
 - If two requirements are closely related AND have the same match level, you may group them in one row.
 - `category`: assign one of — Technical, Experience, Education, Domain, Soft Skills, Certification, Location. Use your judgement for anything that does not fit.
-- `requirement`: the specific JD requirement, concise but precise (copy key phrases from the JD).
-- `your_profile`: what the candidate actually brings for that specific requirement. Be specific — reference their actual background, not generic praise.
+- `requirement`: a short phrase (max ~12 words) copying key language from the JD — not a full sentence.
+- `your_profile`: a short phrase (max ~15 words) stating what the candidate brings for that requirement — not a full sentence.
 - `match`: a short label you write freely. Use ✅ for good matches, ⚠️ for partial/weak, ❌ for gaps. When a JD requirement uses language like "must", "required", "mandatory", or "essential" and the candidate does not meet it, mark it as `❌ Hard gate`.
 
 ### recommendation — REQUIRED
