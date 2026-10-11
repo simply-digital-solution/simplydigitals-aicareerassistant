@@ -132,6 +132,28 @@ async def test_successful_single_score():
     assert update_params["jid"] == 1
 
 
+@pytest.mark.asyncio
+async def test_run_research_agent_called_with_scoring_request_type():
+    """
+    run_research_agent() routes to get_scorer_client() (Sonnet) only when
+    request_type="scoring" — this must stay in sync with that string, or
+    single-job rescoring would silently fall back to get_llm_client()
+    (Gemini) instead.
+    """
+    db = _make_db(_make_job_row(job_id=1))
+    result = _make_result(job_id=1, fit_score=0.82)
+    mock_agent = AsyncMock(return_value=(result, {}))
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", mock_agent),
+    ):
+        await score_single_job(db, job_id=1)
+
+    mock_agent.assert_called_once()
+    assert mock_agent.call_args.kwargs["request_type"] == "scoring"
+
+
 # ---------------------------------------------------------------------------
 # Agent returns AgentError → rescoring=false, error written, old score preserved
 # ---------------------------------------------------------------------------

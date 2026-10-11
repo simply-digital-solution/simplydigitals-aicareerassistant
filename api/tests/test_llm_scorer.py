@@ -153,6 +153,30 @@ async def test_successful_score_writes_result():
     assert had_work is True
     db.commit.assert_called()
 
+
+@pytest.mark.asyncio
+async def test_run_research_agent_called_with_scoring_request_type():
+    """
+    run_research_agent() routes to get_scorer_client() (Sonnet) only when
+    request_type="scoring" — this must stay in sync with that string, or
+    scoring would silently fall back to get_llm_client() (Gemini) instead.
+    """
+    job_row = _make_job_row(job_id=1)
+    db      = _db_with_batch([job_row])
+
+    opp    = _make_opportunity(job_id=1, fit_score=0.78)
+    result = _make_research_result([opp])
+    mock_agent = AsyncMock(return_value=(result, {}))
+
+    with (
+        patch("app.pipeline.llm_scorer._load_profile", AsyncMock(return_value={})),
+        patch("app.pipeline.llm_scorer.run_research_agent", mock_agent),
+    ):
+        await score_next_batch(db)
+
+    mock_agent.assert_called_once()
+    assert mock_agent.call_args.kwargs["request_type"] == "scoring"
+
     # Find the score write UPDATE
     score_calls = _find_ujp_update_calls(db)
     assert len(score_calls) == 1
