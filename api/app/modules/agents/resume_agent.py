@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.api_client import get_llm_client
 from app.shared.schemas import ResumeOutput, AgentError
 
-PROMPT_FILE = Path(__file__).parents[4] / "prompts" / "resume.md"
+PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "resume.md"
 AGENT_NAME = "resume"
 
 # JD truncation limit — prevents flooding context window

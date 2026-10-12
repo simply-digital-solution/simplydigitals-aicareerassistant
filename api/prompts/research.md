@@ -51,6 +51,7 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 - Each item in `reasons` and `risks` must be ONE sentence, maximum ~25 words. Do not write multi-sentence or multi-clause items.
 - `reasons`: 1–5 items — specific reasons this role fits you. Each reason must reference a concrete skill, experience, or achievement from your profile matched to a specific JD requirement. Do not pad with weak reasons.
 - `risks`: 1–5 items — specific, actionable concerns you must address if you apply. Each risk must name the exact skill, certification, domain, or experience gap from the JD and what you are missing. Do NOT write meta-observations like "outside your domain" (already captured in fit_score) or "overqualified" (not actionable). Focus only on gaps you could address in a cover letter, interview, or by acquiring a skill.
+- **Salary risk (mandatory check)**: If the JD states a salary or salary range AND it is below the candidate's minimum compensation, you MUST include it as a risk. State both figures explicitly, e.g. "The advertised salary range (SGD 6,000–8,000/month) is below your stated minimum compensation of SGD 15,000/month." If no salary is stated in the JD, do not mention it.
 
 ### key_keywords
 - 3–5 ATS keywords from the JD the candidate should include in a tailored resume.

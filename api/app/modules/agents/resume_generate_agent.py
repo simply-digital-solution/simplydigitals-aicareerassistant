@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.api_client import get_resume_client
 from app.shared.schemas import GeneratedResumeOutput, AgentError
 
-PROMPT_FILE = Path(__file__).parents[4] / "prompts" / "resume_generate.md"
+PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "resume_generate.md"
 AGENT_NAME  = "resume_generate"
 
 JD_MAX_CHARS = 4000

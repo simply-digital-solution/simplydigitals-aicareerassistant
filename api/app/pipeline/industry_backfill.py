@@ -20,7 +20,7 @@ from app.shared.schemas import IndustryClassifierOutput, AgentError
 
 logger = logging.getLogger(__name__)
 
-PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "industry_classifier.md"
+PROMPT_FILE = Path(__file__).parents[2] / "prompts" / "industry_classifier.md"
 BATCH_SIZE = 30
 DESC_SNIPPET_CHARS = 300
 

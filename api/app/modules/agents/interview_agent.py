@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.api_client import get_llm_client
 from app.shared.schemas import InterviewOutput, AgentError
 
-PROMPT_FILE = Path(__file__).parents[4] / "prompts" / "interview.md"
+PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "interview.md"
 AGENT_NAME = "interview"
 
 JD_MAX_CHARS = 3000
