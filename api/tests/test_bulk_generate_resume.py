@@ -68,6 +68,24 @@ async def test_only_owned_ids_sent_to_generator():
 
 
 # ---------------------------------------------------------------------------
+# Ownership query — job_postings has no user_id column; ownership must be
+# checked via a join to user_job_postings, not a direct WHERE user_id filter
+# (that filter previously caused asyncpg.UndefinedColumnError on every call)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_ownership_query_joins_user_job_postings_not_direct_user_id():
+    db = _make_db(owned_ids=[1])
+    with patch("app.pipeline.resume_generator.generate_resumes_for_jobs",
+               AsyncMock(return_value={1: True})):
+        await _call_bulk_generate([1], db)
+
+    owned_sql = db.execute.call_args_list[0].args[0].text
+    assert "user_job_postings" in owned_sql
+    assert "WHERE user_id = :uid" not in owned_sql
+
+
+# ---------------------------------------------------------------------------
 # Partial failure — some False results returned
 # ---------------------------------------------------------------------------
 

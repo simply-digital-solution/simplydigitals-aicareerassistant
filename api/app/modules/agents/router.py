@@ -1715,9 +1715,14 @@ async def retry_drive_upload(
     if not gr or not gr["resume_json"]:
         raise HTTPException(404, "No stored resume found for retry. Please generate first.")
 
-    # Load job info for folder/filename
+    # Load job info for folder/filename (ownership via user_job_postings)
     job_result = await db.execute(
-        text("SELECT title, company FROM job_postings WHERE id=:jid AND user_id=:uid"),
+        text("""
+            SELECT jp.title, jp.company
+            FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
+            WHERE jp.id = :jid
+        """),
         {"jid": job_id, "uid": current_user.id},
     )
     job = job_result.mappings().first()
@@ -1862,7 +1867,11 @@ async def bulk_generate_resumes(
         params[f"id{i}"] = jid
 
     owned = await db.execute(
-        text(f"SELECT id FROM job_postings WHERE user_id = :uid AND id IN ({placeholders})"),
+        text(f"""
+            SELECT jp.id FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
+            WHERE jp.id IN ({placeholders})
+        """),
         params,
     )
     owned_ids = [r[0] for r in owned.fetchall()]
@@ -2120,9 +2129,14 @@ async def upload_resume_to_drive(
     if not prof or not prof["google_refresh_token"]:
         raise HTTPException(403, "Google Drive not connected. Connect Drive first.")
 
-    # Load job info for folder/filename
+    # Load job info for folder/filename (ownership via user_job_postings)
     job_result = await db.execute(
-        text("SELECT title, company FROM job_postings WHERE id = :jid AND user_id = :uid"),
+        text("""
+            SELECT jp.title, jp.company
+            FROM job_postings jp
+            JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
+            WHERE jp.id = :jid
+        """),
         {"jid": job_id, "uid": current_user.id},
     )
     job = job_result.mappings().first()
