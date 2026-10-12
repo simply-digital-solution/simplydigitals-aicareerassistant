@@ -42,7 +42,7 @@ Return ONLY valid JSON matching this exact schema:
       "content": [],
       "experience": [
         {
-          "title": "Job Title",
+          "title": "Job Title — copied exactly as it appears on the source resume, no additions",
           "company": "Company Name",
           "dates": "Jan 2022 – Present",
           "summary": "Two-sentence role summary highlighting the most impactful aspects of this role relevant to the target job. Each sentence is concise and punchy.",
@@ -72,6 +72,7 @@ Return ONLY valid JSON matching this exact schema:
 ## Rules
 
 - **Never invent** achievements, skills, companies, dates, or qualifications not in the candidate's resume.
+- **Experience `title`**: copy the candidate's job title from the source resume exactly — do not append a platform name, project name, team name, or any other descriptor that is not already part of the title on the source resume. Platform/project names, if relevant, belong in the role `summary` or `bullets`, never appended to `title`.
 - **`headline`**: the candidate's title/specialty line — the bold line directly under their name (e.g. "Global Markets, Front-to-Back Process, Risk and Controls, Operations Technology, PMP, PMI-ACP"). This is rendered on its own, separately from `header_lines` — do not repeat it inside `header_lines`.
 - **`header_lines`**: copy every remaining line of the resume header block verbatim — the contact/location lines that appear between the headline and the first section heading (e.g. email, phone, LinkedIn, location — one per line, or combined as in the source resume). Preserve exact spacing, separators, and order. If the resume has no lines beyond the name and headline, return an empty array. **Never put a second title/specialty-style line in `header_lines`** — if the source resume has two title-like lines (e.g. a short title bar and a longer specialty line), pick ONE for `headline` and put ONLY contact/location info in `header_lines`.
 - **Bold-label bullets** (used in Competencies/Skills-style sections): where the source resume bolds a category name before a comma-separated list (e.g. "Front-to-Back Markets Operations: Trade lifecycle, exception management, ..."), format the `content` line as `"Category Name: item, item, item"` — a colon directly after the category name, no other colons before it. The renderer bolds everything before the first colon automatically.
@@ -86,6 +87,6 @@ Return ONLY valid JSON matching this exact schema:
 - **Experience `summary`**: exactly 2 sentences per role. Pick the most impactful highlights relevant to the target job. No "I". Start each sentence with a past-tense action verb.
 - **Experience `bullets`**: maximum 5 bullets per role. Each bullet must start with a past-tense action verb (e.g. "Led", "Delivered", "Engineered", "Authored", "Championed"). Select only the most relevant bullets for the target job.
 - **Summary section**: maximum 2 paragraphs, 5–10 lines total. Each paragraph must be 2–3 sentences. Do not pad with additional paragraphs or long lists.
-- **Competencies section**: consolidate all competencies into a maximum of 5 categories. Any new skills required by the JD must be merged into the most relevant existing category — never added as standalone lines or extra categories beyond 5.
+- **Competencies section**: consolidate all competencies into a maximum of 5 categories. Any new skills required by the JD must be merged into the most relevant existing category — never added as standalone lines or extra categories beyond 5. **Every category and skill from the source resume must still appear somewhere** — when consolidating below the source's original category count, merge the dropped category's content into the closest remaining category rather than omitting it. This includes tools/technical skills (e.g. software, languages, platforms) — never drop an entire category's content during consolidation.
 - If a `CANDIDATE'S ADDITIONAL CONTEXT` section is provided, treat it as verified facts about the candidate. Use it to fill gaps identified in the JD — add relevant skills or experience into the appropriate resume sections. Never invent anything beyond what is stated there.
 - Return ONLY valid JSON. Nothing else.
