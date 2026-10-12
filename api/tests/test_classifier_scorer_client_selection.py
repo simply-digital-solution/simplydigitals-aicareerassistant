@@ -1,6 +1,7 @@
 """
-Unit tests for get_classifier_client() / get_scorer_client() — per-task
-Anthropic opt-in with fallback to get_llm_client() (Gemini/Ollama).
+Unit tests for get_classifier_client() / get_scorer_client() /
+get_resume_client() — per-task Anthropic opt-in with fallback to
+get_llm_client() (Gemini/Ollama).
 """
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,7 @@ def _reset_singletons():
     api_client._client = None
     api_client._classifier_client = None
     api_client._scorer_client = None
+    api_client._resume_client = None
 
 
 def _mock_settings(anthropic_key="", gemini_key="some-gemini-key"):
@@ -104,4 +106,59 @@ def test_classifier_and_scorer_are_independent_instances():
         scorer = api_client.get_scorer_client()
 
     assert classifier is not scorer
+    _reset_singletons()
+
+
+# ---------------------------------------------------------------------------
+# get_resume_client()
+# ---------------------------------------------------------------------------
+
+def test_resume_client_uses_anthropic_haiku_when_key_set():
+    _reset_singletons()
+    settings = _mock_settings(anthropic_key="sk-ant-test")
+
+    with patch("app.shared.api_client.get_settings", return_value=settings):
+        client = api_client.get_resume_client()
+
+    assert isinstance(client, AnthropicClient)
+    assert client._model == "claude-haiku-5-5"
+    _reset_singletons()
+
+
+def test_resume_client_falls_back_to_llm_client_when_no_anthropic_key():
+    _reset_singletons()
+    settings = _mock_settings(anthropic_key="")
+
+    with patch("app.shared.api_client.get_settings", return_value=settings):
+        client = api_client.get_resume_client()
+
+    assert isinstance(client, GeminiClient)
+    _reset_singletons()
+
+
+def test_resume_client_is_cached_across_calls():
+    _reset_singletons()
+    settings = _mock_settings(anthropic_key="sk-ant-test")
+
+    with patch("app.shared.api_client.get_settings", return_value=settings):
+        client1 = api_client.get_resume_client()
+        client2 = api_client.get_resume_client()
+
+    assert client1 is client2
+    _reset_singletons()
+
+
+def test_classifier_scorer_resume_are_three_independent_instances():
+    """All three per-task clients must be separate singletons, even though
+    all three currently run on the same Haiku model — each is an
+    independently swappable knob, not a shared object."""
+    _reset_singletons()
+    settings = _mock_settings(anthropic_key="sk-ant-test")
+
+    with patch("app.shared.api_client.get_settings", return_value=settings):
+        classifier = api_client.get_classifier_client()
+        scorer = api_client.get_scorer_client()
+        resume = api_client.get_resume_client()
+
+    assert len({id(classifier), id(scorer), id(resume)}) == 3
     _reset_singletons()

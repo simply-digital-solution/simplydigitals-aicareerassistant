@@ -644,40 +644,46 @@ def get_llm_client() -> BaseLLMClient:
 
 # Separate singletons from the global `_client` above — these are opt-in
 # per-task overrides, not a replacement for get_llm_client(). Every other
-# caller (resume generation, interview prep, profile extraction, the
-# non-scoring research agent path, ...) keeps using get_llm_client()
-# untouched.
+# caller (interview prep, profile extraction, the non-scoring research
+# agent path, ...) keeps using get_llm_client() untouched.
 _classifier_client: Optional[BaseLLMClient] = None
 _scorer_client: Optional[BaseLLMClient] = None
+_resume_client: Optional[BaseLLMClient] = None
+
+
+def _build_anthropic_task_client(model: str) -> BaseLLMClient:
+    """
+    Returns an AnthropicClient on the given model if ANTHROPIC_API_KEY is
+    set, else falls back to get_llm_client() (Gemini/Ollama) — safe to
+    deploy before an Anthropic key is configured anywhere. Shared by the
+    per-task client getters below so each one stays an independently
+    swappable model choice without duplicating the fallback logic.
+    """
+    settings = get_settings()
+    if settings.anthropic_api_key:
+        return AnthropicClient(model=model)
+    return get_llm_client()
 
 
 def get_classifier_client() -> BaseLLMClient:
-    """
-    Returns an AnthropicClient on Haiku for industry classification if
-    ANTHROPIC_API_KEY is set, else falls back to get_llm_client() (Gemini/
-    Ollama) — safe to deploy before an Anthropic key is configured anywhere.
-    """
+    """Returns the per-task client for industry classification (Haiku)."""
     global _classifier_client
     if _classifier_client is None:
-        settings = get_settings()
-        if settings.anthropic_api_key:
-            _classifier_client = AnthropicClient(model=settings.anthropic_haiku_model)
-        else:
-            _classifier_client = get_llm_client()
+        _classifier_client = _build_anthropic_task_client(get_settings().anthropic_haiku_model)
     return _classifier_client
 
 
 def get_scorer_client() -> BaseLLMClient:
-    """
-    Returns an AnthropicClient on Haiku for job-fit scoring if
-    ANTHROPIC_API_KEY is set, else falls back to get_llm_client() (Gemini/
-    Ollama) — safe to deploy before an Anthropic key is configured anywhere.
-    """
+    """Returns the per-task client for job-fit scoring (Haiku)."""
     global _scorer_client
     if _scorer_client is None:
-        settings = get_settings()
-        if settings.anthropic_api_key:
-            _scorer_client = AnthropicClient(model=settings.anthropic_haiku_model)
-        else:
-            _scorer_client = get_llm_client()
+        _scorer_client = _build_anthropic_task_client(get_settings().anthropic_haiku_model)
     return _scorer_client
+
+
+def get_resume_client() -> BaseLLMClient:
+    """Returns the per-task client for resume generation (Haiku)."""
+    global _resume_client
+    if _resume_client is None:
+        _resume_client = _build_anthropic_task_client(get_settings().anthropic_haiku_model)
+    return _resume_client
