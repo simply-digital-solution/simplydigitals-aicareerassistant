@@ -88,15 +88,18 @@ def test_section_heading_is_bold_and_black():
     assert str(run.font.color.rgb) == "1A1A1A"
 
 
-def test_experience_company_and_dates_on_own_line_not_title_line():
+def test_experience_company_and_dates_each_on_their_own_line():
     resume = _make_resume()
     doc = _read(build_docx_bytes(resume))
     title_para = next(p for p in doc.paragraphs if p.text == "Product Owner")
     assert "Standard Chartered Bank" not in title_para.text
     assert "10/2020" not in title_para.text
 
-    meta_para = next(p for p in doc.paragraphs if "Standard Chartered Bank" in p.text)
-    assert "10/2020 - 02/2026" in meta_para.text
+    company_para = next(p for p in doc.paragraphs if p.text == "Standard Chartered Bank, Singapore")
+    assert "10/2020" not in company_para.text
+
+    dates_para = next(p for p in doc.paragraphs if p.text == "10/2020 - 02/2026")
+    assert "Standard Chartered Bank" not in dates_para.text
 
 
 def test_bold_prefix_bullet_splits_label_from_rest():

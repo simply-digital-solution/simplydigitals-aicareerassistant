@@ -75,15 +75,20 @@ function experienceBlock(entry: GeneratedResumeExperience): Paragraph[] {
     spacing: { before: 120, after: 0 },
   })
 
-  // Company + dates, own line below the title
-  const metaChildren = [run(entry.company, { italics: true, color: '555555' })]
-  if (entry.dates) {
-    metaChildren.push(run(`  |  ${entry.dates}`, { italics: true, color: '888888' }))
-  }
-  const metaLine = new Paragraph({
-    children: metaChildren,
-    spacing: { before: 0, after: 40 },
+  // Company, own line below the title
+  const companyLine = new Paragraph({
+    children: [run(entry.company, { italics: true, color: '555555' })],
+    spacing: { before: 0, after: entry.dates ? 0 : 40 },
   })
+
+  // Dates, own line below company
+  const lines = [titleLine, companyLine]
+  if (entry.dates) {
+    lines.push(new Paragraph({
+      children: [run(entry.dates, { italics: true, color: '888888' })],
+      spacing: { before: 0, after: 40 },
+    }))
+  }
 
   const bullets = entry.bullets.map(
     b => new Paragraph({
@@ -93,7 +98,7 @@ function experienceBlock(entry: GeneratedResumeExperience): Paragraph[] {
     }),
   )
 
-  return [titleLine, metaLine, ...bullets]
+  return [...lines, ...bullets]
 }
 
 export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''): Promise<void> {
@@ -204,10 +209,8 @@ function ExperienceEntry({ entry }: { entry: GeneratedResumeExperience }) {
   return (
     <div className="mb-4">
       <div className="font-semibold text-gray-900">{entry.title}</div>
-      <div className="text-sm text-gray-600 italic mb-1">
-        {entry.company}
-        {entry.dates && <span className="text-gray-500">{'  |  '}{entry.dates}</span>}
-      </div>
+      <div className="text-sm text-gray-600 italic">{entry.company}</div>
+      {entry.dates && <div className="text-sm text-gray-500 italic mb-1">{entry.dates}</div>}
       {entry.bullets.length > 0 && (
         <ul className="list-disc list-outside ml-4 space-y-1">
           {entry.bullets.map((b, i) => (

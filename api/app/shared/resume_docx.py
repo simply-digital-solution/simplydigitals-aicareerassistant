@@ -140,15 +140,20 @@ def build_docx_bytes(resume: GeneratedResumeOutput) -> bytes:
                 r1 = p_title.add_run(entry.title)
                 _set_run(r1, entry.title, bold=True)
 
-                # Company + dates line (italic company, then dates)
-                p_meta = doc.add_paragraph()
-                p_meta.paragraph_format.space_before = Pt(0)
-                p_meta.paragraph_format.space_after = Pt(2)
-                r2 = p_meta.add_run(entry.company)
+                # Company line (its own line, italic)
+                p_company = doc.add_paragraph()
+                p_company.paragraph_format.space_before = Pt(0)
+                p_company.paragraph_format.space_after = Pt(0)
+                r2 = p_company.add_run(entry.company)
                 _set_run(r2, entry.company, italic=True, color=GRAY_TEXT)
+
+                # Dates line (its own line below company, italic)
                 if entry.dates:
-                    r3 = p_meta.add_run(f"  |  {entry.dates}")
-                    _set_run(r3, f"  |  {entry.dates}", italic=True, color=DATE_GRAY)
+                    p_dates = doc.add_paragraph()
+                    p_dates.paragraph_format.space_before = Pt(0)
+                    p_dates.paragraph_format.space_after = Pt(2)
+                    r3 = p_dates.add_run(entry.dates)
+                    _set_run(r3, entry.dates, italic=True, color=DATE_GRAY)
 
                 # 2-line role summary (job-relevant highlights)
                 if entry.summary:
