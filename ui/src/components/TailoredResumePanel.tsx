@@ -17,84 +17,118 @@ interface TailoredResumePanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// .docx generation — matches the uploaded PDF template exactly
+// .docx generation — matches the SCB/GMO PDF template:
+// centered header (name/headline/contact), bold black section headings,
+// stacked company/dates line, bold-prefix "Label: rest" bullets.
 //
 // Measurements are in twentieths of a point (twips): 1pt = 20 twips
 // Font sizes are in half-points: 11pt = 22, 28pt = 56, 10pt = 20
 // Colours are 6-digit hex without '#'
-// HEADING_BLUE matches the blue used in the PDF (#1F5C9E)
 // ---------------------------------------------------------------------------
 
-const HEADING_BLUE = '1F5C9E'
+const HEADING_COLOR = '1A1A1A'
 const BODY_FONT   = 'Calibri'
 const BODY_SIZE   = 22   // 11pt in half-points
-const PAGE_WIDTH  = 9360 // usable width in twips (A4 minus 1" margins each side)
+// Content lines formatted as "Label: rest" get the label bolded — used by
+// competency-style bullets. Only split when the colon appears early enough
+// to be a label, not an incidental colon deep in a sentence.
+const BOLD_PREFIX_MAX_LABEL_CHARS = 60
 
 function run(text: string, opts: Record<string, unknown> = {}): TextRun {
   return new TextRun({ font: BODY_FONT, size: BODY_SIZE, text, ...opts } as ConstructorParameters<typeof TextRun>[0])
+}
+
+function splitBoldPrefix(text: string): [string, string] | null {
+  const idx = text.indexOf(':')
+  if (idx <= 0 || idx > BOLD_PREFIX_MAX_LABEL_CHARS) return null
+  return [text.slice(0, idx + 1), text.slice(idx + 1)]
+}
+
+function contentRuns(text: string): TextRun[] {
+  const split = splitBoldPrefix(text)
+  if (!split) return [run(text)]
+  const [label, rest] = split
+  return [run(label, { bold: true }), run(rest)]
 }
 
 function sectionHeading(title: string): Paragraph {
   return new Paragraph({
     children: [
       run(title.toUpperCase(), {
-        bold: false,
-        color: HEADING_BLUE,
+        bold: true,
+        color: HEADING_COLOR,
         size: BODY_SIZE,
         font: BODY_FONT,
       }),
     ],
     border: {
-      bottom: { style: BorderStyle.SINGLE, size: 6, color: HEADING_BLUE, space: 1 },
+      bottom: { style: BorderStyle.SINGLE, size: 6, color: HEADING_COLOR, space: 1 },
     },
     spacing: { before: 280, after: 100 },
   })
 }
 
 function experienceBlock(entry: GeneratedResumeExperience): Paragraph[] {
-  // Job title (bold) + italic company + right-aligned dates on one line via tab stop
+  // Job title (bold), own line
   const titleLine = new Paragraph({
-    children: [
-      run(entry.title, { bold: true }),
-      run('  '),
-      run(entry.company, { italics: true, color: '555555' }),
-      run('\t'),
-      run(entry.dates, { color: '888888' }),
-    ],
-    tabStops: [{ type: 'right' as const, position: PAGE_WIDTH }],
-    spacing: { before: 120, after: 40 },
+    children: [run(entry.title, { bold: true })],
+    spacing: { before: 120, after: 0 },
+  })
+
+  // Company + dates, own line below the title
+  const metaChildren = [run(entry.company, { italics: true, color: '555555' })]
+  if (entry.dates) {
+    metaChildren.push(run(`  |  ${entry.dates}`, { italics: true, color: '888888' }))
+  }
+  const metaLine = new Paragraph({
+    children: metaChildren,
+    spacing: { before: 0, after: 40 },
   })
 
   const bullets = entry.bullets.map(
     b => new Paragraph({
-      children: [run(b)],
+      children: contentRuns(b),
       bullet: { level: 0 },
       spacing: { before: 20, after: 20 },
     }),
   )
 
-  return [titleLine, ...bullets]
+  return [titleLine, metaLine, ...bullets]
 }
 
 export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''): Promise<void> {
   const children: Paragraph[] = [
-    // Candidate name — large, left-aligned, bold
+    // Candidate name — large, centered, bold
     new Paragraph({
       children: [
         run(resume.name, { bold: true, size: 56, font: BODY_FONT }),  // 28pt
       ],
-      alignment: AlignmentType.LEFT,
+      alignment: AlignmentType.CENTER,
       spacing: { after: 40 },
     }),
-    // Header lines — verbatim from resume (title bar, contact line, etc.)
+  ]
+
+  // Headline — tailored title/specialty line, centered below the name
+  if (resume.headline) {
+    children.push(
+      new Paragraph({
+        children: [run(resume.headline, { bold: true })],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 40 },
+      }),
+    )
+  }
+
+  // Header lines — verbatim from resume (contact info), centered
+  children.push(
     ...(resume.header_lines ?? []).map((line, i) =>
       new Paragraph({
         children: [run(line, { color: '555555' })],
-        alignment: AlignmentType.LEFT,
+        alignment: AlignmentType.CENTER,
         spacing: { after: i === (resume.header_lines ?? []).length - 1 ? 200 : 40 },
       })
     ),
-  ]
+  )
 
   for (const section of resume.sections) {
     children.push(sectionHeading(section.title))
@@ -107,7 +141,7 @@ export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''
       for (const line of section.content) {
         children.push(
           new Paragraph({
-            children: [run(line)],
+            children: contentRuns(line),
             spacing: { before: 40, after: 40 },
           }),
         )
@@ -148,18 +182,36 @@ export async function downloadAsDocx(resume: GeneratedResumeOutput, company = ''
 // Inline resume display
 // ---------------------------------------------------------------------------
 
+function ContentLine({ text }: { text: string }) {
+  const split = splitBoldPrefix(text)
+  if (!split) return <p className="text-sm text-gray-700 leading-relaxed">{text}</p>
+  const [label, rest] = split
+  return (
+    <p className="text-sm text-gray-700 leading-relaxed">
+      <span className="font-bold">{label}</span>{rest}
+    </p>
+  )
+}
+
+function BulletLine({ text }: { text: string }) {
+  const split = splitBoldPrefix(text)
+  if (!split) return <>{text}</>
+  const [label, rest] = split
+  return <><span className="font-bold">{label}</span>{rest}</>
+}
+
 function ExperienceEntry({ entry }: { entry: GeneratedResumeExperience }) {
   return (
     <div className="mb-4">
-      <div className="flex flex-wrap justify-between items-baseline gap-x-2">
-        <span className="font-semibold text-gray-900">{entry.title}</span>
-        <span className="text-xs text-gray-500 whitespace-nowrap">{entry.dates}</span>
+      <div className="font-semibold text-gray-900">{entry.title}</div>
+      <div className="text-sm text-gray-600 italic mb-1">
+        {entry.company}
+        {entry.dates && <span className="text-gray-500">{'  |  '}{entry.dates}</span>}
       </div>
-      <div className="text-sm text-gray-600 italic mb-1">{entry.company}</div>
       {entry.bullets.length > 0 && (
         <ul className="list-disc list-outside ml-4 space-y-1">
           {entry.bullets.map((b, i) => (
-            <li key={i} className="text-sm text-gray-700 leading-snug">{b}</li>
+            <li key={i} className="text-sm text-gray-700 leading-snug"><BulletLine text={b} /></li>
           ))}
         </ul>
       )}
@@ -178,7 +230,7 @@ function ResumeSectionBlock({ section }: { section: GeneratedResumeSection }) {
       ) : (
         <div className="space-y-1">
           {section.content.map((line, i) => (
-            <p key={i} className="text-sm text-gray-700 leading-relaxed">{line}</p>
+            <ContentLine key={i} text={line} />
           ))}
         </div>
       )}
@@ -189,8 +241,11 @@ function ResumeSectionBlock({ section }: { section: GeneratedResumeSection }) {
 function ResumeDocument({ resume }: { resume: GeneratedResumeOutput }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-8 shadow-sm">
-      <div className="mb-6">
+      <div className="mb-6 text-center">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{resume.name}</h1>
+        {resume.headline && (
+          <p className="text-sm font-bold text-gray-800 mt-1">{resume.headline}</p>
+        )}
         {(resume.header_lines ?? []).map((line, i) => (
           <p key={i} className="text-sm text-gray-500 mt-0.5">{line}</p>
         ))}

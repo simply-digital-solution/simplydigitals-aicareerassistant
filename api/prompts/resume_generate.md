@@ -72,7 +72,9 @@ Return ONLY valid JSON matching this exact schema:
 ## Rules
 
 - **Never invent** achievements, skills, companies, dates, or qualifications not in the candidate's resume.
-- **`header_lines`**: copy every line of the resume header block verbatim — these are the lines that appear between the candidate's name and the first section heading (e.g. title bar, contact line). Preserve exact spacing, separators, and order. If the resume has no header lines beyond the name, return an empty array.
+- **`headline`**: the candidate's title/specialty line — the bold line directly under their name (e.g. "Global Markets, Front-to-Back Process, Risk and Controls, Operations Technology, PMP, PMI-ACP"). This is rendered on its own, separately from `header_lines` — do not repeat it inside `header_lines`.
+- **`header_lines`**: copy every remaining line of the resume header block verbatim — the contact/location lines that appear between the headline and the first section heading (e.g. email, phone, LinkedIn, location — one per line, or combined as in the source resume). Preserve exact spacing, separators, and order. If the resume has no lines beyond the name and headline, return an empty array.
+- **Bold-label bullets** (used in Competencies/Skills-style sections): where the source resume bolds a category name before a comma-separated list (e.g. "Front-to-Back Markets Operations: Trade lifecycle, exception management, ..."), format the `content` line as `"Category Name: item, item, item"` — a colon directly after the category name, no other colons before it. The renderer bolds everything before the first colon automatically.
 - Preserve the candidate's **exact section titles** — do not rename them.
 - Preserve the candidate's **section order** — do not reorder sections.
 - For `section_type`: use `summary`, `experience`, `skills`, `education`, or `other` for any other section.

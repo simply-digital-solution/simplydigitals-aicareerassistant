@@ -394,6 +394,64 @@ describe('MarkAppliedButton', () => {
   })
 })
 
+describe('Resume preview', () => {
+  async function renderPreview(resumeOverrides: Partial<GeneratedResumeResponse['resume']> = {}) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const resume = makeResume()
+    resume.resume = { ...resume.resume, ...resumeOverrides } as GeneratedResumeResponse['resume']
+    mockResearchApi.getGeneratedResume.mockResolvedValue({ data: resume } as never)
+    render(
+      <QueryClientProvider client={client}>
+        <TailoredResumePanel jobId={1} company="ACME Corp" />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => screen.getByRole('button', { name: /toggle resume preview/i }))
+    fireEvent.click(screen.getByRole('button', { name: /toggle resume preview/i }))
+  }
+
+  it('renders the headline below the name', async () => {
+    await renderPreview()
+    expect(await screen.findByText('Senior Data Engineer for Fintech')).toBeInTheDocument()
+  })
+
+  it('omits the headline paragraph when blank', async () => {
+    await renderPreview({ headline: '' })
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+    expect(screen.queryByText('Senior Data Engineer for Fintech')).not.toBeInTheDocument()
+  })
+
+  it('bolds a "Label:" prefix in a content line without duplicating text', async () => {
+    await renderPreview({
+      sections: [
+        {
+          section_type: 'skills',
+          title: 'Core Competencies',
+          content: ['Front-to-Back Markets Operations: Trade lifecycle, exception management'],
+          experience: [],
+        },
+      ],
+    } as never)
+    const label = await screen.findByText('Front-to-Back Markets Operations:')
+    expect(label.tagName).toBe('SPAN')
+    expect(label.className).toContain('font-bold')
+    expect(screen.getByText(/Trade lifecycle, exception management/)).toBeInTheDocument()
+  })
+
+  it('renders a plain content line without a colon unchanged', async () => {
+    await renderPreview({
+      sections: [
+        {
+          section_type: 'summary',
+          title: 'Professional Summary',
+          content: ['A seasoned data engineer with no colon in this sentence.'],
+          experience: [],
+        },
+      ],
+    } as never)
+    expect(await screen.findByText('A seasoned data engineer with no colon in this sentence.')).toBeInTheDocument()
+  })
+})
+
 describe('downloadAsDocx', () => {
   it('calls Packer.toBlob and triggers an anchor click', async () => {
     const { Packer } = await import('docx')
