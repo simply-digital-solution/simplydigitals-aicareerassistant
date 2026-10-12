@@ -42,8 +42,8 @@ COPY app/ ./app/
 COPY alembic.ini ./
 COPY migrations/ ./migrations/
 
-# Copy prompt files into the image
-COPY prompts/ /prompts/
+# Copy prompt files into the image (lands at /app/prompts, matching WORKDIR)
+COPY prompts/ ./prompts/
 
 ARG APP_VERSION=dev
 LABEL org.opencontainers.image.version=${APP_VERSION}
