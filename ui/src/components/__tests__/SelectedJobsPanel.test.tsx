@@ -14,6 +14,7 @@ vi.mock('../../api/client', () => ({
     getSelectedJobs: vi.fn(),
     archiveJob:      vi.fn(),
     rescoreJob:      vi.fn(),
+    getGeneratedResume: vi.fn(),
   },
   applicationsApi: {
     create: vi.fn(),
@@ -57,6 +58,16 @@ function setupMocks(jobs: ReturnType<typeof makeJob>[] = []) {
     return Promise.resolve({ data: {} }) as never
   })
   vi.mocked(clientModule.researchApi.getSelectedJobs).mockReturnValue(makeSelectedResponse(jobs) as never)
+  // Apply only shows once a resume exists — default to "a resume is on file"
+  // so Apply-button tests don't need to mock this individually.
+  vi.mocked(clientModule.researchApi.getGeneratedResume).mockResolvedValue({
+    data: {
+      job_posting_id: 1,
+      resume: null,
+      drive_file_id: 'file123',
+      drive_link: 'https://drive.google.com/file123',
+    },
+  } as never)
 }
 
 beforeEach(() => {

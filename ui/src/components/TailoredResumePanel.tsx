@@ -5,7 +5,7 @@ import {
   AlignmentType, BorderStyle,
 } from 'docx'
 import { researchApi, authApi, applicationsApi } from '../api/client'
-import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExperience } from '../api/client'
+import type { GeneratedResumeOutput, GeneratedResumeSection, GeneratedResumeExperience, GeneratedResumeResponse } from '../api/client'
 
 interface TailoredResumePanelProps {
   jobId: number
@@ -375,13 +375,42 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
     },
   })
 
-  // resume prefers mutation data (freshly generated) but falls back to cache
-  const resume = generateMutation.data ?? existing
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => {
+      setGenerateError('')
+      return researchApi.uploadResumeToDrive(jobId, file).then(r => r.data)
+    },
+    onSuccess: (data) => {
+      generateMutation.reset()  // clear stale generated data so the uploaded file's link wins
+      queryClient.setQueryData(['generated-resume', jobId], {
+        job_posting_id: jobId,
+        resume: null,
+        drive_file_id: data.drive_file_id,
+        drive_link: data.drive_link,
+      })
+      setGenerateError('')
+    },
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      const detail = err?.response?.data?.detail ?? 'Upload failed. Please try again.'
+      setGenerateError(detail)
+    },
+  })
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''  // allow re-selecting the same file
+    if (file) uploadMutation.mutate(file)
+  }
+
+  // resume prefers freshest mutation data (upload, then generate) but falls back to cache
+  const resume = uploadMutation.data
+    ? queryClient.getQueryData<GeneratedResumeResponse>(['generated-resume', jobId])
+    : generateMutation.data ?? existing
 
   const effectiveDriveLink = resume?.drive_link ?? null
   const hasDriveError = Boolean(resume?.drive_error || generateError.includes('Drive upload failed'))
 
-  const isWorking = generateMutation.isPending || retryMutation.isPending || isGenerating
+  const isWorking = generateMutation.isPending || retryMutation.isPending || uploadMutation.isPending || isGenerating
 
   return (
     <div className="mt-3 border-t border-gray-100 pt-3">
@@ -417,10 +446,6 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
                   : 'Just generated'}
               </span>
               <div className="flex items-center gap-3 flex-wrap">
-                {applicationId != null && (
-                  <MarkAppliedButton applicationId={applicationId} jobUrl={jobUrl} />
-                )}
-
                 {/* Download from Drive */}
                 {resume.drive_file_id && (
                   <a
@@ -470,14 +495,38 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
                 )}
 
                 {!readOnly && (
-                  <button
-                    onClick={() => generateMutation.mutate(additionalContext)}
-                    disabled={isWorking || !driveConnected}
-                    title={!driveConnected ? 'Connect Google Drive first' : undefined}
-                    className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {generateMutation.isPending ? 'Regenerating…' : '↺ Regenerate'}
-                  </button>
+                  <>
+                    <label
+                      className={`text-xs text-indigo-500 transition-colors ${
+                        isWorking || !driveConnected
+                          ? 'opacity-50 cursor-not-allowed'
+                          : 'hover:text-indigo-700 cursor-pointer'
+                      }`}
+                    >
+                      {uploadMutation.isPending ? 'Uploading…' : '⤒ Re-upload'}
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        onChange={handleFileSelected}
+                        disabled={isWorking || !driveConnected}
+                        className="hidden"
+                        aria-label="Re-upload resume"
+                      />
+                    </label>
+
+                    <button
+                      onClick={() => generateMutation.mutate(additionalContext)}
+                      disabled={isWorking || !driveConnected}
+                      title={!driveConnected ? 'Connect Google Drive first' : undefined}
+                      className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {generateMutation.isPending ? 'Regenerating…' : '↺ Regenerate'}
+                    </button>
+                  </>
+                )}
+
+                {applicationId != null && (
+                  <MarkAppliedButton applicationId={applicationId} jobUrl={jobUrl} />
                 )}
               </div>
             </div>
@@ -513,9 +562,23 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">No resume yet</span>
               <div className="flex items-center gap-3 flex-wrap">
-                {applicationId != null && (
-                  <MarkAppliedButton applicationId={applicationId} jobUrl={jobUrl} />
-                )}
+                <label
+                  className={`text-xs text-indigo-500 font-medium transition-colors ${
+                    isWorking || !driveConnected
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:text-indigo-700 cursor-pointer'
+                  }`}
+                >
+                  {uploadMutation.isPending ? 'Uploading…' : '⤒ Upload Resume'}
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={handleFileSelected}
+                    disabled={isWorking || !driveConnected}
+                    className="hidden"
+                    aria-label="Upload resume"
+                  />
+                </label>
                 <button
                   onClick={() => generateMutation.mutate(additionalContext)}
                   disabled={isWorking || !driveConnected}

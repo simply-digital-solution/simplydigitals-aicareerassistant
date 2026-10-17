@@ -311,6 +311,15 @@ export const researchApi = {
     api.get<GeneratedResumeResponse>(`/research/jobs/${jobId}/resume`),
   retryDriveUpload: (jobId: number) =>
     api.post<GeneratedResumeResponse>(`/research/jobs/${jobId}/retry-drive-upload`),
+  uploadResumeToDrive: (jobId: number, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<{ drive_link: string; drive_file_id: string }>(
+      `/research/jobs/${jobId}/upload-to-drive`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    )
+  },
 }
 
 // Profile API

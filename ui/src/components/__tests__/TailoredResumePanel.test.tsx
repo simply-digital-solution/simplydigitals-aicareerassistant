@@ -11,6 +11,7 @@ vi.mock('../../api/client', () => ({
     getGeneratedResume: vi.fn(),
     generateResume: vi.fn(),
     retryDriveUpload: vi.fn(),
+    uploadResumeToDrive: vi.fn(),
   },
   authApi: {
     googleStatus: vi.fn(),
@@ -127,6 +128,73 @@ describe('TailoredResumePanel', () => {
     renderPanel()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /generate/i })).toBeInTheDocument(),
+    )
+  })
+
+  it('shows Upload Resume input when no resume exists', async () => {
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    renderPanel()
+    await waitFor(() =>
+      expect(screen.getByLabelText(/^upload resume$/i)).toBeInTheDocument(),
+    )
+  })
+
+  it('does not show Apply when no resume exists, even with an applicationId', async () => {
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <TailoredResumePanel jobId={1} company="ACME Corp" applicationId={42} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => screen.getByRole('button', { name: /generate/i }))
+    expect(screen.queryByRole('button', { name: /mark job as applied/i })).not.toBeInTheDocument()
+  })
+
+  it('calls uploadResumeToDrive when a file is selected via Upload Resume', async () => {
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    mockResearchApi.uploadResumeToDrive.mockResolvedValue({
+      data: { drive_file_id: 'file123', drive_link: 'https://drive.google.com/file123' },
+    } as never)
+
+    renderPanel(7)
+    await waitFor(() => screen.getByLabelText(/^upload resume$/i))
+    const file = new File(['content'], 'resume.pdf', { type: 'application/pdf' })
+    fireEvent.change(screen.getByLabelText(/^upload resume$/i), { target: { files: [file] } })
+
+    await waitFor(() =>
+      expect(mockResearchApi.uploadResumeToDrive).toHaveBeenCalledWith(7, file),
+    )
+  })
+
+  it('shows Apply, Re-upload and Preview after a resume is uploaded, with Apply rightmost', async () => {
+    mockResearchApi.getGeneratedResume.mockRejectedValue(notFoundError())
+    mockResearchApi.uploadResumeToDrive.mockResolvedValue({
+      data: { drive_file_id: 'file123', drive_link: 'https://drive.google.com/file123' },
+    } as never)
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <TailoredResumePanel jobId={1} company="ACME Corp" applicationId={42} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => screen.getByLabelText(/^upload resume$/i))
+    const file = new File(['content'], 'resume.pdf', { type: 'application/pdf' })
+    fireEvent.change(screen.getByLabelText(/^upload resume$/i), { target: { files: [file] } })
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /mark job as applied/i })).toBeInTheDocument(),
+    )
+    expect(screen.getByLabelText(/^re-upload resume$/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /regenerate/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /toggle resume preview/i })).toBeInTheDocument()
+
+    // Apply must be the rightmost actionable control in the button row
+    const buttonRow = screen.getByRole('button', { name: /mark job as applied/i }).parentElement!
+    const controls = Array.from(buttonRow.querySelectorAll('button, label'))
+    expect(controls[controls.length - 1]).toBe(
+      screen.getByRole('button', { name: /mark job as applied/i }),
     )
   })
 
