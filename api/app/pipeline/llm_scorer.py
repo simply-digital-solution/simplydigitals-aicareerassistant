@@ -8,7 +8,6 @@ the result back. Sleeps 30s between jobs, 5 min when the queue is empty.
 import asyncio
 import json
 import logging
-import re
 import time
 from datetime import datetime, timezone
 from app.shared.sql_compat import now_utc, today_utc
@@ -25,55 +24,6 @@ logger = logging.getLogger(__name__)
 
 SLEEP_BETWEEN_BATCHES = 5     # seconds between scoring jobs
 SLEEP_QUEUE_EMPTY     = 300   # seconds to wait when no unscored jobs remain
-
-# Matches the salary line the scraper embeds: "Salary: SGD 6,000–6,500/month"
-# Covers both en-dash (U+2013) and hyphen as separators.
-_SALARY_RE = re.compile(
-    r"Salary:\s*SGD\s*([\d,]+)\s*[–\-]\s*([\d,]+)",
-    re.IGNORECASE,
-)
-
-
-def _apply_salary_guardrail(opp, profile: dict, description: str) -> None:
-    """
-    If salary_max < user's salary_floor, penalise fit_score proportionally
-    and inject a salary risk if not already present.
-
-    Penalty: fit_score *= salary_max / salary_floor
-    This means a job at 54% of floor scores 54% of its LLM score.
-    A job at 80% of floor scores 80% of its LLM score.
-    A job at or above floor is untouched.
-    """
-    salary_floor = (profile.get("compensation") or {}).get("min_base")
-    if not salary_floor:
-        return
-
-    m = _SALARY_RE.search(description)
-    if not m:
-        return
-
-    salary_max = int(m.group(2).replace(",", ""))
-    if salary_max >= salary_floor:
-        return
-
-    ratio = salary_max / salary_floor
-    original = opp.fit_score
-    opp.fit_score = round(original * ratio, 2)
-    logger.info(
-        "guardrail: salary_max=%d < floor=%d (ratio=%.2f) — score %.2f → %.2f",
-        salary_max, salary_floor, ratio, original, opp.fit_score,
-    )
-
-    salary_risk = (
-        f"The advertised salary range (SGD {m.group(1)}–{m.group(2)}/month) "
-        f"is below your stated minimum compensation of SGD {salary_floor:,}/month."
-    )
-    already_present = any(
-        "salary" in r.lower() or "compensation" in r.lower()
-        for r in opp.risks
-    )
-    if not already_present:
-        opp.risks.insert(0, salary_risk)
 
 
 def _apply_hard_gate_guardrail(opp) -> None:
@@ -94,9 +44,8 @@ def _apply_hard_gate_guardrail(opp) -> None:
         )
 
 
-def _apply_guardrails(opp, profile: dict, description: str) -> None:
+def _apply_guardrails(opp) -> None:
     """Apply all post-LLM score guardrails. Mutates opp in place."""
-    _apply_salary_guardrail(opp, profile, description)
     _apply_hard_gate_guardrail(opp)
 
 
@@ -362,7 +311,7 @@ async def score_next_batch(db: AsyncSession) -> bool:
         await db.commit()
         return True
 
-    _apply_guardrails(opp, profile, job_dict["description"])
+    _apply_guardrails(opp)
     await _write_score(db, jp_id, user_id, opp, model=single_model)
     await db.execute(
         text("UPDATE job_postings SET inferred_industries=:ind WHERE id=:id"),
@@ -543,7 +492,7 @@ async def score_single_job(db: AsyncSession, job_id: int, user_id: int | None = 
         await db.commit()
         return False
 
-    _apply_guardrails(opp, profile, job_dict["description"])
+    _apply_guardrails(opp)
     await _write_score(db, job_id, resolved_user_id, opp, model=single_model)
     # Update inferred_industries on the shared job_postings row
     await db.execute(
