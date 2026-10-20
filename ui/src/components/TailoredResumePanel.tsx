@@ -430,7 +430,7 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
           <>
             {!readOnly && (
               <p className="text-xs text-gray-400">
-                Add more details in the master resume and reupload it if you think it is missing. The resume should be the golden source with as many details as possible.
+                Resumes are generated from your master resume. Add any missing details there, then re-upload it.
               </p>
             )}
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -547,7 +547,7 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
         ) : !readOnly ? (
           <>
             <p className="text-xs text-gray-400">
-              Add more details in the master resume and reupload it if you think it is missing. The resume should be the golden source with as many details as possible.
+              Resumes are generated from your master resume. Add any missing details there, then re-upload it.
             </p>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">No resume yet</span>
