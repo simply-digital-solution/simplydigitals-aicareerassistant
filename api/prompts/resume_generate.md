@@ -88,8 +88,14 @@ Return ONLY valid JSON matching this exact schema:
 - Skills section: reorder skills to put most relevant to the job first.
 - **Never use first person** — no "I", "my", "I have". Always use third-person past-tense action verbs.
 - **Experience `summary`**: mirror the source resume's structure — only include a role summary if the source resume has an intro paragraph before the bullets for that role. If the source resume is bullets-only for that role (no intro paragraph), leave `summary` as `""`. When present, 1–2 sentences, no "I", starting with a past-tense action verb.
-- **Experience `bullets`**: mirror the source resume's bullet count for that role, subject to the 2-page budget above — do not pad to a fixed number, and do not drop bullets arbitrarily. When the page budget forces cuts, trim older/less-relevant roles first (down to 1–2 bullets each) before trimming the most recent or most job-relevant role. Each bullet must start with a past-tense action verb (e.g. "Led", "Delivered", "Engineered", "Authored", "Championed").
-- **Summary section**: exactly 1 paragraph, no more than 6 lines. Do not split into multiple paragraphs or add lists.
+- **Experience `bullets` — fixed per-role counts for this candidate's resume structure**: when the role title matches one of the below, use exactly that many bullets (select the most job-relevant ones from everything in that role in the source resume — the source resume may group bullets under sub-headings; flatten them into one list and pick the strongest across all sub-headings, not just the first sub-heading):
+  - "Product Owner": exactly 5 bullets
+  - "Product Engineering Manager": exactly 4 bullets
+  - "Senior Functional Analyst": exactly 4 bullets
+  - Any role inside an "Earlier Experience" section (e.g. "Murex Analyst", "MxML Developer", "Murex Consultant"): exactly 3 bullets each
+  - Any other role not listed above: mirror the source resume's bullet count for that role, subject to the 2-page budget above.
+  Each bullet must start with a past-tense action verb (e.g. "Led", "Delivered", "Engineered", "Authored", "Championed").
+- **Summary section**: exactly 1 paragraph, exactly 5 lines. Do not split into multiple paragraphs or add lists.
 - **Competencies section**: consolidate all competencies into a maximum of 5 categories. Any new skills required by the JD must be merged into the most relevant existing category — never added as standalone lines or extra categories beyond 5. **Every category and skill from the source resume must still appear somewhere** — when consolidating below the source's original category count, merge the dropped category's content into the closest remaining category rather than omitting it. This includes tools/technical skills (e.g. software, languages, platforms) — never drop an entire category's content during consolidation.
 - If a `CANDIDATE'S ADDITIONAL CONTEXT` section is provided, treat it as verified facts about the candidate. Use it to fill gaps identified in the JD — add relevant skills or experience into the appropriate resume sections. Never invent anything beyond what is stated there.
 - Return ONLY valid JSON. Nothing else.
