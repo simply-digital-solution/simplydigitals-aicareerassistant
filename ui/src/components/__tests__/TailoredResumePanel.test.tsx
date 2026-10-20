@@ -233,7 +233,7 @@ describe('TailoredResumePanel', () => {
     renderPanel(42)
     await waitFor(() => screen.getByRole('button', { name: /generate/i }))
     fireEvent.click(screen.getByRole('button', { name: /generate/i }))
-    await waitFor(() => expect(mockResearchApi.generateResume).toHaveBeenCalledWith(42, ''))
+    await waitFor(() => expect(mockResearchApi.generateResume).toHaveBeenCalledWith(42))
   })
 
   it('renders generated resume after Generate succeeds', async () => {

@@ -321,7 +321,6 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
   const queryClient = useQueryClient()
   const [showPreview, setShowPreview] = useState(false)
   const [generateError, setGenerateError] = useState('')
-  const [additionalContext, setAdditionalContext] = useState('')
 
   const { data: driveStatus } = useQuery({
     queryKey: ['google-drive-status'],
@@ -342,14 +341,13 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
   const driveConnected = driveStatus?.connected ?? false
 
   const generateMutation = useMutation({
-    mutationFn: (ctx: string) => {
+    mutationFn: () => {
       setGenerateError('')
       // axios resolves 2xx; 207 is 2xx so it resolves normally — we extract drive_error from data
-      return researchApi.generateResume(jobId, ctx).then(r => r.data)
+      return researchApi.generateResume(jobId).then(r => r.data)
     },
     onSuccess: (data) => {
       queryClient.setQueryData(['generated-resume', jobId], data)
-      setAdditionalContext('')
       if (data.drive_error) {
         setGenerateError(`Resume generated but Drive upload failed: ${data.drive_error}`)
       } else {
@@ -431,13 +429,9 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
         ) : resume ? (
           <>
             {!readOnly && (
-              <textarea
-                value={additionalContext}
-                onChange={e => setAdditionalContext(e.target.value)}
-                placeholder="Additional context for regeneration (optional) — e.g. I have hands-on ServiceNow experience from a 2023 project not listed in my resume"
-                rows={2}
-                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
-              />
+              <p className="text-xs text-gray-400">
+                Add more details in the master resume and reupload it if you think it is missing. The resume should be the golden source with as many details as possible.
+              </p>
             )}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">
@@ -515,7 +509,7 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
                     </label>
 
                     <button
-                      onClick={() => generateMutation.mutate(additionalContext)}
+                      onClick={() => generateMutation.mutate()}
                       disabled={isWorking || !driveConnected}
                       title={!driveConnected ? 'Connect Google Drive first' : undefined}
                       className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -552,13 +546,9 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
           </>
         ) : !readOnly ? (
           <>
-            <textarea
-              value={additionalContext}
-              onChange={e => setAdditionalContext(e.target.value)}
-              placeholder="Additional context (optional) — e.g. I have hands-on ServiceNow experience from a 2023 project not listed in my resume"
-              rows={2}
-              className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
-            />
+            <p className="text-xs text-gray-400">
+              Add more details in the master resume and reupload it if you think it is missing. The resume should be the golden source with as many details as possible.
+            </p>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs text-gray-400">No resume yet</span>
               <div className="flex items-center gap-3 flex-wrap">
@@ -580,7 +570,7 @@ export default function TailoredResumePanel({ jobId, company: _company, jobUrl, 
                   />
                 </label>
                 <button
-                  onClick={() => generateMutation.mutate(additionalContext)}
+                  onClick={() => generateMutation.mutate()}
                   disabled={isWorking || !driveConnected}
                   title={!driveConnected ? 'Connect Google Drive first' : undefined}
                   className="text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
