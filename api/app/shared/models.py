@@ -42,7 +42,6 @@ class Profile(Base):
     target_industries = Column(Text)      # JSON array
     years_experience = Column(Integer)
     skills = Column(Text)                 # JSON array
-    additional_skills = Column(Text)      # JSON array — manually curated, kept separate from resume-derived `skills`
     resume_text = Column(Text)
     resume_obj = Column(Text)
     linkedin_url = Column(String(500))

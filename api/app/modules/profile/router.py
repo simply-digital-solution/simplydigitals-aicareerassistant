@@ -60,7 +60,6 @@ class ProfileUpdate(BaseModel):
     full_name: str | None = None
     target_locations: str | None = None      # JSON array string
     skills: str | None = None                # JSON array string
-    additional_skills: str | None = None     # JSON array string — manually curated, kept separate from resume-derived `skills`
     seniority_level: str | None = None       # junior|mid|senior|lead|principal|director|vp|executive
     target_industries: str | None = None     # JSON array string
     target_titles: str | None = None         # JSON array string of target job titles
@@ -84,7 +83,6 @@ class ProfileResponse(BaseModel):
     target_locations: str | None
     years_experience: int | None
     skills: str | None
-    additional_skills: str | None
     remote_preference: str | None
     employment_type: str | None
     salary_floor: int | None
@@ -314,7 +312,7 @@ async def update_profile(
     updates = body.model_dump(exclude_none=True)
 
     # Deduplicate JSON array fields before writing
-    for array_field in ('skills', 'additional_skills', 'target_industries', 'target_titles', 'target_locations', 'excluded_companies'):
+    for array_field in ('skills', 'target_industries', 'target_titles', 'target_locations', 'excluded_companies'):
         if array_field in updates:
             updates[array_field] = _dedupe_json_array(updates[array_field])
 
