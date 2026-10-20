@@ -44,10 +44,12 @@ def log_llm_call(
     requested_at: str,
     responded_at: str,
     duration_s: float,
+    cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
 ) -> None:
     llm_file_logger.info(
-        "user_id=%s job_id=%s type=%s model=%s input=%d output=%d duration=%.1fs requested=%s responded=%s",
+        "user_id=%s job_id=%s type=%s model=%s input=%d output=%d cache_read=%d cache_creation=%d duration=%.1fs requested=%s responded=%s",
         user_id, job_posting_id, request_type, model,
-        input_tokens, output_tokens, duration_s,
+        input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, duration_s,
         requested_at, responded_at,
     )

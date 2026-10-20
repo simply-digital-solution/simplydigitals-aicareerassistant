@@ -40,6 +40,52 @@ def test_log_llm_call_writes_to_file_logger():
     assert "duration=60.0s" in formatted
 
 
+def test_log_llm_call_includes_cache_tokens():
+    """log_llm_call() should log cache_read_tokens/cache_creation_tokens when given."""
+    from app.shared.llm_logger import log_llm_call, llm_file_logger
+
+    with patch.object(llm_file_logger, "info") as mock_info:
+        log_llm_call(
+            user_id=1,
+            job_posting_id=42,
+            request_type="scoring",
+            model="claude-haiku-5-5",
+            input_tokens=128,
+            output_tokens=200,
+            requested_at="2026-06-17T05:00:00",
+            responded_at="2026-06-17T05:01:00",
+            duration_s=60.0,
+            cache_read_tokens=7967,
+            cache_creation_tokens=0,
+        )
+
+    formatted = mock_info.call_args[0][0] % mock_info.call_args[0][1:]
+    assert "cache_read=7967" in formatted
+    assert "cache_creation=0" in formatted
+
+
+def test_log_llm_call_cache_tokens_default_to_zero():
+    """Callers that don't pass cache tokens (Ollama/Gemini) keep logging 0."""
+    from app.shared.llm_logger import log_llm_call, llm_file_logger
+
+    with patch.object(llm_file_logger, "info") as mock_info:
+        log_llm_call(
+            user_id=1,
+            job_posting_id=42,
+            request_type="research",
+            model="llama3.1:8b",
+            input_tokens=50,
+            output_tokens=80,
+            requested_at="2026-06-17T05:00:00",
+            responded_at="2026-06-17T05:00:05",
+            duration_s=5.0,
+        )
+
+    formatted = mock_info.call_args[0][0] % mock_info.call_args[0][1:]
+    assert "cache_read=0" in formatted
+    assert "cache_creation=0" in formatted
+
+
 def test_log_llm_call_none_user_and_job():
     """log_llm_call() must not raise when user_id and job_posting_id are None."""
     from app.shared.llm_logger import log_llm_call, llm_file_logger

@@ -30,6 +30,27 @@ def _build_user_message(
     feedback_examples: str = "",
     full_description: bool = False,
 ) -> str:
+    cacheable_prefix, variable_suffix = _build_user_message_parts(
+        profile, job_postings, search_filters, feedback_examples, full_description
+    )
+    return f"{cacheable_prefix}{variable_suffix}"
+
+
+def _build_user_message_parts(
+    profile: dict[str, Any],
+    job_postings: list[dict],
+    search_filters: dict[str, Any],
+    feedback_examples: str = "",
+    full_description: bool = False,
+) -> tuple[str, str]:
+    """
+    Same content as _build_user_message(), split into two pieces at the
+    boundary between what's identical across every job scored for this user
+    (profile + resume) and what varies per call (the job postings). Callers
+    that want prompt caching send the two pieces separately with a cache
+    marker on the first; _build_user_message() just concatenates them for
+    callers that don't care about caching.
+    """
     excluded = search_filters.get("excluded_companies") or profile.get('rules', {}).get('excluded_companies', [])
     salary_floor = search_filters.get("salary_floor") or profile.get('compensation', {}).get('min_base', 'N/A')
     salary_currency = search_filters.get("salary_currency") or profile.get('compensation', {}).get('currency', '')
@@ -60,6 +81,10 @@ def _build_user_message(
 
     resume_block = f"\nFull resume (use this as the primary source of truth for the candidate's actual experience):\n{resume_text}\n" if resume_text else ""
 
+    # Everything above this point is identical across every job scored for
+    # this user in the same batch — the cacheable prefix.
+    cacheable_prefix = f"{profile_block}\n{resume_block}"
+
     postings_block = f"Job postings to analyze ({len(postings)} total):\n"
     for i, job in enumerate(postings, 1):
         inferred = job.get("inferred_industries") or []
@@ -78,14 +103,14 @@ def _build_user_message(
 
     feedback_block = f"\n{feedback_examples}\n" if feedback_examples else ""
 
-    return (
-        f"{profile_block}\n"
-        f"{resume_block}"
+    variable_suffix = (
         f"{feedback_block}"
         f"{postings_block}\n\n"
         f"Return a JSON object with an \"opportunities\" array containing exactly {len(postings)} items, "
         f"one per posting above. Do not omit any posting."
     )
+
+    return cacheable_prefix, variable_suffix
 
 
 async def run_research_agent(
@@ -113,9 +138,21 @@ async def run_research_agent(
     # default "research") without affecting it.
     client = get_scorer_client() if request_type == "scoring" else get_llm_client()
     system_prompt = _load_system_prompt()
-    user_message = _build_user_message(
+    cacheable_prefix, variable_suffix = _build_user_message_parts(
         profile, job_postings, search_filters or {}, feedback_examples, full_description
     )
+
+    # Scoring jobs sequentially within a batch sends the same profile+resume
+    # prefix on every call — mark it cacheable so only the first call in a
+    # ~5-minute window pays full price for it. Other request types (chat
+    # research, etc.) don't batch the same way, so they skip the split and
+    # send everything as one plain message, same as before.
+    if request_type == "scoring":
+        user_message = variable_suffix
+        cache_kwargs = {"cacheable_prefix": cacheable_prefix}
+    else:
+        user_message = f"{cacheable_prefix}{variable_suffix}"
+        cache_kwargs = {}
 
     return await client.run_agent(
         agent_name=AGENT_NAME,
@@ -129,4 +166,5 @@ async def run_research_agent(
         request_type=request_type,
         stream_callback=stream_callback,
         max_self_corrections=max_self_corrections,
+        **cache_kwargs,
     )

@@ -46,6 +46,18 @@ class SecurityError(Exception):
 # Base class — shared lifecycle, subclasses implement _call()
 # ------------------------------------------------------------------
 
+def _flatten_content(content: str | list[str]) -> str:
+    """
+    run_agent() sends a user message's content as [cacheable_prefix,
+    user_message] when prompt caching is requested. Only AnthropicClient
+    understands that shape; every other provider flattens it back to a
+    plain string via this helper.
+    """
+    if isinstance(content, list):
+        return "".join(content)
+    return content
+
+
 class BaseLLMClient(ABC):
     """
     Owns run_agent(): scrubbing → _call() → reflexion → DB record → budget.
@@ -73,21 +85,34 @@ class BaseLLMClient(ABC):
         use_coordinator: bool = False,
         stream_callback: Optional[callable] = None,
         max_self_corrections: Optional[int] = None,
+        cacheable_prefix: Optional[str] = None,
     ) -> tuple[T | AgentError, dict]:
+        """
+        cacheable_prefix: optional text that's identical across repeated
+        calls (e.g. the candidate's profile+resume across a batch of
+        scoring calls). When given, user_message is sent as two pieces —
+        [cacheable_prefix, user_message] — so a provider that supports
+        prompt caching (AnthropicClient) can mark the prefix reusable.
+        Providers without a caching concept just concatenate the two
+        pieces back into one string, matching today's behavior.
+        """
         import logging
         _log = logging.getLogger("llm_timing")
 
-        self._scrub_secrets(system_prompt + user_message)
+        self._scrub_secrets(system_prompt + (cacheable_prefix or "") + user_message)
 
         started_at = datetime.now(timezone.utc)
         t0 = time.monotonic()
 
+        user_content = (
+            [cacheable_prefix, user_message] if cacheable_prefix is not None else user_message
+        )
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_message},
+            {"role": "user",   "content": user_content},
         ]
 
-        input_chars = sum(len(m["content"]) for m in messages)
+        input_chars = len(system_prompt) + (len(cacheable_prefix) if cacheable_prefix else 0) + len(user_message)
         _log.info("TIMING [%s] LLM call start — input ~%d chars", agent_name, input_chars)
         raw_text, usage = await self._call(
             messages, stream_callback,
@@ -201,6 +226,8 @@ class BaseLLMClient(ABC):
         requested_at: datetime,
         responded_at: datetime,
         db: Optional[AsyncSession],
+        cache_read_tokens: int = 0,
+        cache_creation_tokens: int = 0,
     ) -> None:
         from app.shared.llm_logger import log_llm_call
 
@@ -216,6 +243,8 @@ class BaseLLMClient(ABC):
             requested_at=requested_at.isoformat(),
             responded_at=responded_at.isoformat(),
             duration_s=duration_s,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
         )
 
         if db is not None:
@@ -287,8 +316,8 @@ class BaseLLMClient(ABC):
                 "output": raw_output,
                 "it": usage.get("input_tokens", 0),
                 "ot": usage.get("output_tokens", 0),
-                "crt": 0,
-                "cct": 0,
+                "crt": usage.get("cache_read_tokens", 0),
+                "cct": usage.get("cache_creation_tokens", 0),
                 "cost": 0.0,
                 "started": started_at,
                 "completed": datetime.now(timezone.utc),
@@ -317,6 +346,13 @@ class OllamaClient(BaseLLMClient):
         request_type: str = "unknown",
         db: Optional[AsyncSession] = None,
     ) -> tuple[str, dict]:
+        # Ollama has no caching concept, so a list-shaped content (from
+        # run_agent()'s cacheable_prefix split, normally only used by
+        # AnthropicClient) is flattened back into one plain string.
+        messages = [
+            {**m, "content": _flatten_content(m["content"])} for m in messages
+        ]
+
         payload = {
             "model": self._model,
             "messages": messages,
@@ -401,6 +437,13 @@ class GeminiClient(BaseLLMClient):
     ) -> tuple[str, dict]:
         from app.shared.rate_limiter import gemini_rate_limiter
         await gemini_rate_limiter.acquire()
+
+        # Gemini has no caching concept, so a list-shaped content (from
+        # run_agent()'s cacheable_prefix split, normally only used by
+        # AnthropicClient) is flattened back into one plain string.
+        messages = [
+            {**m, "content": _flatten_content(m["content"])} for m in messages
+        ]
 
         # Convert OpenAI-style messages to Gemini contents format.
         # System message becomes the first user turn with a "SYSTEM:" prefix
@@ -519,6 +562,12 @@ class AnthropicClient(BaseLLMClient):
         # and appends further user/assistant turns for reflexion retries.
         # Anthropic takes `system` as a separate top-level param, not a
         # message with role "system" — split it out, cache the rest as-is.
+        # A user message's content may be [cacheable_prefix, user_message]
+        # (set by run_agent() when it's given a cacheable_prefix) — turn
+        # that into two text blocks with the cache marker on the first, so
+        # the identical prefix across repeated calls (e.g. the candidate's
+        # profile+resume across a batch of scoring calls) is cached
+        # server-side instead of being billed in full every time.
         system_blocks: list[dict] = []
         api_messages: list[dict] = []
         for m in messages:
@@ -527,6 +576,19 @@ class AnthropicClient(BaseLLMClient):
                     "type": "text",
                     "text": m["content"],
                     "cache_control": {"type": "ephemeral"},
+                })
+            elif isinstance(m["content"], list):
+                cacheable_prefix, variable_suffix = m["content"]
+                api_messages.append({
+                    "role": m["role"],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": cacheable_prefix,
+                            "cache_control": {"type": "ephemeral"},
+                        },
+                        {"type": "text", "text": variable_suffix},
+                    ],
                 })
             else:
                 api_messages.append({"role": m["role"], "content": m["content"]})
@@ -576,6 +638,8 @@ class AnthropicClient(BaseLLMClient):
             requested_at=requested_at,
             responded_at=responded_at,
             db=db,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
         )
 
         return full_text, {
