@@ -121,6 +121,7 @@ export default function ResumeSection({
     <>
     <Section
       title="Resume"
+      subtitle="Keep this comprehensive — it's used for both scoring job fit and generating tailored resumes"
       badge={hasResume
         ? <span className="text-xs text-green-600 font-normal">✓ {wordCount} words</span>
         : <span className="text-xs text-amber-500 font-normal">Not uploaded</span>}
@@ -157,10 +158,6 @@ export default function ResumeSection({
         </div>
       }
     >
-      <p className="text-xs text-gray-400">
-        This should be your most comprehensive resume — it's used for both scoring job fit and generating tailored resumes for individual roles.
-      </p>
-
       {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
 
       {extracting && (
