@@ -390,6 +390,7 @@ async def _load_profile(db: AsyncSession | None = None, user_id: int | None = No
     if not p:
         return {}
     skills = json.loads(p.skills) if p.skills else []
+    additional_skills = json.loads(p.additional_skills) if p.additional_skills else []
     target_titles = json.loads(p.target_titles) if p.target_titles else []
     return {
         "targets": {
@@ -416,6 +417,7 @@ async def _load_profile(db: AsyncSession | None = None, user_id: int | None = No
         "candidate_summary": "",
         "target_titles": target_titles,
         "core_skills": skills,
+        "additional_skills": additional_skills,
         "industries": json.loads(p.target_industries) if p.target_industries else [],
         "full_name": p.full_name or "",
         "resume_text": p.resume_text or "",

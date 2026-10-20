@@ -18,6 +18,7 @@ const baseData: ProfileData = {
   target_locations: null,
   years_experience: null,
   skills: null,
+  additional_skills: null,
   remote_preference: null,
   employment_type: null,
   salary_floor: null,

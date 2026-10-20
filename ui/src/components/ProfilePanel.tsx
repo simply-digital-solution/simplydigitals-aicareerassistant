@@ -4,6 +4,7 @@ import type { ProfileData } from '../api/client'
 import api from '../api/client'
 import ResumeSection from './profile/ResumeSection'
 import SkillsSection from './profile/SkillsSection'
+import AdditionalSkillsSection from './profile/AdditionalSkillsSection'
 import TargetRolesSection from './profile/TargetRolesSection'
 import PreferencesSection from './profile/PreferencesSection'
 import ContactSection from './profile/ContactSection'
@@ -58,6 +59,7 @@ export default function ProfilePanel() {
       )}
       <ResumeSection data={data} onSaved={invalidate} />
       <SkillsSection data={data} onSaved={invalidate} />
+      <AdditionalSkillsSection data={data} onSaved={invalidate} />
       <TargetRolesSection data={data} onSaved={invalidate} />
       <EducationSection data={data} onSaved={invalidate} />
       <CertificationsSection data={data} onSaved={invalidate} />

@@ -14,6 +14,7 @@ export interface ProfileData {
   target_locations: string | null
   years_experience: number | null
   skills: string | null
+  additional_skills: string | null   // JSON array — manually added, kept separate from resume-derived skills
   remote_preference: string | null   // remote | hybrid | onsite | any
   employment_type: string | null     // full_time | contract | any
   salary_floor: number | null

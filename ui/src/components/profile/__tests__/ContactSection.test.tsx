@@ -9,7 +9,7 @@ vi.mock('../../../api/client', () => ({
 
 const base: ProfileData = {
   resume_text: null, resume_obj: null, linkedin_url: null, full_name: null,
-  target_locations: null, years_experience: null, skills: null,
+  target_locations: null, years_experience: null, skills: null, additional_skills: null,
   remote_preference: null, employment_type: null, salary_floor: null,
   salary_currency: null, excluded_companies: null, role_fit_json: null,
   seniority_level: null, target_industries: null, target_titles: null,

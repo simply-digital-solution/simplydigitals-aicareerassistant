@@ -17,6 +17,7 @@ const baseData: ProfileData = {
   target_locations: JSON.stringify(['Singapore']),
   years_experience: null,
   skills: null,
+  additional_skills: null,
   remote_preference: 'hybrid',
   employment_type: 'full_time',
   salary_floor: 8000,

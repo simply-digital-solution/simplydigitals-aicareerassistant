@@ -42,6 +42,7 @@ def _build_user_message(
     candidate_summary = profile.get('candidate_summary') or ''
     seniority = profile.get('seniority_level') or ''
     core_skills = profile.get('core_skills') or profile.get('background', {}).get('skills', [])
+    additional_skills = profile.get('additional_skills') or []
 
     lines = ["Candidate profile:"]
     if candidate_summary:
@@ -50,6 +51,8 @@ def _build_user_message(
         lines.append(f"- Seniority: {seniority}")
     lines.append(f"- Years experience: {profile.get('background', {}).get('years_experience', 'unknown')}")
     lines.append(f"- Core skills: {', '.join(core_skills) if core_skills else 'none specified'}")
+    if additional_skills:
+        lines.append(f"- Additional skills (self-reported): {', '.join(additional_skills)}")
     lines.append(f"- Location: {location}")
     lines.append(f"- Remote preference: {remote_pref}")
     lines.append(f"- Employment type: {employment_type}")

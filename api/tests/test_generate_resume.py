@@ -61,6 +61,7 @@ def _make_profile_orm(resume_text: str = "My resume text here."):
     p.full_name = "Jane Doe"
     p.resume_text = resume_text
     p.skills = "[]"
+    p.additional_skills = "[]"
     p.target_titles = "[]"
     p.target_locations = "[]"
     p.target_industries = "[]"
