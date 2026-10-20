@@ -157,6 +157,10 @@ export default function ResumeSection({
         </div>
       }
     >
+      <p className="text-xs text-gray-400">
+        This should be your most comprehensive resume — it's used for both scoring job fit and generating tailored resumes for individual roles.
+      </p>
+
       {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
 
       {extracting && (
