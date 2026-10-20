@@ -42,6 +42,7 @@ def _build_user_message(
     candidate_summary = profile.get('candidate_summary') or ''
     seniority = profile.get('seniority_level') or ''
     core_skills = profile.get('core_skills') or profile.get('background', {}).get('skills', [])
+    resume_text = (profile.get('resume_text') or '').strip()
 
     lines = ["Candidate profile:"]
     if candidate_summary:
@@ -56,6 +57,8 @@ def _build_user_message(
     lines.append(f"- Min compensation: {salary_floor} {salary_currency}")
     lines.append(f"- Excluded companies: {', '.join(excluded) if excluded else 'none'}")
     profile_block = "\n".join(lines)
+
+    resume_block = f"\nFull resume (use this as the primary source of truth for the candidate's actual experience):\n{resume_text}\n" if resume_text else ""
 
     postings_block = f"Job postings to analyze ({len(postings)} total):\n"
     for i, job in enumerate(postings, 1):
@@ -77,6 +80,7 @@ def _build_user_message(
 
     return (
         f"{profile_block}\n"
+        f"{resume_block}"
         f"{feedback_block}"
         f"{postings_block}\n\n"
         f"Return a JSON object with an \"opportunities\" array containing exactly {len(postings)} items, "
