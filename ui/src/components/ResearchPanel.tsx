@@ -301,6 +301,10 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
           </button>
           {open && (
             <div className="space-y-3 pt-2">
+              <p className="text-xs text-gray-400">
+                Job fit is scored based on your master resume. Add any missing details there to improve future scoring.
+              </p>
+
               {(reasons.length > 0 || risks.length > 0) && (
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
@@ -356,10 +360,6 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
                   {job.recommendation}
                 </div>
               )}
-
-              <p className="text-xs text-gray-400">
-                Resumes are generated from your master resume. Add any missing details there, then re-upload it.
-              </p>
             </div>
           )}
         </>
