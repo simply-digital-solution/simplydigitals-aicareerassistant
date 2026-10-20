@@ -356,6 +356,10 @@ export function StoredJobCard({ job, feedback, onFeedback, onArchive, onSave, on
                   {job.recommendation}
                 </div>
               )}
+
+              <p className="text-xs text-gray-400">
+                Resumes are generated from your master resume. Add any missing details there, then re-upload it.
+              </p>
             </div>
           )}
         </>
