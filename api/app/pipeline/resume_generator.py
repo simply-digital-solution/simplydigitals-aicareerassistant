@@ -2,8 +2,8 @@
 Bulk resume generator.
 
 Generates tailored resumes for a list of job IDs sequentially.
-Rate limiting is handled globally by GeminiClient via gemini_rate_limiter —
-no artificial sleep needed here.
+Rate limiting, when the Gemini fallback client is in use, is handled globally
+by GeminiClient via gemini_rate_limiter — no artificial sleep needed here.
 """
 import logging
 from datetime import datetime, timezone

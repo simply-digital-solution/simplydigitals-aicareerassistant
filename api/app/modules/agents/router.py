@@ -1856,7 +1856,8 @@ async def bulk_generate_resumes(
     """
     Generate tailored resumes for multiple jobs sequentially.
     Returns {results: {job_id: true/false}}.
-    Rate limiting is handled globally by GeminiClient.
+    Rate limiting, when the Gemini fallback client is in use, is handled
+    globally by GeminiClient.
     """
     from app.pipeline.resume_generator import generate_resumes_for_jobs
 

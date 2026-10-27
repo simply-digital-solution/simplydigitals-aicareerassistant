@@ -63,7 +63,7 @@
 - Python 3.11+
 - [Poetry](https://python-poetry.org/docs/#installation)
 - Node.js 20+
-- [Ollama](https://ollama.com) (optional — only needed if you don't have a Gemini API key)
+- [Ollama](https://ollama.com) (optional — only needed for the legacy global LLM path if neither a Gemini nor an Anthropic key is set)
 
 ### Backend
 
@@ -93,12 +93,14 @@ The Vite dev server proxies `/api` to `http://localhost:8000` — both must be r
 
 ### LLM setup
 
-The backend picks its LLM automatically from `.env`:
+Industry classification, job scoring and resume generation use **Anthropic Claude Haiku**: set `ANTHROPIC_API_KEY` in `.env` (model from `ANTHROPIC_HAIKU_MODEL`, default `claude-haiku-5-5`).
 
-- **Gemini** (recommended): set `GEMINI_API_KEY` in `.env` — uses `gemini-2.5-flash-lite` by default
-- **Ollama** (local/offline): leave `GEMINI_API_KEY` empty — install Ollama and pull `deepseek-r1:7b`
+If `ANTHROPIC_API_KEY` is empty, those tasks silently fall back to the legacy global client, and the non-scoring research path always uses it:
 
-The switch is silent — always check `.env` if LLM behaviour seems wrong.
+- **Gemini**: set `GEMINI_API_KEY` — uses `gemini-2.5-flash-lite` by default
+- **Ollama** (local/offline): leave both keys empty — install Ollama and pull `deepseek-r1:7b`
+
+The switch is silent — check `.env` and `api/app/shared/api_client.py` if LLM behaviour seems wrong.
 
 ### Login
 
@@ -295,7 +297,7 @@ the pipeline can deploy.
 | `EC2_SSH_KEY` | Private SSH key (PEM content) |
 | `DATABASE_URL` | `postgresql+asyncpg://user:pass@rds-host:5432/dbname` |
 | `JWT_SECRET_KEY` | Random secret, min 32 chars |
-| `GEMINI_API_KEY` | From Google AI Studio |
+| `ANTHROPIC_API_KEY` | From the Anthropic Console |
 | `HCAPTCHA_SECRET_KEY` | hCaptcha server-side secret |
 | `GOOGLE_CLIENT_ID` | Google OAuth2 client ID (Drive integration) |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth2 client secret |

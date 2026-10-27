@@ -25,13 +25,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 10080  # 7 days
 
-    # Gemini — required in production, optional in dev (falls back to Ollama)
+    # Gemini — legacy global client (get_llm_client); optional in dev (falls back to Ollama)
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash-lite"
     gemini_fallback_model: str = "gemini-2.5-flash"
 
-    # Anthropic — optional, used per-task (e.g. classification/scoring) rather
-    # than as the single global provider; unused until a caller opts in.
+    # Anthropic — primary LLM for the per-task clients (classification, scoring,
+    # resume generation); falls back to the global client if the key is empty.
     anthropic_api_key: str = ""
     anthropic_haiku_model: str = "claude-haiku-5-5"
     anthropic_sonnet_model: str = "claude-sonnet-5-5"

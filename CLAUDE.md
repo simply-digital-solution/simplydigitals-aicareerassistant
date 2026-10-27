@@ -47,11 +47,16 @@ Set `DATABASE_URL=postgresql+asyncpg://postgres:dev@localhost:5432/aicareer-db` 
 
 ### LLM backend
 
-`get_llm_client()` returns `GeminiClient` if `GEMINI_API_KEY` is set in `.env`.
-- **Production** (`APP_ENV=production`): `GEMINI_API_KEY` is required — raises `RuntimeError` at startup if missing. No Ollama fallback.
-- **Development**: falls back to `OllamaClient` if `GEMINI_API_KEY` is empty. Requires Ollama running locally.
+**Anthropic (Claude Haiku) is the primary LLM** for the per-task pipelines, via `api/app/shared/api_client.py`:
+- `get_classifier_client()` — industry classification (`industry_backfill`)
+- `get_scorer_client()` — job-fit scoring (`research_agent`, `request_type == "scoring"`)
+- `get_resume_client()` — resume generation (`resume_generate_agent`)
 
-Always check `.env` before assuming which backend is in use.
+Each returns an `AnthropicClient` on `ANTHROPIC_HAIKU_MODEL` when `ANTHROPIC_API_KEY` is set, and falls back to `get_llm_client()` only if it is empty.
+
+`get_llm_client()` is the legacy global client: `GeminiClient` if `GEMINI_API_KEY` is set, else `OllamaClient` in development (raises `RuntimeError` in production if the Gemini key is missing). It is still used by the non-scoring research path and `industry_refinement`.
+
+**Never infer the active LLM from `.env` key presence or from this file alone** — `.env` can hold stale keys (e.g. an old `GEMINI_API_KEY`). Read `api_client.py` and the call site before stating which provider a task uses.
 
 ### Authentication
 

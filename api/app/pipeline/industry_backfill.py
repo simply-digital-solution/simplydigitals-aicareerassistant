@@ -2,7 +2,7 @@
 Industry backfill tool.
 
 Finds all job_postings with inferred_industries = '[]' and classifies them
-using Gemini — updating only inferred_industries, leaving scores untouched.
+using the classifier client (Anthropic Haiku) — updating only inferred_industries, leaving scores untouched.
 
 Usage:
     cd api && poetry run python -m app.pipeline.industry_backfill

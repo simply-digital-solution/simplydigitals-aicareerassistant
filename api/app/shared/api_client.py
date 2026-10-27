@@ -687,6 +687,12 @@ _client: Optional[BaseLLMClient] = None
 
 def get_llm_client() -> BaseLLMClient:
     """
+    Legacy global client — NOT used for classification, scoring or resume
+    generation (those use get_classifier_client/get_scorer_client/
+    get_resume_client, which return Anthropic Haiku when ANTHROPIC_API_KEY
+    is set). Still used by the non-scoring research path, industry_refinement,
+    and as the fallback when ANTHROPIC_API_KEY is empty.
+
     Returns GeminiClient if GEMINI_API_KEY is set.
     Falls back to OllamaClient in development only.
     Raises RuntimeError in production if GEMINI_API_KEY is missing.
