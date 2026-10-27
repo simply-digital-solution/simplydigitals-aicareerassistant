@@ -3,18 +3,17 @@ import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from fastapi.middleware.cors import CORSMiddleware
-
-from app.shared.database import get_db_context
-from app.shared.config import get_settings
-from app.modules.applications.router import router as applications_router
+from app.modules.admin.router import router as admin_router
 from app.modules.agents.router import router as agents_router
+from app.modules.applications.router import router as applications_router
 from app.modules.profile.router import router as profile_router
 from app.modules.scoring.router import router as scoring_router
 from app.modules.stats.router import router as stats_router
-from app.modules.admin.router import router as admin_router
+from app.shared.config import get_settings
+from app.shared.database import get_db_context
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)
