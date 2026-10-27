@@ -7,14 +7,14 @@ by GeminiClient via gemini_rate_limiter — no artificial sleep needed here.
 """
 import logging
 from datetime import datetime, timezone
-from app.shared.sql_compat import now_utc
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.agents.resume_generate_agent import run_resume_generate_agent
 from app.shared.models import Profile
 from app.shared.schemas import AgentError
+from app.shared.sql_compat import now_utc
 
 logger = logging.getLogger(__name__)
 

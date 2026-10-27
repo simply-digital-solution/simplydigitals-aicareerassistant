@@ -8,10 +8,11 @@ Output: ApplicationOutput.
 """
 from pathlib import Path
 from typing import Any, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.api_client import get_llm_client
-from app.shared.schemas import ApplicationOutput, AgentError
+from app.shared.schemas import AgentError, ApplicationOutput
 
 PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "application.md"
 AGENT_NAME = "application"

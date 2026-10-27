@@ -6,7 +6,7 @@ import httpx
 import pytest
 import respx
 
-from app.pipeline.scraper import scrape_efinancialcareers, _EFC_LOCATIONS
+from app.pipeline.scraper import _EFC_LOCATIONS, scrape_efinancialcareers
 
 _SEARCH_URL = "https://job-search-ui.efinancialcareers.com/v1/efc/jobs/search"
 

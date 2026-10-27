@@ -1,6 +1,7 @@
 """Tests for inactivity suspension logic."""
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 def _make_result(rows: list):

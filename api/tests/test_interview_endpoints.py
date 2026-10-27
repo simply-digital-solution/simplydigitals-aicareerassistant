@@ -5,13 +5,13 @@
 - Admin email set: both addresses allowed
 """
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from httpx import AsyncClient, ASGITransport
 
-from app.shared.database import get_db
+import pytest
+from httpx import ASGITransport, AsyncClient
+
 from app.modules.auth.router import get_current_user
-
+from app.shared.database import get_db
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -213,6 +213,7 @@ async def test_interview_from_job_no_jd_returns_422(app):
 
 def test_flatten_resume_json_returns_plain_text():
     import json
+
     from app.modules.agents.router import _flatten_resume_json
 
     resume = {
@@ -259,6 +260,7 @@ def test_flatten_resume_json_handles_invalid_json():
 
 def test_flatten_resume_json_handles_empty_sections():
     import json
+
     from app.modules.agents.router import _flatten_resume_json
 
     resume = {"name": "John", "headline": "Engineer", "sections": []}
@@ -383,7 +385,9 @@ def test_build_interview_pack_docx_returns_bytes():
 
 def test_build_interview_pack_docx_is_valid_docx():
     from io import BytesIO
+
     from docx import Document
+
     from app.shared.interview_pack_docx import build_interview_pack_docx
     from app.shared.schemas import InterviewPackOutput, StarQuestion
 

@@ -12,10 +12,10 @@ DB execute() call sequence inside score_next_batch:
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from app.pipeline.llm_scorer import score_next_batch, _build_feedback_examples
-
+from app.pipeline.llm_scorer import _build_feedback_examples, score_next_batch
 
 # ---------------------------------------------------------------------------
 # Helpers

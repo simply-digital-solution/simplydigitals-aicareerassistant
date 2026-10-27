@@ -10,9 +10,9 @@ Verifies that:
 import json
 import logging
 import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # AuditLogger — _audit_logger.info() is called with a JSON line
@@ -111,6 +111,7 @@ async def test_log_event_no_plain_open_call():
 def test_logs_dir_falls_back_to_dev_when_var_log_not_writable(tmp_path, monkeypatch):
     """If /var/log is not writable, _LOGS_DIR should be the api/logs directory."""
     import importlib
+
     import app.shared.logger as logger_mod
 
     # /var/log is not writable in CI/dev — just assert the module already chose a fallback
@@ -129,6 +130,7 @@ def test_logs_dir_falls_back_to_dev_when_var_log_not_writable(tmp_path, monkeypa
 def test_audit_handler_is_timed_rotating():
     """The audit file handler must be a TimedRotatingFileHandler, not a plain FileHandler."""
     from logging.handlers import TimedRotatingFileHandler
+
     from app.shared.logger import _audit_handler
 
     assert isinstance(_audit_handler, TimedRotatingFileHandler)

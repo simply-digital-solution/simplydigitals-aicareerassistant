@@ -3,12 +3,17 @@ LangGraph central state object.
 Every graph node reads from and writes to this TypedDict.
 Eliminates data-passing complexity between nodes.
 """
-from typing import Optional, Any
+from typing import Any, Optional
+
 from typing_extensions import TypedDict
 
 from app.shared.schemas import (
-    ResearchOutput, ResumeOutput, ApplicationOutput,
-    InterviewOutput, SignalsOutput, AgentError,
+    AgentError,
+    ApplicationOutput,
+    InterviewOutput,
+    ResearchOutput,
+    ResumeOutput,
+    SignalsOutput,
 )
 
 

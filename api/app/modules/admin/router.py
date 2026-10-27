@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.pipeline.suspension import reactivate_user, suspend_inactive_users
 from app.shared.database import get_db
 from app.shared.sql_compat import days_ago
-from app.pipeline.suspension import suspend_inactive_users, reactivate_user
 
 ADMIN_EMAILS: frozenset[str] = frozenset({
     "pandiri.vasu@simplydigitals.com.sg",

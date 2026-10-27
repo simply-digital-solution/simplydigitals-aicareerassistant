@@ -1,8 +1,9 @@
 """
 Unit tests for POST /research/jobs/rescore-all
 """
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
 from fastapi import HTTPException
 
 

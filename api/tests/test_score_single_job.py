@@ -15,10 +15,10 @@ Execute call sequence (success path, user_id provided):
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from app.pipeline.llm_scorer import score_single_job
-
 
 # ---------------------------------------------------------------------------
 # Helpers

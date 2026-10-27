@@ -1,7 +1,8 @@
 """Tests for GET /api/v1/stats/dashboard."""
-import pytest
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 def _make_user(user_id: int = 1):

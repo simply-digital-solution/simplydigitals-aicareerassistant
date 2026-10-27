@@ -1,7 +1,8 @@
 """Tests for admin router — access control and endpoint correctness."""
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from httpx import AsyncClient, ASGITransport
+
+import pytest
+from httpx import ASGITransport, AsyncClient
 
 from app.shared.database import get_db
 
@@ -231,8 +232,9 @@ async def test_suspend_user_not_found(app):
 
 @pytest.mark.asyncio
 async def test_activate_user(app):
-    from app.pipeline.suspension import reactivate_user
     from unittest.mock import patch
+
+    from app.pipeline.suspension import reactivate_user
 
     app.dependency_overrides[get_db] = _db_override([])
     try:

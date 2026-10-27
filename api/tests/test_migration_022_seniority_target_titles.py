@@ -1,9 +1,9 @@
 """Verifies migration 022 adds seniority_level and target_titles to profiles."""
 import importlib.util
 import pathlib
+from unittest.mock import MagicMock, patch
 
 import sqlalchemy as sa
-from unittest.mock import MagicMock, patch
 
 
 def _load_migration():

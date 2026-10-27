@@ -5,7 +5,7 @@ import httpx
 import pytest
 import respx
 
-from app.pipeline.ats_scrapers import scrape_workday, _parse_workday_posted_on
+from app.pipeline.ats_scrapers import _parse_workday_posted_on, scrape_workday
 
 _CAREERS_URL = "https://acme.wd3.myworkdayjobs.com/AcmeExternal"
 _LIST_URL = "https://acme.wd3.myworkdayjobs.com/wday/cxs/acme/AcmeExternal/jobs"

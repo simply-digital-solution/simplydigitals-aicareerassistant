@@ -11,12 +11,11 @@ Phase 1 will add parallel fan-out, ask_user gates, and orchestrator routing.
 import uuid
 from typing import Any, Optional
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from app.pipeline.state import GraphState
 from app.modules.agents.research_agent import run_research_agent
 from app.modules.agents.resume_agent import run_resume_agent
-
+from app.pipeline.state import GraphState
 
 # ---------------------------------------------------------------------------
 # Node: load_profile

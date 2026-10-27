@@ -1,16 +1,16 @@
 """
 Unit tests for Google Drive helpers and OAuth endpoints.
 """
-import pytest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone, timedelta
+
+import pytest
 
 from app.shared.google_drive import (
     get_oauth_url,
-    token_expiry_iso,
     is_token_expired,
+    token_expiry_iso,
 )
-
 
 # ---------------------------------------------------------------------------
 # get_oauth_url
@@ -234,7 +234,7 @@ async def test_refresh_token_invalid_grant_raises_revoked_exception():
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client_cls.return_value = mock_client
 
-        from app.shared.google_drive import refresh_access_token, GoogleTokenRevokedException
+        from app.shared.google_drive import GoogleTokenRevokedException, refresh_access_token
         with pytest.raises(GoogleTokenRevokedException) as exc_info:
             await refresh_access_token("stale-refresh-token")
 
@@ -267,7 +267,7 @@ async def test_refresh_token_other_400_raises_http_status_error():
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client_cls.return_value = mock_client
 
-        from app.shared.google_drive import refresh_access_token, GoogleTokenRevokedException
+        from app.shared.google_drive import GoogleTokenRevokedException, refresh_access_token
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
             await refresh_access_token("some-token")
 

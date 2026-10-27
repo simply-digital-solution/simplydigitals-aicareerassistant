@@ -3,8 +3,8 @@ Tests for industry filter logic: fuzzy match and job-list filtering.
 (industry_extractor.py was removed in favour of LLM-based extraction.)
 """
 import pytest
-from app.modules.agents.router import _filter_by_industry, _industry_match
 
+from app.modules.agents.router import _filter_by_industry, _industry_match
 
 # ---------------------------------------------------------------------------
 # Fuzzy match similarity

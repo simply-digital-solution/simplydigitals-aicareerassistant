@@ -1,7 +1,8 @@
 import os
 from functools import lru_cache
-from dotenv import load_dotenv
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # Load .env from the api/ directory regardless of cwd
 load_dotenv(Path(__file__).parents[2] / ".env")

@@ -1,13 +1,14 @@
 """
 Unit tests for AnthropicClient._call().
 """
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 
 def _make_response(text: str, input_tokens=100, output_tokens=50,
                     cache_read=0, cache_creation=0, model="claude-haiku-5-5"):
-    from anthropic.types import Message, Usage, TextBlock
+    from anthropic.types import Message, TextBlock, Usage
 
     return Message(
         id="msg_test",

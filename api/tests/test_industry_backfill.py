@@ -3,10 +3,10 @@ Unit tests for api/app/pipeline/industry_backfill.py
 """
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from app.pipeline.industry_backfill import backfill_industries
-
 
 # ---------------------------------------------------------------------------
 # Helpers

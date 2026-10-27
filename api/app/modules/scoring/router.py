@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.router import get_current_user
-from app.pipeline.llm_scorer import _get_scorings_today, _get_daily_limit
+from app.pipeline.llm_scorer import _get_daily_limit, _get_scorings_today
 from app.shared.database import get_db
 
 router = APIRouter(prefix="/api/v1/scoring", tags=["scoring"])

@@ -1,13 +1,14 @@
 """
 Unit tests for POST /research/jobs/bulk-generate-resume
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastapi import HTTPException
 
 
 async def _call_bulk_generate(job_ids, db, user_id=1):
-    from app.modules.agents.router import bulk_generate_resumes, BulkGenerateResumeRequest
+    from app.modules.agents.router import BulkGenerateResumeRequest, bulk_generate_resumes
     user = MagicMock()
     user.id = user_id
     body = BulkGenerateResumeRequest(job_ids=job_ids)

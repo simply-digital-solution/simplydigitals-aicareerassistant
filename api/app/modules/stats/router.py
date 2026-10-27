@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.router import get_current_user
 from app.shared.database import get_db
-from app.shared.sql_compat import days_ago as _days_ago, months_ago
+from app.shared.sql_compat import days_ago as _days_ago
+from app.shared.sql_compat import months_ago
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 

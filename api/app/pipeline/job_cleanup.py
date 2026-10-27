@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from app.shared.sql_compat import now_utc
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.shared.sql_compat import now_utc
 
 logger = logging.getLogger(__name__)
 

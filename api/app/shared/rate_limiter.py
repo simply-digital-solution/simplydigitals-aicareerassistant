@@ -12,8 +12,9 @@ The limiter is a module-level singleton so it is shared across all coroutines
 in the process regardless of which user triggered the call.
 """
 import asyncio
-import time
 import logging
+import time
+
 from app.shared.config import get_settings
 
 logger = logging.getLogger(__name__)

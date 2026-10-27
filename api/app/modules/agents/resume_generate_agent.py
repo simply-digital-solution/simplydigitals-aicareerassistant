@@ -6,10 +6,11 @@ a complete tailored resume in the candidate's own format and style.
 """
 from pathlib import Path
 from typing import Any, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.api_client import get_resume_client
-from app.shared.schemas import GeneratedResumeOutput, AgentError
+from app.shared.schemas import AgentError, GeneratedResumeOutput
 
 PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "resume_generate.md"
 AGENT_NAME  = "resume_generate"

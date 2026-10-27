@@ -17,7 +17,6 @@ from pydantic import BaseModel
 from app.modules.agents.research_agent import run_research_agent
 from app.shared.schemas import AgentError, ResearchOutput
 
-
 # ---------------------------------------------------------------------------
 # research_agent.py: cacheable_prefix only passed for request_type="scoring"
 # ---------------------------------------------------------------------------

@@ -5,9 +5,10 @@ Execute call sequence when candidates are found:
   [1] DELETE FROM user_job_postings WHERE job_posting_id IN (...)
   [2] DELETE FROM job_postings WHERE id IN (...)
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 def _make_db_with_candidates(ids: list[int]):
@@ -105,7 +106,7 @@ async def test_delete_statements_include_candidate_ids():
 
 @pytest.mark.asyncio
 async def test_select_excludes_protected_statuses():
-    from app.pipeline.job_cleanup import purge_stale_research_jobs, _PROTECTED_STATUSES
+    from app.pipeline.job_cleanup import _PROTECTED_STATUSES, purge_stale_research_jobs
 
     db = _make_db_empty()
     await purge_stale_research_jobs(db, days=30)
@@ -154,9 +155,10 @@ async def test_custom_days_used_in_cutoff():
 
 @pytest.mark.asyncio
 async def test_admin_cleanup_endpoint_returns_deleted_count():
+    from httpx import ASGITransport, AsyncClient
+
     from app.main import app
     from app.shared.database import get_db
-    from httpx import AsyncClient, ASGITransport
 
     candidate_result = MagicMock()
     candidate_result.fetchall.return_value = [(1,), (2,)]
@@ -186,8 +188,9 @@ async def test_admin_cleanup_endpoint_returns_deleted_count():
 
 @pytest.mark.asyncio
 async def test_admin_cleanup_endpoint_rejects_non_admin():
+    from httpx import ASGITransport, AsyncClient
+
     from app.main import app
-    from httpx import AsyncClient, ASGITransport
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(

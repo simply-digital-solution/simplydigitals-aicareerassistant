@@ -23,8 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-import httpx
 import feedparser
+import httpx
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)

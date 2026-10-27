@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.api_client import get_classifier_client
-from app.shared.schemas import IndustryClassifierOutput, AgentError
+from app.shared.schemas import AgentError, IndustryClassifierOutput
 
 logger = logging.getLogger(__name__)
 

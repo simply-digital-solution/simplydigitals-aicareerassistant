@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 _PROD_LOGS_DIR = Path("/var/log/aicareer")
 _DEV_LOGS_DIR = Path(__file__).parents[3] / "logs"

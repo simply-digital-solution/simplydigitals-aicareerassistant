@@ -18,8 +18,9 @@ Execute call sequence (success path):
   [11] final SELECT for response
 Total: 12
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastapi import HTTPException
 
 

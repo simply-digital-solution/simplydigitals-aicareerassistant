@@ -6,9 +6,9 @@ Verifies:
 2. New user creation also sets last_seen_at immediately.
 3. The admin /users query reads u.last_seen_at, not MAX(ar.started_at).
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -7,10 +7,11 @@ Output: ResearchOutput (ranked opportunities with fit scores).
 """
 from pathlib import Path
 from typing import Any, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.api_client import get_llm_client, get_scorer_client
-from app.shared.schemas import ResearchOutput, AgentError
+from app.shared.schemas import AgentError, ResearchOutput
 
 PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "research.md"
 AGENT_NAME = "research"

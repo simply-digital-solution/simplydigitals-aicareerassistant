@@ -1,7 +1,7 @@
 """Ensures the production config guard raises on misconfigured secrets."""
 import pytest
-from app.shared.config import Settings
 
+from app.shared.config import Settings
 
 VALID = dict(
     app_env="production",

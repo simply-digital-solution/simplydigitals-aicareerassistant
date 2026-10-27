@@ -7,9 +7,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.models import Application
 from app.modules.auth.router import get_current_user
 from app.shared.database import get_db
+from app.shared.models import Application
+
 from .schemas import ApplicationCreate, ApplicationResponse, ApplicationUpdate, PipelineMoveRequest
 
 router = APIRouter(prefix="/api/v1/applications", tags=["applications"])

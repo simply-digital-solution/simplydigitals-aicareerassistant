@@ -4,9 +4,9 @@ Unit tests for the archive job endpoint logic in app/modules/agents/router.py.
 Tests the archive_job function in isolation: mocking DB and auth.
 """
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from fastapi import HTTPException
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -41,7 +41,6 @@ def _db_with_job_then_update():
 # ---------------------------------------------------------------------------
 
 from app.modules.agents.router import archive_job
-
 
 # ---------------------------------------------------------------------------
 # Tests

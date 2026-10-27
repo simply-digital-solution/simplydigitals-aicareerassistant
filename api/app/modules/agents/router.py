@@ -22,30 +22,31 @@ Endpoints:
   GET  /api/v1/audit/log                — recent audit events
   GET  /api/v1/audit/verify             — verify hash-chain integrity
 """
-import json
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Any, Optional
+
 from app.shared.sql_compat import now_utc
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
-from fastapi.responses import StreamingResponse, RedirectResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.database import get_db
-from app.shared.config import get_settings
-from app.modules.auth.router import get_current_user
-from app.modules.agents.research_agent import run_research_agent
-from app.modules.agents.resume_agent import run_resume_agent
 from app.modules.agents.application_agent import run_application_agent
 from app.modules.agents.interview_agent import run_interview_agent
 from app.modules.agents.interview_pack_agent import run_interview_pack_agent
+from app.modules.agents.research_agent import run_research_agent
+from app.modules.agents.resume_agent import run_resume_agent
+from app.modules.auth.router import get_current_user
 from app.pipeline.graph import run_session
+from app.shared.config import get_settings
+from app.shared.database import get_db
 from app.shared.schemas import AgentError
 
 router = APIRouter(prefix="/api/v1", tags=["agents"])
@@ -171,8 +172,9 @@ async def _stream_research(
     db: AsyncSession,
 ):
     """Generator: auto-scrapes jobs if none provided, then streams research agent."""
-    import time
     import logging
+    import time
+
     from app.pipeline.scraper import search_jobs
     _log = logging.getLogger("research_timing")
 
@@ -335,8 +337,8 @@ async def _stream_research(
                 target_titles = profile.get("target_titles") or []
                 if target_titles and result.opportunities:
                     try:
-                        from app.shared.skill_gap import update_title_skills_from_research
                         from app.shared.api_client import get_llm_client
+                        from app.shared.skill_gap import update_title_skills_from_research
                         client = get_llm_client()
                         opps_as_dicts = [o.model_dump() for o in result.opportunities]
                         asyncio.create_task(
@@ -382,9 +384,11 @@ async def _load_profile(db: AsyncSession | None = None, user_id: int | None = No
     """Load profile from DB as a dict the research agent understands."""
     if db is None or user_id is None:
         return {}
-    from sqlalchemy import select
-    from app.shared.models import Profile
     import json
+
+    from sqlalchemy import select
+
+    from app.shared.models import Profile
     result = await db.execute(select(Profile).where(Profile.user_id == user_id))
     p = result.scalar_one_or_none()
     if not p:
@@ -450,6 +454,7 @@ def _flatten_resume_json(resume_json: str) -> str:
 async def _load_resume_from_db(db: AsyncSession, user_id: int) -> str:
     """Return stored resume text for a user, or empty string if none saved."""
     from sqlalchemy import select
+
     from app.shared.models import Profile
     result = await db.execute(select(Profile).where(Profile.user_id == user_id))
     profile = result.scalar_one_or_none()
@@ -662,8 +667,8 @@ async def interview_from_job(
     drive_connected = bool(prof and prof["google_refresh_token"])
 
     if drive_connected:
+        from app.shared.google_drive import convert_docx_to_pdf_bytes, upload_or_update_file
         from app.shared.interview_pack_docx import build_interview_pack_docx
-        from app.shared.google_drive import upload_or_update_file, convert_docx_to_pdf_bytes
         from app.shared.schemas import InterviewPackOutput as _IPO
 
         job_title = app_row[1][:60] if app_row[1] else "Role"  # use JD start as fallback
@@ -1478,10 +1483,11 @@ async def generate_resume(
     - 502: LLM generation failed.
     """
     from fastapi.responses import JSONResponse
+
     from app.modules.agents.resume_generate_agent import run_resume_generate_agent
-    from app.shared.schemas import AgentError
+    from app.shared.google_drive import convert_docx_to_pdf_bytes, upload_or_update_file
     from app.shared.resume_docx import build_docx_bytes
-    from app.shared.google_drive import upload_or_update_file, convert_docx_to_pdf_bytes
+    from app.shared.schemas import AgentError
 
     # Fetch job (ownership via user_job_postings)
     job_row = await db.execute(
@@ -1691,11 +1697,13 @@ async def retry_drive_upload(
     Requires resume_json to still be present in generated_resumes.
     On success, clears resume_json from the DB row.
     """
-    from fastapi.responses import JSONResponse
-    from app.shared.schemas import GeneratedResumeOutput
-    from app.shared.resume_docx import build_docx_bytes
-    from app.shared.google_drive import upload_or_update_file, convert_docx_to_pdf_bytes
     import json as _json
+
+    from fastapi.responses import JSONResponse
+
+    from app.shared.google_drive import convert_docx_to_pdf_bytes, upload_or_update_file
+    from app.shared.resume_docx import build_docx_bytes
+    from app.shared.schemas import GeneratedResumeOutput
 
     # Load OAuth tokens
     prof_result = await db.execute(

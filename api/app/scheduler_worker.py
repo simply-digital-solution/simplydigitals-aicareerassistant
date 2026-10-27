@@ -8,8 +8,8 @@ the API container stays stateless and focused on HTTP only.
 import asyncio
 import logging
 
-from app.shared.database import get_db_context
 from app.pipeline.scheduler import start, stop
+from app.shared.database import get_db_context
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger(__name__)

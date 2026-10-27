@@ -9,10 +9,10 @@ Call order for limit checks:
   [N]   SELECT SUM(jobs_scored) ... — lifetime total  → _get_daily_limit
   [N+1] SELECT jobs_scored ... WHERE date=today       → _get_scorings_today
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from sqlalchemy.ext.asyncio import AsyncSession
 
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # ---------------------------------------------------------------------------
 # Helpers

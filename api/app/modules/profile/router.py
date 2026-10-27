@@ -1,21 +1,19 @@
 import base64
 import io
 import json
+
 import docx
 import pdfplumber
-
-from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import text
-
-from app.shared.database import get_db, get_db_context
 from app.modules.auth.router import get_current_user
-from app.shared.models import Profile
-from app.shared.resume_detail_extractor import extract_resume_details, deduplicate_certifications
 from app.shared.api_client import get_llm_client
+from app.shared.database import get_db, get_db_context
+from app.shared.models import Profile
+from app.shared.resume_detail_extractor import deduplicate_certifications, extract_resume_details
 
 router = APIRouter(prefix="/api/v1/profile", tags=["profile"])
 
@@ -406,7 +404,7 @@ async def get_skill_gaps(
     db: AsyncSession = Depends(get_db),
 ):
     """Return gap analysis only for titles that are in the user's current target_titles."""
-    from app.shared.skill_gap import get_all_title_skills, compute_gap
+    from app.shared.skill_gap import compute_gap, get_all_title_skills
     profile = await _get_or_create(db, current_user.id)
     profile_skills = json.loads(profile.skills) if profile.skills else []
     target_titles_lower = {
@@ -444,8 +442,13 @@ async def refresh_skill_gap(
     db: AsyncSession = Depends(get_db),
 ):
     """Re-run LLM distillation for a single title using its stored source keywords."""
-    from app.shared.skill_gap import get_all_title_skills, distill_required_skills, save_title_skills, compute_gap
     from app.shared.api_client import get_llm_client
+    from app.shared.skill_gap import (
+        compute_gap,
+        distill_required_skills,
+        get_all_title_skills,
+        save_title_skills,
+    )
 
     profile = await _get_or_create(db, current_user.id)
     profile_skills = json.loads(profile.skills) if profile.skills else []
@@ -489,8 +492,8 @@ async def seed_skill_gap(
     db: AsyncSession = Depends(get_db),
 ):
     """Generate required skills for a title using LLM knowledge (no JD keywords needed)."""
-    from app.shared.skill_gap import seed_required_skills, save_title_skills, compute_gap
     from app.shared.api_client import get_llm_client
+    from app.shared.skill_gap import compute_gap, save_title_skills, seed_required_skills
 
     profile = await _get_or_create(db, current_user.id)
     profile_skills = json.loads(profile.skills) if profile.skills else []
@@ -520,8 +523,9 @@ async def seed_all_skill_gaps(
 ):
     """Seed required skills for all target titles that have no data yet."""
     import asyncio
-    from app.shared.skill_gap import get_all_title_skills, seed_required_skills, save_title_skills
+
     from app.shared.api_client import get_llm_client
+    from app.shared.skill_gap import get_all_title_skills, save_title_skills, seed_required_skills
 
     profile = await _get_or_create(db, current_user.id)
     target_titles = json.loads(profile.target_titles) if profile.target_titles else []

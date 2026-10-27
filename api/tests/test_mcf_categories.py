@@ -1,7 +1,7 @@
 """
 Unit tests for MCF category → industry mapping in scraper.py
 """
-from app.pipeline.scraper import _mcf_categories_to_industries, MCF_CATEGORY_MAP
+from app.pipeline.scraper import MCF_CATEGORY_MAP, _mcf_categories_to_industries
 
 
 def _item(*category_names: str) -> dict:

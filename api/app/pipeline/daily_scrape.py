@@ -10,15 +10,15 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from app.shared.sql_compat import now_utc
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.pipeline.scraper import scrape_mycareersfuture, scrape_efinancialcareers, _EFC_LOCATIONS
-from app.pipeline.ats_scrapers import detect_ats_platform, scrape_greenhouse, scrape_workday
-from app.shared.models import Profile
 from app.modules.agents.router import _filter_by_industry
+from app.pipeline.ats_scrapers import detect_ats_platform, scrape_greenhouse, scrape_workday
+from app.pipeline.scraper import _EFC_LOCATIONS, scrape_efinancialcareers, scrape_mycareersfuture
+from app.shared.models import Profile
+from app.shared.sql_compat import now_utc
 
 logger = logging.getLogger(__name__)
 

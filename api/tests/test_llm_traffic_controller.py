@@ -2,17 +2,17 @@
 Tests for LLMTrafficController in app.shared.llm_traffic_controller.
 """
 import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.shared.llm_traffic_controller import (
-    LLMTrafficController,
-    _init_controller,
-    _clear_controller,
-    get_controller,
     _QUEUE_MAX_SIZE,
+    LLMTrafficController,
+    _clear_controller,
+    _init_controller,
+    get_controller,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

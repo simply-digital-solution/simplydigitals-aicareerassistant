@@ -1,8 +1,8 @@
 """Tests for industry_refinement and updated resume_detail_extractor."""
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # resume_detail_extractor — job_industry_labels parameter

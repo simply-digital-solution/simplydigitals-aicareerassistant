@@ -4,10 +4,11 @@ Tests for resume generation endpoints:
   - GET  /research/jobs/{job_id}/resume
 """
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.shared.schemas import GeneratedResumeOutput, GeneratedResumeSection, AgentError
+import pytest
+
+from app.shared.schemas import AgentError, GeneratedResumeOutput, GeneratedResumeSection
 
 _AGENT_PATCH   = "app.modules.agents.resume_generate_agent.run_resume_generate_agent"
 _DRIVE_PATCH   = "app.shared.google_drive.upload_or_update_file"
@@ -226,6 +227,7 @@ async def test_generate_resume_upserts_to_db():
 @pytest.mark.asyncio
 async def test_generate_resume_404_when_job_not_found():
     from fastapi import HTTPException
+
     from app.modules.agents.router import generate_resume
 
     db = _make_db(has_job=False)
@@ -239,6 +241,7 @@ async def test_generate_resume_404_when_job_not_found():
 @pytest.mark.asyncio
 async def test_generate_resume_422_when_no_resume_in_profile():
     from fastapi import HTTPException
+
     from app.modules.agents.router import generate_resume
 
     db = _make_db(resume_text="")
@@ -252,6 +255,7 @@ async def test_generate_resume_422_when_no_resume_in_profile():
 @pytest.mark.asyncio
 async def test_generate_resume_422_when_drive_not_connected():
     from fastapi import HTTPException
+
     from app.modules.agents.router import generate_resume
 
     db = _make_db(drive_connected=False)
@@ -306,6 +310,7 @@ async def test_generate_resume_201_on_success():
 @pytest.mark.asyncio
 async def test_generate_resume_502_when_agent_returns_error():
     from fastapi import HTTPException
+
     from app.modules.agents.router import generate_resume
 
     db = _make_db()
@@ -340,6 +345,7 @@ async def test_get_generated_resume_returns_resume():
 @pytest.mark.asyncio
 async def test_get_generated_resume_404_when_not_found():
     from fastapi import HTTPException
+
     from app.modules.agents.router import get_generated_resume
 
     db = _db_for_get_resume(has_resume=False)

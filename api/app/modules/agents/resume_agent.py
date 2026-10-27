@@ -7,10 +7,11 @@ Output: ResumeOutput (line edits, headline, about options, skills).
 """
 from pathlib import Path
 from typing import Any, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.api_client import get_llm_client
-from app.shared.schemas import ResumeOutput, AgentError
+from app.shared.schemas import AgentError, ResumeOutput
 
 PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "resume.md"
 AGENT_NAME = "resume"

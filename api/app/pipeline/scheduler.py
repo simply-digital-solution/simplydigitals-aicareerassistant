@@ -28,8 +28,8 @@ STOP_TIMEOUT = 90  # seconds to wait for in-flight work before hard-cancel
 
 
 async def _run_daily_scrape() -> None:
-    from app.shared.database import get_db_context
     from app.pipeline.daily_scrape import scrape_for_all_users
+    from app.shared.database import get_db_context
     logger.info("scheduler: daily scrape triggered at %s", __import__('datetime').datetime.now().isoformat(timespec='seconds'))
     await scrape_for_all_users(get_db_context, shutdown_event=_shutdown_event)
     if _scheduler:
@@ -39,15 +39,15 @@ async def _run_daily_scrape() -> None:
 
 
 async def _run_industry_refinement() -> None:
-    from app.shared.database import get_db_context
     from app.pipeline.industry_refinement import refine_all_users
+    from app.shared.database import get_db_context
     logger.info("scheduler: industry refinement triggered")
     await refine_all_users(get_db_context)
 
 
 async def _run_daily_suspension() -> None:
-    from app.shared.database import get_db_context
     from app.pipeline.suspension import suspend_inactive_users
+    from app.shared.database import get_db_context
     logger.info("scheduler: daily suspension check triggered")
     async with get_db_context() as db:
         suspended = await suspend_inactive_users(db)
@@ -55,8 +55,8 @@ async def _run_daily_suspension() -> None:
 
 
 async def _run_daily_job_cleanup() -> None:
-    from app.shared.database import get_db_context
     from app.pipeline.job_cleanup import archive_old_job_postings, purge_stale_research_jobs
+    from app.shared.database import get_db_context
     logger.info("scheduler: daily job cleanup triggered")
     async with get_db_context() as db:
         archived = await archive_old_job_postings(db)
@@ -131,7 +131,7 @@ def _start_traffic_controller(get_db_context_fn) -> None:
 def _stop_traffic_controller() -> None:
     """Stop LLMTrafficController if it was started."""
     try:
-        from app.shared.llm_traffic_controller import get_controller, _clear_controller
+        from app.shared.llm_traffic_controller import _clear_controller, get_controller
         controller = get_controller()
         if controller:
             controller.stop()

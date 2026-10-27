@@ -4,12 +4,12 @@ Unit tests for BaseLLMClient.run_agent() reflexion behaviour:
   - asyncio.sleep(5) called between reflexion retries
   - get_llm_client() production guard
 """
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
 from pydantic import BaseModel
 
 from app.shared.schemas import AgentError
-
 
 # ---------------------------------------------------------------------------
 # Minimal concrete subclass for testing

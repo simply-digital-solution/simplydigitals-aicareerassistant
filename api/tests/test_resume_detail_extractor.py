@@ -1,8 +1,8 @@
 """Tests for resume_detail_extractor — parse logic and additive merge."""
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Parser tests (no LLM call — test _parse_response directly)
@@ -149,6 +149,7 @@ async def test_extract_resume_details_returns_empty_on_llm_error():
 @pytest.mark.asyncio
 async def test_extract_resume_details_returns_empty_on_timeout():
     import asyncio
+
     from app.shared.resume_detail_extractor import extract_resume_details
 
     async def _slow(*args, **kwargs):

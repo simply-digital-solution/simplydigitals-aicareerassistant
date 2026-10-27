@@ -1,9 +1,10 @@
 """
 Tests for _startup_industry_backfill and _count_unclassified_jobs in scheduler.py.
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.pipeline.scheduler import _count_unclassified_jobs, _startup_industry_backfill
 

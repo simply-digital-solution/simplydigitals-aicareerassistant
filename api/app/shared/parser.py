@@ -1,6 +1,7 @@
 import json
 import re
-from typing import TypeVar, Type, Optional
+from typing import Optional, Type, TypeVar
+
 from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)

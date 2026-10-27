@@ -1,6 +1,7 @@
 """Tests for GET /research/jobs/applied endpoint and Drive filename generation."""
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 def _make_user(user_id: int = 1):

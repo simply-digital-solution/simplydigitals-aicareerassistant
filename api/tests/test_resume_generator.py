@@ -1,8 +1,9 @@
 """
 Unit tests for generate_resumes_for_jobs() in resume_generator.py.
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 def _make_profile(resume_text="My resume", full_name="Ada Lovelace"):

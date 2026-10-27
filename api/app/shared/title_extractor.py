@@ -12,11 +12,10 @@ Key prompt rules:
 - Never infer functional ownership titles (Market Risk Manager, Risk Manager, Regulatory Reporting Manager)
   unless the resume explicitly shows the person owned the P&L or business function, not just the technology
 """
+import asyncio
 import json
 import re
-import asyncio
 from typing import Optional
-
 
 _TOP_N = 5
 

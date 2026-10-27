@@ -2,9 +2,10 @@
 Unit tests for SlidingWindowRateLimiter.
 """
 import asyncio
-import pytest
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.shared.rate_limiter import SlidingWindowRateLimiter, _build_rate_limiter
 

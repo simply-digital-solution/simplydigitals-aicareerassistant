@@ -1,9 +1,10 @@
 """
 Unit tests for move_pipeline, create_application, and kanban endpoints in applications/router.py
 """
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 def _make_user(user_id=1):
@@ -73,6 +74,7 @@ async def test_move_sets_applied_at_when_status_is_applied():
 @pytest.mark.asyncio
 async def test_move_does_not_overwrite_applied_at_if_already_set():
     from datetime import date
+
     from app.modules.applications.router import move_pipeline
     from app.modules.applications.schemas import PipelineMoveRequest
 
@@ -91,6 +93,7 @@ async def test_move_does_not_overwrite_applied_at_if_already_set():
 @pytest.mark.asyncio
 async def test_move_invalid_status_raises_400():
     from fastapi import HTTPException
+
     from app.modules.applications.router import move_pipeline
     from app.modules.applications.schemas import PipelineMoveRequest
 
@@ -406,7 +409,7 @@ async def test_kanban_sql_joins_user_job_postings_with_archived_filter():
 @pytest.mark.asyncio
 async def test_kanban_empty_board_returns_all_status_keys():
     """Positive: board always has all status keys even when no apps exist."""
-    from app.modules.applications.router import get_pipeline, VALID_STATUSES
+    from app.modules.applications.router import VALID_STATUSES, get_pipeline
 
     db = _make_kanban_db([])
     board = await get_pipeline(current_user=_make_user(), db=db)

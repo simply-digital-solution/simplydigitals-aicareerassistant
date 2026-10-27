@@ -5,7 +5,7 @@ import httpx
 import pytest
 import respx
 
-from app.pipeline.scraper import scrape_mycareersfuture, _MCF_BASE
+from app.pipeline.scraper import _MCF_BASE, scrape_mycareersfuture
 
 
 @pytest.mark.asyncio

@@ -10,15 +10,15 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from app.shared.sql_compat import now_utc, today_utc
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.agents.research_agent import run_research_agent
 from app.modules.agents.router import _load_profile
 from app.shared.config import get_settings
 from app.shared.schemas import AgentError
+from app.shared.sql_compat import now_utc, today_utc
 
 logger = logging.getLogger(__name__)
 

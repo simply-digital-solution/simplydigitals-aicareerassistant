@@ -5,10 +5,10 @@ score_jobs_by_ids() now delegates to score_single_job() for each job_id,
 so tests mock score_single_job directly.
 """
 from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from app.pipeline.llm_scorer import score_jobs_by_ids
-
 
 # ---------------------------------------------------------------------------
 # Empty input → empty dict, no DB calls

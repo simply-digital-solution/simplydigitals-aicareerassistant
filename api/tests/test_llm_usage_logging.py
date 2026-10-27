@@ -1,10 +1,10 @@
 """
 Tests for LLM usage logging: file logger and DB insert in OllamaClient._call().
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # llm_logger.py unit tests
@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 def test_log_llm_call_writes_to_file_logger():
     """log_llm_call() should emit one INFO line to the llm_usage_file logger."""
-    from app.shared.llm_logger import log_llm_call, llm_file_logger
+    from app.shared.llm_logger import llm_file_logger, log_llm_call
 
     with patch.object(llm_file_logger, "info") as mock_info:
         log_llm_call(
@@ -42,7 +42,7 @@ def test_log_llm_call_writes_to_file_logger():
 
 def test_log_llm_call_includes_cache_tokens():
     """log_llm_call() should log cache_read_tokens/cache_creation_tokens when given."""
-    from app.shared.llm_logger import log_llm_call, llm_file_logger
+    from app.shared.llm_logger import llm_file_logger, log_llm_call
 
     with patch.object(llm_file_logger, "info") as mock_info:
         log_llm_call(
@@ -66,7 +66,7 @@ def test_log_llm_call_includes_cache_tokens():
 
 def test_log_llm_call_cache_tokens_default_to_zero():
     """Callers that don't pass cache tokens (Ollama/Gemini) keep logging 0."""
-    from app.shared.llm_logger import log_llm_call, llm_file_logger
+    from app.shared.llm_logger import llm_file_logger, log_llm_call
 
     with patch.object(llm_file_logger, "info") as mock_info:
         log_llm_call(
@@ -88,7 +88,7 @@ def test_log_llm_call_cache_tokens_default_to_zero():
 
 def test_log_llm_call_none_user_and_job():
     """log_llm_call() must not raise when user_id and job_posting_id are None."""
-    from app.shared.llm_logger import log_llm_call, llm_file_logger
+    from app.shared.llm_logger import llm_file_logger, log_llm_call
 
     with patch.object(llm_file_logger, "info") as mock_info:
         log_llm_call(
@@ -211,8 +211,9 @@ async def test_call_skips_db_insert_when_no_db():
 @pytest.mark.asyncio
 async def test_run_agent_passes_request_type_to_call():
     """run_agent() should forward request_type and job_posting_id to _call()."""
-    from app.shared.api_client import OllamaClient
     from pydantic import BaseModel
+
+    from app.shared.api_client import OllamaClient
 
     class DummySchema(BaseModel):
         value: str

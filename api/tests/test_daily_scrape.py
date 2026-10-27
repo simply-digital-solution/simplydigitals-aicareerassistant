@@ -9,10 +9,15 @@ Per-job execute() call sequence (after profile select):
   2. INSERT INTO user_job_postings ... ON CONFLICT DO NOTHING RETURNING id → .fetchone() returns (id,) or None
 """
 import json
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
 import pytest
 
-from app.pipeline.daily_scrape import scrape_for_user, scrape_for_all_users, scrape_watchlist_for_user
+from app.pipeline.daily_scrape import (
+    scrape_for_all_users,
+    scrape_for_user,
+    scrape_watchlist_for_user,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -489,8 +494,9 @@ async def test_job_with_empty_url_is_skipped():
 
 @pytest.mark.asyncio
 async def test_external_id_preferred_over_url_derived_uuid():
-    from app.pipeline.daily_scrape import _insert_jobs_for_user
     from datetime import datetime, timezone
+
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
 
     db = AsyncMock()
     db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
@@ -506,8 +512,9 @@ async def test_external_id_preferred_over_url_derived_uuid():
 
 @pytest.mark.asyncio
 async def test_long_url_derived_uuid_is_truncated_to_100_chars():
-    from app.pipeline.daily_scrape import _insert_jobs_for_user
     from datetime import datetime, timezone
+
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
 
     db = AsyncMock()
     db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
@@ -528,8 +535,9 @@ async def test_long_url_derived_uuid_is_truncated_to_100_chars():
 
 @pytest.mark.asyncio
 async def test_source_defaults_to_mycareersfuture_when_absent():
-    from app.pipeline.daily_scrape import _insert_jobs_for_user
     from datetime import datetime, timezone
+
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
 
     db = AsyncMock()
     db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
@@ -544,8 +552,9 @@ async def test_source_defaults_to_mycareersfuture_when_absent():
 
 @pytest.mark.asyncio
 async def test_source_passes_through_scraper_value():
-    from app.pipeline.daily_scrape import _insert_jobs_for_user
     from datetime import datetime, timezone
+
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
 
     db = AsyncMock()
     db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
@@ -566,8 +575,9 @@ async def test_source_not_overwritten_in_conflict_update_clause():
     ON CONFLICT DO UPDATE clause never assigns source, regardless of the
     value passed as a bind parameter.
     """
-    from app.pipeline.daily_scrape import _insert_jobs_for_user
     from datetime import datetime, timezone
+
+    from app.pipeline.daily_scrape import _insert_jobs_for_user
 
     db = AsyncMock()
     db.execute.side_effect = [_jp_insert_exec(1), _ujp_insert_exec(True)]
@@ -587,6 +597,7 @@ async def test_source_not_overwritten_in_conflict_update_clause():
 # ---------------------------------------------------------------------------
 
 from contextlib import asynccontextmanager
+
 
 def _make_get_db_context(user_ids: list[int]):
     """Returns a get_db_context that yields a fresh AsyncMock each call."""

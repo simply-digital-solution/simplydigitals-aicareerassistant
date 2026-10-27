@@ -1,10 +1,11 @@
 """
 Tests for _compute_batch_size() in app.shared.system_resources.
 """
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from app.shared.system_resources import _compute_batch_size, _MIN_BATCH, _MAX_BATCH
+import pytest
+
+from app.shared.system_resources import _MAX_BATCH, _MIN_BATCH, _compute_batch_size
 
 
 def _mock_psutil(cpu: float, mem: float):

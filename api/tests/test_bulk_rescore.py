@@ -1,14 +1,14 @@
 """
 Unit tests for POST /research/jobs/bulk-rescore
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastapi import HTTPException
 
 
 async def _call_bulk_rescore(job_ids, db, user_id=1):
-    from app.modules.agents.router import bulk_rescore_jobs
-    from app.modules.agents.router import BulkRescoreRequest
+    from app.modules.agents.router import BulkRescoreRequest, bulk_rescore_jobs
     user = MagicMock()
     user.id = user_id
     body = BulkRescoreRequest(job_ids=job_ids)

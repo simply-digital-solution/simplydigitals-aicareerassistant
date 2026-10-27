@@ -17,7 +17,7 @@ Architecture:
 """
 import asyncio
 import logging
-from typing import Callable, Awaitable
+from typing import Awaitable, Callable
 
 from app.shared.system_resources import _compute_batch_size
 

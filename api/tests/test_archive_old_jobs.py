@@ -1,8 +1,9 @@
 """
 Unit tests for archive_old_job_postings() in job_cleanup.py.
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 def _make_db(rowcount: int = 0):
@@ -85,8 +86,9 @@ async def test_excludes_jobs_with_applications():
 
 @pytest.mark.asyncio
 async def test_cutoff_uses_days_parameter():
+    from datetime import datetime, timedelta, timezone
+
     from app.pipeline.job_cleanup import archive_old_job_postings
-    from datetime import datetime, timezone, timedelta
     db = _make_db()
     await archive_old_job_postings(db, days=7)
     params = db.execute.call_args[0][1]
@@ -97,8 +99,9 @@ async def test_cutoff_uses_days_parameter():
 
 @pytest.mark.asyncio
 async def test_default_days_is_14():
-    from app.pipeline.job_cleanup import archive_old_job_postings, ARCHIVE_POSTING_DAYS
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
+
+    from app.pipeline.job_cleanup import ARCHIVE_POSTING_DAYS, archive_old_job_postings
     assert ARCHIVE_POSTING_DAYS == 14
     db = _make_db()
     await archive_old_job_postings(db)
@@ -125,9 +128,10 @@ async def test_commits_even_when_zero_rows():
 
 @pytest.mark.asyncio
 async def test_admin_archive_endpoint_returns_count():
+    from httpx import ASGITransport, AsyncClient
+
     from app.main import app
     from app.shared.database import get_db
-    from httpx import AsyncClient, ASGITransport
 
     result = MagicMock()
     result.rowcount = 5
@@ -155,8 +159,9 @@ async def test_admin_archive_endpoint_returns_count():
 
 @pytest.mark.asyncio
 async def test_admin_archive_endpoint_rejects_non_admin():
+    from httpx import ASGITransport, AsyncClient
+
     from app.main import app
-    from httpx import AsyncClient, ASGITransport
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(

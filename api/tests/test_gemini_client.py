@@ -1,9 +1,9 @@
 """
 Unit tests for GeminiClient and get_llm_client() provider switching.
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,7 +42,7 @@ def _make_mock_http(response_data: dict):
 @pytest.mark.asyncio
 async def test_gemini_call_sends_correct_url_and_key():
     """_call() must POST to the Gemini generateContent endpoint with the API key."""
-    from app.shared.api_client import GeminiClient, GEMINI_BASE_URL
+    from app.shared.api_client import GEMINI_BASE_URL, GeminiClient
 
     mock_http = _make_mock_http(_make_gemini_response("hello"))
 
@@ -313,7 +313,7 @@ def test_get_llm_client_returns_gemini_when_key_is_set():
 @pytest.mark.asyncio
 async def test_gemini_call_falls_back_to_secondary_model_on_503():
     """When primary model returns 503, _call() retries with the fallback model."""
-    from app.shared.api_client import GeminiClient, GEMINI_BASE_URL
+    from app.shared.api_client import GEMINI_BASE_URL, GeminiClient
 
     urls_called = []
 

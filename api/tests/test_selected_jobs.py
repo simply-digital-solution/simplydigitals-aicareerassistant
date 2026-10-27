@@ -4,8 +4,9 @@ Tests for the Selected Jobs feature:
   - POST /applications/ stores job_posting_id
   - GET /research/jobs excludes selected jobs
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 def _make_user(user_id: int = 1):

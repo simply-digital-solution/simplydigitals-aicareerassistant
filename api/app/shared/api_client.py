@@ -8,21 +8,22 @@ Concrete subclasses only implement _call() — the raw HTTP exchange.
 Provider is selected at startup via the llm_provider config setting.
 """
 import asyncio
-import re
-import json
-import time
 import hashlib
+import json
+import re
+import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone, date
-from typing import TypeVar, Type, Optional
+from datetime import date, datetime, timezone
+from typing import Optional, Type, TypeVar
 
 import httpx
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.config import get_settings
-from .parser import parse_agent_output, build_reflexion_prompt
+
+from .parser import build_reflexion_prompt, parse_agent_output
 from .schemas import AgentError
 
 T = TypeVar("T", bound=BaseModel)
