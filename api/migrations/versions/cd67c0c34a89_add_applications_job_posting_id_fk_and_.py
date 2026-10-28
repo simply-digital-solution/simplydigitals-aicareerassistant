@@ -10,16 +10,15 @@ Revises: a4001bda2f32
 Create Date: 2026-10-28 09:57:58.989983
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = 'cd67c0c34a89'
-down_revision: Union[str, None] = 'a4001bda2f32'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = 'a4001bda2f32'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
