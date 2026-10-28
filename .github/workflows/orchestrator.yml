@@ -54,12 +54,18 @@ jobs:
               - 'api/**'
               - '!api/**.md'
               - 'prompts/**'
+              - '.github/workflows/api-ci.yml'
+              - '.github/workflows/orchestrator.yml'
             ui:
               - 'ui/**'
               - '!ui/**.md'
+              - '.github/workflows/ui-ci.yml'
+              - '.github/workflows/orchestrator.yml'
             website:
               - 'website/**'
               - '!website/setup-aws.sh'
+              - '.github/workflows/website-ci.yml'
+              - '.github/workflows/orchestrator.yml'
 
   # ── Validate required secrets (runs on pull request only) ────────────────
   validate-secrets:
@@ -116,7 +122,7 @@ jobs:
     if: needs.detect.outputs.api == 'true' || startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/api-ci.yml
     with:
-      run_lint:   ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}
+      run_lint:   ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v')) }}
       run_tests:  ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') }}
       run_deploy: ${{ vars.ENABLE_DEPLOY == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v')) }}
     secrets:
@@ -141,7 +147,7 @@ jobs:
     if: needs.detect.outputs.ui == 'true' || startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/ui-ci.yml
     with:
-      run_lint:   ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}
+      run_lint:   ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v')) }}
       run_tests:  ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v') }}
       run_deploy: ${{ vars.ENABLE_DEPLOY == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v')) }}
     secrets:
