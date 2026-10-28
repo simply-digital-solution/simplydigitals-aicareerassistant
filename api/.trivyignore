@@ -11,9 +11,3 @@ CVE-2025-64439
 CVE-2026-104873
 # lxml: fix needs lxml 6.x; follow-up PR once python-docx/pdfplumber constraints are checked
 CVE-2026-41066
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-CVE-2025-62727
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-CVE-2026-48818
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-CVE-2026-54283
