@@ -1,20 +1,6 @@
 # Known dependency advisories accepted for now (read by .github/workflows/api-ci.yml).
 # Every ID needs a '# <package>: <reason>' line directly above it; remove the entry when the follow-up lands.
 
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-PYSEC-2026-161
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-PYSEC-2026-248
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-PYSEC-2026-249
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-PYSEC-2026-1941
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-PYSEC-2026-1942
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-PYSEC-2026-2280
-# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
-PYSEC-2026-2281
 # cryptography: fix needs cryptography 50.x; pulled in by pdfminer-six (pdfplumber); follow-up PR upgrading cryptography
 PYSEC-2026-3552
 # langchain-core: fix needs langchain-core 1.x; follow-up PR 'langgraph/langchain majors'

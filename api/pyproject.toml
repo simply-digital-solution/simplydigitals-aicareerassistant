@@ -8,7 +8,7 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
-fastapi = "^0.115"
+fastapi = "^0.162"
 uvicorn = {extras = ["standard"], version = "^0.30"}
 langgraph = "^0.2"
 anthropic = "^0.49"
