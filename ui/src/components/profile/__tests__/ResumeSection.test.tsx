@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import type { AxiosResponse } from 'axios'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import ResumeSection from '../ResumeSection'
 import type { ProfileData } from '../../../api/client'
@@ -124,7 +125,7 @@ describe('ResumeSection', () => {
   it('PDF upload: saves resume_text then calls extractAndSave', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({
       data: { text: 'Parsed resume text', obj: FAKE_PDF_B64, mime: 'application/pdf' }
-    } as any)
+    } as AxiosResponse)
 
     render(<ResumeSection data={base} onSaved={vi.fn()} />)
 
@@ -146,7 +147,7 @@ describe('ResumeSection', () => {
   it('PDF upload: renders iframe after successful upload', async () => {
     vi.mocked(api.post).mockResolvedValueOnce({
       data: { text: 'Parsed resume text', obj: FAKE_PDF_B64, mime: 'application/pdf' }
-    } as any)
+    } as AxiosResponse)
 
     render(<ResumeSection data={base} onSaved={vi.fn()} />)
     fireEvent.click(screen.getByText('Resume'))
