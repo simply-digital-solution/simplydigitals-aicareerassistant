@@ -384,8 +384,12 @@ function RoleCombobox({ value, onChange, options }: {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Sync external clear (value reset to '')
-  useEffect(() => { if (value === '') setInputValue('') }, [value])
+  // Sync external clear (value reset to ''): adjust state during render rather than in an effect
+  const [prevValue, setPrevValue] = useState(value)
+  if (value !== prevValue) {
+    setPrevValue(value)
+    if (value === '') setInputValue('')
+  }
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -603,8 +607,13 @@ export default function ResearchPanel() {
 
   const visibleJobs = data?.jobs ?? []
 
-  // Clear selection when page or filters change
-  useEffect(() => { setSelectedIds(new Set()) }, [page, filterRole, filterDays, filterScore])
+  // Clear selection when page or filters change: adjust state during render rather than in an effect
+  const selectionScope = `${page}|${filterRole}|${filterDays}|${filterScore}`
+  const [prevSelectionScope, setPrevSelectionScope] = useState(selectionScope)
+  if (selectionScope !== prevSelectionScope) {
+    setPrevSelectionScope(selectionScope)
+    setSelectedIds(new Set())
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">

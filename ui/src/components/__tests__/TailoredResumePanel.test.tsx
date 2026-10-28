@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import TailoredResumePanel, { downloadAsDocx } from '../TailoredResumePanel'
+import TailoredResumePanel from '../TailoredResumePanel'
+import { downloadAsDocx } from '../tailoredResumeDocx'
 import * as clientModule from '../../api/client'
 import type { GeneratedResumeOutput, GeneratedResumeResponse } from '../../api/client'
 
