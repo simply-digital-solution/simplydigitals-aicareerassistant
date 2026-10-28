@@ -64,3 +64,14 @@ def test_pipeline_workflow_file_triggers_its_pipeline(path_filters, pipeline, wo
 @pytest.mark.parametrize("pipeline", ["api", "ui", "website"])
 def test_orchestrator_change_triggers_every_pipeline(path_filters, pipeline):
     assert ".github/workflows/orchestrator.yml" in path_filters[pipeline]
+
+
+# ── Lint must run on pull requests, or a skipped Lint check looks green ──
+
+
+@pytest.mark.parametrize("job", ["api", "ui"])
+def test_lint_runs_on_pull_requests_and_branch_pushes_but_not_main(jobs, job):
+    expr = jobs[job]["with"]["run_lint"]
+    assert "github.event_name == 'pull_request'" in expr
+    assert "github.event_name == 'push'" in expr
+    assert "github.ref != 'refs/heads/main'" in expr
