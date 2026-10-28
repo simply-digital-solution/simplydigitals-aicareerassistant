@@ -13,11 +13,12 @@
 # searched, comma-separated (e.g. "singapore"); omitted searches all
 # configured ones. Ignored unless efinancialcareers is in sources.
 
-# Note: scrape failures happen inside the running backend process, so they
-# land in the backend's own server log, not in this script's output — the
-# curl call below only ever sees the final JSON response. Only the
-# classify and score steps run as direct subprocesses of this script, so
-# only those two are checked here for PIPELINE_ERROR: lines.
+# Note: scrape requests run inside the backend process, so the details of a
+# failed request (exception type, resolved IPs) land in the backend's own
+# server log. The scrape response carries per-run counts of attempted and
+# failed MCF queries, which scripts.scrape_result turns into a summary and an
+# exit status. The classify and score steps run as direct subprocesses of this
+# script, so their output is checked here for PIPELINE_ERROR: lines.
 set -uo pipefail
 
 USER_EMAIL="${1:?Usage: scrape_and_score.sh <user-email> [backend-url] [sources] [efc_locations]}"
@@ -53,7 +54,10 @@ SCRAPE_RESULT=$(curl -s -X POST \
   -H "Content-Type: application/json" \
   "$SCRAPE_URL")
 echo "$SCRAPE_RESULT"
-echo "(scrape failures, if any, land in the backend server's own log — not visible here)"
+SCRAPE_SUMMARY=$(poetry run python -m scripts.scrape_result "$SCRAPE_RESULT")
+SCRAPE_STATUS=$?
+echo "$SCRAPE_SUMMARY"
+echo "(exception types and resolved IPs for failed requests are in the backend server's own log)"
 
 echo "== Classifying industries for newly scraped jobs =="
 CLASSIFY_OUTPUT=$(poetry run python -m app.pipeline.industry_backfill 2>&1)
@@ -65,8 +69,8 @@ echo "$SCORE_OUTPUT"
 
 echo "== Done =="
 
-ERROR_LINES=$(printf '%s\n%s\n' "$CLASSIFY_OUTPUT" "$SCORE_OUTPUT" | grep "PIPELINE_ERROR:" || true)
-if [ -n "$ERROR_LINES" ]; then
+ERROR_LINES=$(printf '%s\n%s\n%s\n' "$SCRAPE_SUMMARY" "$CLASSIFY_OUTPUT" "$SCORE_OUTPUT" | grep "PIPELINE_ERROR:" || true)
+if [ -n "$ERROR_LINES" ] || [ "$SCRAPE_STATUS" -ne 0 ]; then
   echo ""
   echo "== Errors =="
   echo "$ERROR_LINES"

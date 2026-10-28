@@ -127,10 +127,15 @@ async def scrape_for_user(
     shutdown_event=None,
     sources: set[str] | None = None,
     efc_locations: set[str] | None = None,
+    stats: dict[str, int] | None = None,
 ) -> int:
     """
     Scrape job aggregators for a single user's target titles and insert new
     job rows. Returns the number of new rows inserted.
+
+    `stats`, if given, is filled in place with `mcf_queries_attempted` and
+    `mcf_queries_failed`, so a caller can tell a run where every MCF query
+    failed from one that simply found nothing new.
 
     `sources` restricts which aggregators run — e.g. {"mycareersfuture"} to
     skip eFinancialCareers. None (the default) runs all of them, matching
@@ -164,6 +169,8 @@ async def scrape_for_user(
     )
 
     inserted = 0
+    mcf_attempted = 0
+    mcf_failed = 0
     now = now_utc()
 
     for title in target_titles:
@@ -177,10 +184,15 @@ async def scrape_for_user(
 
         if "mycareersfuture" in active_sources:
             logger.info("scrape_for_user: user_id=%d fetching MCF for title=%r", user_id, title)
+            mcf_attempted += 1
+            mcf_failures: list[str] = []
             try:
-                jobs += await scrape_mycareersfuture(query=title, max_results=100)
+                jobs += await scrape_mycareersfuture(query=title, max_results=100, failures=mcf_failures)
             except Exception as exc:
+                mcf_failures.append(type(exc).__name__)
                 logger.warning("scrape_for_user: user_id=%d MCF fetch failed for title=%r: %s", user_id, title, exc)
+            if mcf_failures:
+                mcf_failed += 1
 
         if "efinancialcareers" in active_sources:
             for efc_location in active_efc_locations:
@@ -221,6 +233,15 @@ async def scrape_for_user(
         "scrape_for_user: user_id=%d done — total inserted=%d across %d titles in %.2fs",
         user_id, inserted, len(target_titles), elapsed,
     )
+    if mcf_attempted:
+        logger.log(
+            logging.ERROR if mcf_failed == mcf_attempted else logging.INFO,
+            "scrape_for_user: user_id=%d MCF queries: attempted=%d succeeded=%d failed=%d",
+            user_id, mcf_attempted, mcf_attempted - mcf_failed, mcf_failed,
+        )
+    if stats is not None:
+        stats["mcf_queries_attempted"] = mcf_attempted
+        stats["mcf_queries_failed"] = mcf_failed
     return inserted
 
 

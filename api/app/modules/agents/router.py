@@ -1948,8 +1948,11 @@ async def trigger_scrape(
     from app.pipeline.daily_scrape import scrape_for_user
     source_set = {s.strip() for s in sources.split(",") if s.strip()} if sources else None
     efc_location_set = {s.strip() for s in efc_locations.split(",") if s.strip()} if efc_locations else None
-    inserted = await scrape_for_user(current_user.id, db, sources=source_set, efc_locations=efc_location_set)
-    return {"inserted": inserted}
+    stats: dict[str, int] = {}
+    inserted = await scrape_for_user(
+        current_user.id, db, sources=source_set, efc_locations=efc_location_set, stats=stats
+    )
+    return {"inserted": inserted, **stats}
 
 
 @router.post("/research/scrape-watchlist")

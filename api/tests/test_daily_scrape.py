@@ -835,7 +835,7 @@ async def test_scrape_for_user_stops_between_titles_on_shutdown():
 
     fetch_count = 0
 
-    async def _mock_scrape(query, max_results):
+    async def _mock_scrape(query, max_results, failures=None):
         nonlocal fetch_count
         fetch_count += 1
         # Signal shutdown after first title fetch — second title must be skipped
@@ -847,3 +847,82 @@ async def test_scrape_for_user_stops_between_titles_on_shutdown():
         await scrape_for_user(user_id=1, db=db, shutdown_event=event)
 
     assert fetch_count == 1, f"only first title should be fetched before shutdown, got {fetch_count}"
+
+
+# ---------------------------------------------------------------------------
+# scrape_for_user — stats: tells a failed MCF query apart from one with no results
+# ---------------------------------------------------------------------------
+
+def _mcf_fake(failing_queries):
+    async def _fake(query, max_results=20, failures=None):
+        if query in failing_queries:
+            if failures is not None:
+                failures.append("ConnectTimeout")
+            return []
+        return []
+    return _fake
+
+
+@pytest.mark.asyncio
+async def test_stats_count_failed_and_attempted_mcf_queries():
+    profile = _make_profile(target_titles=["A", "B", "C"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile)]
+    stats: dict[str, int] = {}
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", _mcf_fake({"A", "C"})):
+        await scrape_for_user(user_id=1, db=db, sources={"mycareersfuture"}, stats=stats)
+
+    assert stats == {"mcf_queries_attempted": 3, "mcf_queries_failed": 2}
+
+
+@pytest.mark.asyncio
+async def test_stats_zero_failed_when_queries_succeed_with_no_results():
+    profile = _make_profile(target_titles=["A", "B"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile)]
+    stats: dict[str, int] = {}
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", _mcf_fake(set())):
+        await scrape_for_user(user_id=1, db=db, sources={"mycareersfuture"}, stats=stats)
+
+    assert stats == {"mcf_queries_attempted": 2, "mcf_queries_failed": 0}
+
+
+@pytest.mark.asyncio
+async def test_raising_scraper_counts_as_failed_query():
+    profile = _make_profile(target_titles=["A"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile)]
+    stats: dict[str, int] = {}
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture",
+               AsyncMock(side_effect=RuntimeError("boom"))):
+        await scrape_for_user(user_id=1, db=db, sources={"mycareersfuture"}, stats=stats)
+
+    assert stats == {"mcf_queries_attempted": 1, "mcf_queries_failed": 1}
+
+
+@pytest.mark.asyncio
+async def test_all_mcf_queries_failing_logs_error(caplog):
+    profile = _make_profile(target_titles=["A", "B"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile)]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", _mcf_fake({"A", "B"})), \
+         caplog.at_level("ERROR"):
+        await scrape_for_user(user_id=1, db=db, sources={"mycareersfuture"})
+
+    assert "MCF queries: attempted=2 succeeded=0 failed=2" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_stats_omitted_by_default_still_works():
+    profile = _make_profile(target_titles=["A"], target_industries=[])
+    db = AsyncMock()
+    db.execute.side_effect = [_profile_exec(profile)]
+
+    with patch("app.pipeline.daily_scrape.scrape_mycareersfuture", _mcf_fake(set())):
+        inserted = await scrape_for_user(user_id=1, db=db, sources={"mycareersfuture"})
+
+    assert inserted == 0
