@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.api_client import get_classifier_client
+from app.shared.prompts import load_prompt
 from app.shared.schemas import AgentError, IndustryClassifierOutput
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ DESC_SNIPPET_CHARS = 300
 
 
 def _load_prompt() -> str:
-    return PROMPT_FILE.read_text(encoding="utf-8")
+    return load_prompt(PROMPT_FILE)
 
 
 def _build_user_message(jobs: list[dict]) -> str:

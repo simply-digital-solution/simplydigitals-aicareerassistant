@@ -21,10 +21,7 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 ## Rules
 
 - Pick 1–3 industries from this fixed list:
-  `Technology & Software`, `Banking & Financial Services`, `Capital Markets & Investment Management`,
-  `Consulting & Professional Services`, `Government & Public Sector`, `Healthcare & Life Sciences`,
-  `Real Estate & Infrastructure`, `Supply Chain & Logistics`, `Media, Marketing & Communications`,
-  `Insurance`, `Energy & Resources`, `Education`, `Manufacturing & Engineering`, `Telecommunications`
+  {{INDUSTRIES}}
 - Base the classification on the job title, company name, and description — not any candidate profile.
 - If no industry fits clearly, return `[]`.
 - You MUST echo the exact `job_id` back for every posting given to you.

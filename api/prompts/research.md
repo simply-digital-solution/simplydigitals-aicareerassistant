@@ -79,10 +79,7 @@ Return ONLY valid JSON matching this exact schema. No surrounding text, no markd
 
 ### inferred_industries — REQUIRED
 - Pick 1–3 industries from this fixed list that best describe the hiring company and role:
-  `Technology & Software`, `Banking & Financial Services`, `Capital Markets & Investment Management`,
-  `Consulting & Professional Services`, `Government & Public Sector`, `Healthcare & Life Sciences`,
-  `Real Estate & Infrastructure`, `Supply Chain & Logistics`, `Media, Marketing & Communications`,
-  `Insurance`, `Energy & Resources`, `Education`, `Manufacturing & Engineering`, `Telecommunications`
+  {{INDUSTRIES}}
 - Base the classification on the job description and company — not the candidate's profile.
 - If no industry fits, return `[]`.
 
