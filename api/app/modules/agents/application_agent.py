@@ -6,8 +6,9 @@ for a specific application.
 Input: profile dict + resume text + target job description.
 Output: ApplicationOutput.
 """
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +29,7 @@ def _build_user_message(
     profile: dict[str, Any],
     resume_text: str,
     jd_text: str,
-    jd_summary: Optional[str] = None,
+    jd_summary: str | None = None,
 ) -> str:
     target_roles = ", ".join(profile.get("targets", {}).get("roles", ["the target role"]))
     cover_letter_style = profile.get("communication_style", {}).get("cover_letter", "professional, concise")
@@ -50,11 +51,11 @@ async def run_application_agent(
     profile: dict[str, Any],
     resume_text: str,
     jd_text: str,
-    db: Optional[AsyncSession] = None,
-    user_id: Optional[int] = None,
-    application_id: Optional[int] = None,
-    jd_summary: Optional[str] = None,
-    stream_callback: Optional[callable] = None,
+    db: AsyncSession | None = None,
+    user_id: int | None = None,
+    application_id: int | None = None,
+    jd_summary: str | None = None,
+    stream_callback: Callable[..., Any] | None = None,
 ) -> tuple[ApplicationOutput | AgentError, dict]:
     """
     Run the application drafts agent.

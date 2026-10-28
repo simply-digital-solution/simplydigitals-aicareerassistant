@@ -25,8 +25,7 @@ Endpoints:
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from app.shared.sql_compat import now_utc
 
@@ -59,37 +58,37 @@ router = APIRouter(prefix="/api/v1", tags=["agents"])
 class ResearchRequest(BaseModel):
     # All optional — if empty, scraper fetches jobs automatically from profile targets
     job_postings: list[dict] = Field(default_factory=list)
-    query: Optional[str] = None
+    query: str | None = None
     queries: list[str] = Field(default_factory=list)   # multiple roles — scrape all in parallel
-    location: Optional[str] = None
-    remote_preference: Optional[str] = None
-    employment_type: Optional[str] = None
-    salary_floor: Optional[int] = None
-    salary_currency: Optional[str] = None
+    location: str | None = None
+    remote_preference: str | None = None
+    employment_type: str | None = None
+    salary_floor: int | None = None
+    salary_currency: str | None = None
     required_skills: list[str] = Field(default_factory=list)
     excluded_companies: list[str] = Field(default_factory=list)
-    application_id: Optional[int] = None
+    application_id: int | None = None
 
 
 class ResumeRequest(BaseModel):
     jd_text: str
-    resume_text: Optional[str] = None  # if omitted, loaded from DB profile
-    jd_summary: Optional[str] = None
-    application_id: Optional[int] = None
+    resume_text: str | None = None  # if omitted, loaded from DB profile
+    jd_summary: str | None = None
+    application_id: int | None = None
 
 
 class ApplicationRequest(BaseModel):
     jd_text: str
-    resume_text: Optional[str] = None  # if omitted, loaded from DB profile
-    jd_summary: Optional[str] = None
-    application_id: Optional[int] = None
+    resume_text: str | None = None  # if omitted, loaded from DB profile
+    jd_summary: str | None = None
+    application_id: int | None = None
 
 
 class InterviewRequest(BaseModel):
     jd_text: str
     company_name: str = ""
-    jd_summary: Optional[str] = None
-    application_id: Optional[int] = None
+    jd_summary: str | None = None
+    application_id: int | None = None
 
 
 class InterviewFromJobRequest(BaseModel):
@@ -97,8 +96,8 @@ class InterviewFromJobRequest(BaseModel):
 
 
 class RunSessionRequest(BaseModel):
-    job_postings: Optional[list[dict]] = None
-    job_description: Optional[str] = None
+    job_postings: list[dict] | None = None
+    job_description: str | None = None
     trigger: str = "manual"
 
 
@@ -669,7 +668,6 @@ async def interview_from_job(
     if drive_connected:
         from app.shared.google_drive import convert_docx_to_pdf_bytes, upload_or_update_file
         from app.shared.interview_pack_docx import build_interview_pack_docx
-        from app.shared.schemas import InterviewPackOutput as _IPO
 
         job_title = app_row[1][:60] if app_row[1] else "Role"  # use JD start as fallback
         # prefer company name from DB row
@@ -995,7 +993,7 @@ async def _update_draft_status(
     draft_id: int,
     user_id: int,
     status: str,
-    edited_content: Optional[str],
+    edited_content: str | None,
 ):
     row = await db.execute(
         text("SELECT id FROM drafts WHERE id = :did AND user_id = :uid"),
@@ -1158,7 +1156,6 @@ async def get_stored_jobs(
     Jobs with no inferred industries (empty list) are always shown.
     The days filter uses the calendar day boundary in the user's browser timezone.
     """
-    import json as _json
     offset = (page - 1) * per_page
 
     # Load user's target industries for server-side filtering
@@ -1698,8 +1695,6 @@ async def retry_drive_upload(
     On success, clears resume_json from the DB row.
     """
     import json as _json
-
-    from fastapi.responses import JSONResponse
 
     from app.shared.google_drive import convert_docx_to_pdf_bytes, upload_or_update_file
     from app.shared.resume_docx import build_docx_bytes

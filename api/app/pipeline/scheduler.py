@@ -210,7 +210,7 @@ async def stop() -> None:
         try:
             await asyncio.wait_for(_scorer_task, timeout=STOP_TIMEOUT)
             logger.info("scheduler: scorer loop exited cleanly")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("scheduler: scorer loop did not finish within %ds — cancelling", STOP_TIMEOUT)
             _scorer_task.cancel()
             try:

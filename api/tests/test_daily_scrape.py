@@ -9,14 +9,14 @@ Per-job execute() call sequence (after profile select):
   2. INSERT INTO user_job_postings ... ON CONFLICT DO NOTHING RETURNING id → .fetchone() returns (id,) or None
 """
 import json
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from datetime import UTC
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.pipeline.daily_scrape import (
     scrape_for_all_users,
     scrape_for_user,
-    scrape_watchlist_for_user,
 )
 
 
@@ -494,7 +494,7 @@ async def test_job_with_empty_url_is_skipped():
 
 @pytest.mark.asyncio
 async def test_external_id_preferred_over_url_derived_uuid():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.pipeline.daily_scrape import _insert_jobs_for_user
 
@@ -504,7 +504,7 @@ async def test_external_id_preferred_over_url_derived_uuid():
     job = _make_job(url="https://example.com/job/short-slug")
     job["external_id"] = "workday:acme:JR12345"
 
-    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(UTC))
 
     insert_call = db.execute.call_args_list[0]
     assert insert_call.args[1]["uuid"] == "workday:acme:JR12345"
@@ -512,7 +512,7 @@ async def test_external_id_preferred_over_url_derived_uuid():
 
 @pytest.mark.asyncio
 async def test_long_url_derived_uuid_is_truncated_to_100_chars():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.pipeline.daily_scrape import _insert_jobs_for_user
 
@@ -522,7 +522,7 @@ async def test_long_url_derived_uuid_is_truncated_to_100_chars():
     long_slug = "a" * 150
     job = _make_job(url=f"https://example.com/job/{long_slug}")
 
-    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(UTC))
 
     insert_call = db.execute.call_args_list[0]
     assert len(insert_call.args[1]["uuid"]) == 100
@@ -535,7 +535,7 @@ async def test_long_url_derived_uuid_is_truncated_to_100_chars():
 
 @pytest.mark.asyncio
 async def test_source_defaults_to_mycareersfuture_when_absent():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.pipeline.daily_scrape import _insert_jobs_for_user
 
@@ -544,7 +544,7 @@ async def test_source_defaults_to_mycareersfuture_when_absent():
 
     job = _make_job()  # no "source" key — mirrors scrape_mycareersfuture()'s dicts
 
-    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(UTC))
 
     insert_call = db.execute.call_args_list[0]
     assert insert_call.args[1]["source"] == "mycareersfuture"
@@ -552,7 +552,7 @@ async def test_source_defaults_to_mycareersfuture_when_absent():
 
 @pytest.mark.asyncio
 async def test_source_passes_through_scraper_value():
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.pipeline.daily_scrape import _insert_jobs_for_user
 
@@ -562,7 +562,7 @@ async def test_source_passes_through_scraper_value():
     job = _make_job()
     job["source"] = "workday"
 
-    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(UTC))
 
     insert_call = db.execute.call_args_list[0]
     assert insert_call.args[1]["source"] == "workday"
@@ -575,7 +575,7 @@ async def test_source_not_overwritten_in_conflict_update_clause():
     ON CONFLICT DO UPDATE clause never assigns source, regardless of the
     value passed as a bind parameter.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.pipeline.daily_scrape import _insert_jobs_for_user
 
@@ -585,7 +585,7 @@ async def test_source_not_overwritten_in_conflict_update_clause():
     job = _make_job()
     job["source"] = "greenhouse"
 
-    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(timezone.utc))
+    await _insert_jobs_for_user(user_id=1, jobs=[job], db=db, now=datetime.now(UTC))
 
     insert_sql = db.execute.call_args_list[0].args[0].text
     update_clause = insert_sql.split("DO UPDATE SET", 1)[1].split("RETURNING", 1)[0]
@@ -826,7 +826,6 @@ async def test_scrape_for_user_stops_between_titles_on_shutdown():
     When shutdown_event is set before the second title iteration,
     the MCF scraper must not be called for that title.
     """
-    import json as _json
     event = _asyncio.Event()
 
     profile = _make_profile(target_titles=["Data Engineer", "ML Engineer"], target_industries=[])

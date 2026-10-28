@@ -9,7 +9,7 @@ Deduplication rules:
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,7 @@ def _parse_posted_at(job: dict) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(posted_str.replace("Z", "+00:00"))
         if not hasattr(parsed, "hour"):
-            return datetime(parsed.year, parsed.month, parsed.day, tzinfo=timezone.utc)
+            return datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC)
         return parsed
     except (ValueError, AttributeError):
         return None

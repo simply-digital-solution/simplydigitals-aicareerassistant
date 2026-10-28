@@ -1,6 +1,8 @@
 """
 Unit tests for scrape_workday() — Workday's internal (undocumented) jobs API.
 """
+from datetime import UTC
+
 import httpx
 import pytest
 import respx
@@ -176,15 +178,15 @@ async def test_skips_postings_missing_path_or_title():
 # ---------------------------------------------------------------------------
 
 def test_parses_posted_today():
-    from datetime import datetime, timezone
+    from datetime import datetime
     result = _parse_workday_posted_on("Posted Today")
-    assert result == datetime.now(timezone.utc).date().isoformat()
+    assert result == datetime.now(UTC).date().isoformat()
 
 
 def test_parses_posted_n_days_ago():
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
     result = _parse_workday_posted_on("Posted 9 Days Ago")
-    expected = (datetime.now(timezone.utc) - timedelta(days=9)).date().isoformat()
+    expected = (datetime.now(UTC) - timedelta(days=9)).date().isoformat()
     assert result == expected
 
 

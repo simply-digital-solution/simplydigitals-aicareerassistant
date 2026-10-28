@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Optional, Type, TypeVar
+from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -12,7 +12,7 @@ STATUS_EXTRACTED = "extracted_json"
 STATUS_FAILED = "failed"
 
 
-def _try_parse(raw: str, schema: Type[T]) -> tuple[Optional[T], Optional[str]]:
+def _try_parse(raw: str, schema: type[T]) -> tuple[T | None, str | None]:
     """Single parse attempt. Returns (model, None) on success or (None, error_str) on failure."""
     try:
         data = json.loads(raw.strip())
@@ -23,7 +23,7 @@ def _try_parse(raw: str, schema: Type[T]) -> tuple[Optional[T], Optional[str]]:
         return None, f"Schema validation error: {e}"
 
 
-def _extract_json_block(text: str) -> Optional[str]:
+def _extract_json_block(text: str) -> str | None:
     """Try to find a JSON block inside ```json ... ``` or the first { ... } block."""
     # Fenced code block
     m = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
@@ -38,8 +38,8 @@ def _extract_json_block(text: str) -> Optional[str]:
 
 def parse_agent_output(
     raw_text: str,
-    schema: Type[T],
-) -> tuple[Optional[T], str]:
+    schema: type[T],
+) -> tuple[T | None, str]:
     """
     Phase 0 parser — no LLM retry (that lives in api_client).
     Returns (parsed_model | None, status).
@@ -77,7 +77,7 @@ def parse_agent_output(
 
 def build_reflexion_prompt(
     raw_text: str,
-    schema: Type[BaseModel],
+    schema: type[BaseModel],
     attempt: int,
     max_attempts: int,
     last_error: str,

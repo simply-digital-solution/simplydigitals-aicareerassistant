@@ -13,8 +13,9 @@ import json
 import re
 import time
 from abc import ABC, abstractmethod
-from datetime import date, datetime, timezone
-from typing import Optional, Type, TypeVar
+from collections.abc import Callable
+from datetime import UTC, date, datetime
+from typing import Any, TypeVar
 
 import httpx
 from pydantic import BaseModel
@@ -77,16 +78,16 @@ class BaseLLMClient(ABC):
         agent_name: str,
         system_prompt: str,
         user_message: str,
-        output_schema: Type[T],
-        db: Optional[AsyncSession] = None,
-        application_id: Optional[int] = None,
-        user_id: Optional[int] = None,
-        job_posting_id: Optional[int] = None,
+        output_schema: type[T],
+        db: AsyncSession | None = None,
+        application_id: int | None = None,
+        user_id: int | None = None,
+        job_posting_id: int | None = None,
         request_type: str = "unknown",
         use_coordinator: bool = False,
-        stream_callback: Optional[callable] = None,
-        max_self_corrections: Optional[int] = None,
-        cacheable_prefix: Optional[str] = None,
+        stream_callback: Callable[..., Any] | None = None,
+        max_self_corrections: int | None = None,
+        cacheable_prefix: str | None = None,
     ) -> tuple[T | AgentError, dict]:
         """
         cacheable_prefix: optional text that's identical across repeated
@@ -102,7 +103,7 @@ class BaseLLMClient(ABC):
 
         self._scrub_secrets(system_prompt + (cacheable_prefix or "") + user_message)
 
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         t0 = time.monotonic()
 
         user_content = (
@@ -198,12 +199,12 @@ class BaseLLMClient(ABC):
     async def _call(
         self,
         messages: list[dict],
-        stream_callback: Optional[callable] = None,
+        stream_callback: Callable[..., Any] | None = None,
         *,
-        user_id: Optional[int] = None,
-        job_posting_id: Optional[int] = None,
+        user_id: int | None = None,
+        job_posting_id: int | None = None,
         request_type: str = "unknown",
-        db: Optional[AsyncSession] = None,
+        db: AsyncSession | None = None,
     ) -> tuple[str, dict]:
         """Make the HTTP call and return (full_text, usage_dict)."""
 
@@ -219,14 +220,14 @@ class BaseLLMClient(ABC):
     async def _persist_usage(
         self,
         *,
-        user_id: Optional[int],
-        job_posting_id: Optional[int],
+        user_id: int | None,
+        job_posting_id: int | None,
         request_type: str,
         input_tokens: int,
         output_tokens: int,
         requested_at: datetime,
         responded_at: datetime,
-        db: Optional[AsyncSession],
+        db: AsyncSession | None,
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
     ) -> None:
@@ -286,8 +287,8 @@ class BaseLLMClient(ABC):
         status: str,
         duration_ms: int,
         started_at: datetime,
-        application_id: Optional[int],
-        user_id: Optional[int],
+        application_id: int | None,
+        user_id: int | None,
         attempt_number: int,
         system_prompt: str,
     ) -> int:
@@ -321,7 +322,7 @@ class BaseLLMClient(ABC):
                 "cct": usage.get("cache_creation_tokens", 0),
                 "cost": 0.0,
                 "started": started_at,
-                "completed": datetime.now(timezone.utc),
+                "completed": datetime.now(UTC),
             },
         )
         return insert_result.scalar_one_or_none()
@@ -340,12 +341,12 @@ class OllamaClient(BaseLLMClient):
     async def _call(
         self,
         messages: list[dict],
-        stream_callback: Optional[callable] = None,
+        stream_callback: Callable[..., Any] | None = None,
         *,
-        user_id: Optional[int] = None,
-        job_posting_id: Optional[int] = None,
+        user_id: int | None = None,
+        job_posting_id: int | None = None,
         request_type: str = "unknown",
-        db: Optional[AsyncSession] = None,
+        db: AsyncSession | None = None,
     ) -> tuple[str, dict]:
         # Ollama has no caching concept, so a list-shaped content (from
         # run_agent()'s cacheable_prefix split, normally only used by
@@ -363,7 +364,7 @@ class OllamaClient(BaseLLMClient):
 
         full_text = ""
         input_tokens = sum(len(m["content"].split()) for m in messages)
-        requested_at = datetime.now(timezone.utc)
+        requested_at = datetime.now(UTC)
 
         async with httpx.AsyncClient(timeout=300.0) as client:
             if stream_callback is not None:
@@ -389,7 +390,7 @@ class OllamaClient(BaseLLMClient):
                 data = resp.json()
                 full_text = data.get("message", {}).get("content", "")
 
-        responded_at = datetime.now(timezone.utc)
+        responded_at = datetime.now(UTC)
         output_tokens = len(full_text.split())
 
         await self._persist_usage(
@@ -429,12 +430,12 @@ class GeminiClient(BaseLLMClient):
     async def _call(
         self,
         messages: list[dict],
-        stream_callback: Optional[callable] = None,
+        stream_callback: Callable[..., Any] | None = None,
         *,
-        user_id: Optional[int] = None,
-        job_posting_id: Optional[int] = None,
+        user_id: int | None = None,
+        job_posting_id: int | None = None,
         request_type: str = "unknown",
-        db: Optional[AsyncSession] = None,
+        db: AsyncSession | None = None,
     ) -> tuple[str, dict]:
         from app.shared.rate_limiter import gemini_rate_limiter
         await gemini_rate_limiter.acquire()
@@ -462,7 +463,7 @@ class GeminiClient(BaseLLMClient):
         }
 
         input_tokens = sum(len(m["content"].split()) for m in messages)
-        requested_at = datetime.now(timezone.utc)
+        requested_at = datetime.now(UTC)
         full_text = ""
 
         headers = {"X-goog-api-key": self._api_key, "Content-Type": "application/json"}
@@ -496,7 +497,7 @@ class GeminiClient(BaseLLMClient):
         input_tokens = usage_meta.get("promptTokenCount", input_tokens)
         output_tokens = usage_meta.get("candidatesTokenCount", len(full_text.split()))
 
-        responded_at = datetime.now(timezone.utc)
+        responded_at = datetime.now(UTC)
 
         if stream_callback is not None:
             await stream_callback(full_text)
@@ -550,12 +551,12 @@ class AnthropicClient(BaseLLMClient):
     async def _call(
         self,
         messages: list[dict],
-        stream_callback: Optional[callable] = None,
+        stream_callback: Callable[..., Any] | None = None,
         *,
-        user_id: Optional[int] = None,
-        job_posting_id: Optional[int] = None,
+        user_id: int | None = None,
+        job_posting_id: int | None = None,
         request_type: str = "unknown",
-        db: Optional[AsyncSession] = None,
+        db: AsyncSession | None = None,
     ) -> tuple[str, dict]:
         import anthropic
 
@@ -594,7 +595,7 @@ class AnthropicClient(BaseLLMClient):
             else:
                 api_messages.append({"role": m["role"], "content": m["content"]})
 
-        requested_at = datetime.now(timezone.utc)
+        requested_at = datetime.now(UTC)
 
         import logging
         _log = logging.getLogger(__name__)
@@ -625,7 +626,7 @@ class AnthropicClient(BaseLLMClient):
         cache_read_tokens = usage.cache_read_input_tokens or 0
         cache_creation_tokens = usage.cache_creation_input_tokens or 0
 
-        responded_at = datetime.now(timezone.utc)
+        responded_at = datetime.now(UTC)
 
         if stream_callback is not None:
             await stream_callback(full_text)
@@ -683,7 +684,7 @@ async def _update_budget(db: AsyncSession, agent_name: str, usage: dict):
 
 
 # Singleton
-_client: Optional[BaseLLMClient] = None
+_client: BaseLLMClient | None = None
 
 
 def get_llm_client() -> BaseLLMClient:
@@ -717,9 +718,9 @@ def get_llm_client() -> BaseLLMClient:
 # per-task overrides, not a replacement for get_llm_client(). Every other
 # caller (interview prep, profile extraction, the non-scoring research
 # agent path, ...) keeps using get_llm_client() untouched.
-_classifier_client: Optional[BaseLLMClient] = None
-_scorer_client: Optional[BaseLLMClient] = None
-_resume_client: Optional[BaseLLMClient] = None
+_classifier_client: BaseLLMClient | None = None
+_scorer_client: BaseLLMClient | None = None
+_resume_client: BaseLLMClient | None = None
 
 
 def _build_anthropic_task_client(model: str) -> BaseLLMClient:

@@ -522,7 +522,6 @@ async def seed_all_skill_gaps(
     db: AsyncSession = Depends(get_db),
 ):
     """Seed required skills for all target titles that have no data yet."""
-    import asyncio
 
     from app.shared.api_client import get_llm_client
     from app.shared.skill_gap import get_all_title_skills, save_title_skills, seed_required_skills

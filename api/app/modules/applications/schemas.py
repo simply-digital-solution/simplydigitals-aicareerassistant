@@ -1,30 +1,29 @@
 from datetime import date, datetime
-from typing import Optional
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 
 class ApplicationCreate(BaseModel):
     company_name: str
     role_title: str
-    job_description: Optional[str] = None
-    source_url: Optional[str] = None
-    source: Optional[str] = "manual"
-    status: Optional[str] = "selected"
-    deadline: Optional[date] = None
-    notes: Optional[str] = None
-    job_posting_id: Optional[int] = None
+    job_description: str | None = None
+    source_url: str | None = None
+    source: str | None = "manual"
+    status: str | None = "selected"
+    deadline: date | None = None
+    notes: str | None = None
+    job_posting_id: int | None = None
 
 
 class ApplicationUpdate(BaseModel):
-    company_name: Optional[str] = None
-    role_title: Optional[str] = None
-    job_description: Optional[str] = None
-    status: Optional[str] = None
-    deadline: Optional[date] = None
-    applied_at: Optional[date] = None
-    notes: Optional[str] = None
-    fit_score: Optional[float] = None
+    company_name: str | None = None
+    role_title: str | None = None
+    job_description: str | None = None
+    status: str | None = None
+    deadline: date | None = None
+    applied_at: date | None = None
+    notes: str | None = None
+    fit_score: float | None = None
 
 
 class ApplicationResponse(BaseModel):
@@ -32,17 +31,17 @@ class ApplicationResponse(BaseModel):
     user_id: int
     company_name: str
     role_title: str
-    job_description: Optional[str]
-    jd_summary: Optional[str]
-    source_url: Optional[str]
-    source: Optional[str]
+    job_description: str | None
+    jd_summary: str | None
+    source_url: str | None
+    source: str | None
     status: str
-    fit_score: Optional[float]
-    deadline: Optional[date]
-    applied_at: Optional[date]
-    notes: Optional[str]
-    job_posting_id: Optional[int]
-    status_updated_at: Optional[datetime]
+    fit_score: float | None
+    deadline: date | None
+    applied_at: date | None
+    notes: str | None
+    job_posting_id: int | None
+    status_updated_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

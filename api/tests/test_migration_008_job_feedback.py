@@ -3,7 +3,6 @@ import importlib.util
 import pathlib
 from unittest.mock import MagicMock, patch
 
-import pytest
 import sqlalchemy as sa
 
 

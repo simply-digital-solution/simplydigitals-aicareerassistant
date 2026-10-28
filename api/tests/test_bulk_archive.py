@@ -1,7 +1,7 @@
 """
 Unit tests for POST /api/v1/research/jobs/bulk-archive
 """
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient

@@ -3,7 +3,7 @@ LangGraph central state object.
 Every graph node reads from and writes to this TypedDict.
 Eliminates data-passing complexity between nodes.
 """
-from typing import Any, Optional
+from typing import Any
 
 from typing_extensions import TypedDict
 
@@ -30,14 +30,14 @@ class GraphState(TypedDict, total=False):
     target_app_ids: list[int]
 
     # Inputs passed to individual agents
-    job_description: Optional[str]   # raw JD text for application/resume agents
+    job_description: str | None   # raw JD text for application/resume agents
 
     # Agent outputs
-    research_result: Optional[ResearchOutput]
-    resume_result: Optional[ResumeOutput]
-    application_result: Optional[ApplicationOutput]
-    interview_result: Optional[InterviewOutput]
-    signals_result: Optional[SignalsOutput]
+    research_result: ResearchOutput | None
+    resume_result: ResumeOutput | None
+    application_result: ApplicationOutput | None
+    interview_result: InterviewOutput | None
+    signals_result: SignalsOutput | None
 
     # Error tracking
     errors: list[AgentError]

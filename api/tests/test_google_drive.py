@@ -1,7 +1,7 @@
 """
 Unit tests for Google Drive helpers and OAuth endpoints.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -47,16 +47,16 @@ def test_get_oauth_url_requests_offline_access():
 def test_token_expiry_iso_returns_future():
     expiry = token_expiry_iso(3600)
     dt = datetime.fromisoformat(expiry)
-    assert dt > datetime.now(timezone.utc)
+    assert dt > datetime.now(UTC)
 
 
 def test_is_token_expired_with_past_time():
-    past = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
+    past = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
     assert is_token_expired(past) is True
 
 
 def test_is_token_expired_with_future_time():
-    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
     assert is_token_expired(future) is False
 
 
@@ -152,7 +152,7 @@ async def test_upload_creates_folder_hierarchy_and_file():
         file_id, link, new_tokens = await upload_or_update_file(
             access_token="acc",
             refresh_token="ref",
-            expiry_iso=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            expiry_iso=(datetime.now(UTC) + timedelta(hours=1)).isoformat(),
             folder_name="Acme Corp - Engineer",
             filename="Resume_Acme_Corp.docx",
             file_bytes=b"fake docx content",
@@ -195,7 +195,7 @@ async def test_upload_updates_existing_file():
         file_id, link, _ = await upload_or_update_file(
             access_token="acc",
             refresh_token="ref",
-            expiry_iso=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            expiry_iso=(datetime.now(UTC) + timedelta(hours=1)).isoformat(),
             folder_name="Acme Corp - Engineer",
             filename="Resume_Acme_Corp.docx",
             file_bytes=b"updated docx content",
@@ -267,7 +267,7 @@ async def test_refresh_token_other_400_raises_http_status_error():
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client_cls.return_value = mock_client
 
-        from app.shared.google_drive import GoogleTokenRevokedException, refresh_access_token
+        from app.shared.google_drive import refresh_access_token
         with pytest.raises(httpx.HTTPStatusError) as exc_info:
             await refresh_access_token("some-token")
 

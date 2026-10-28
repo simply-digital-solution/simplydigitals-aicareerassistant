@@ -5,7 +5,7 @@ Execute call sequence when candidates are found:
   [1] DELETE FROM user_job_postings WHERE job_posting_id IN (...)
   [2] DELETE FROM job_postings WHERE id IN (...)
 """
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -145,7 +145,7 @@ async def test_custom_days_used_in_cutoff():
     params = db.execute.call_args_list[0][0][1]
     cutoff_dt = params["cutoff"]
     assert isinstance(cutoff_dt, datetime)
-    expected = datetime.now(timezone.utc) - timedelta(days=7)
+    expected = datetime.now(UTC) - timedelta(days=7)
     assert abs((cutoff_dt - expected).total_seconds()) < 5
 
 

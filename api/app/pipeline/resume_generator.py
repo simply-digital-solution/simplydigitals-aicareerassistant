@@ -6,7 +6,6 @@ Rate limiting, when the Gemini fallback client is in use, is handled globally
 by GeminiClient via gemini_rate_limiter — no artificial sleep needed here.
 """
 import logging
-from datetime import datetime, timezone
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -5,6 +5,7 @@
 - Admin email set: both addresses allowed
 """
 import json
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -119,12 +120,12 @@ async def test_get_interview_pack_not_found(app):
 
 @pytest.mark.asyncio
 async def test_get_interview_pack_returns_pack(app):
-    from datetime import datetime, timezone
+    from datetime import datetime
     pack_row = MagicMock()
     pack_row.__getitem__ = lambda self, i: [
         "My pitch text",
         json.dumps([{"q": "Q1", "situation": "S", "task": "T", "action": "A", "result": "R"}]),
-        datetime(2026, 6, 23, 10, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 6, 23, 10, 0, 0, tzinfo=UTC),
     ][i]
 
     mock_result = MagicMock()

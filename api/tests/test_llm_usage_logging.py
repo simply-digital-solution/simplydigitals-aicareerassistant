@@ -1,7 +1,6 @@
 """
 Tests for LLM usage logging: file logger and DB insert in OllamaClient._call().
 """
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

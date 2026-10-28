@@ -2,8 +2,7 @@ import hashlib
 import json
 import logging
 import os
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -78,7 +77,7 @@ class AuditLogger:
         content_hash = _sha256(content)
         prev_hash = await self._get_last_chain_hash(db)
         chain_hash = _sha256(prev_hash + content_hash)
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
         await db.execute(
             text("""

@@ -5,7 +5,7 @@ Generates a 2-minute pitch + 10 STAR questions for a specific job posting.
 Persists the result in interview_packs table (upsert by application_id).
 """
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ def _build_user_message(
     profile: dict[str, Any],
     jd_text: str,
     company_name: str,
-    jd_summary: Optional[str],
+    jd_summary: str | None,
     tailored_resume_text: str = "",
 ) -> str:
     background = profile.get("background", {})
@@ -66,7 +66,7 @@ async def run_interview_pack_agent(
     user_id: int,
     application_id: int,
     company_name: str = "",
-    jd_summary: Optional[str] = None,
+    jd_summary: str | None = None,
     tailored_resume_text: str = "",
 ) -> tuple[InterviewPackOutput | AgentError, dict]:
     client = get_llm_client()

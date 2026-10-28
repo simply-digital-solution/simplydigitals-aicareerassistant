@@ -1,7 +1,7 @@
 """
 Unit tests for move_pipeline, create_application, and kanban endpoints in applications/router.py
 """
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,8 +30,8 @@ def _make_app(app_id=1, user_id=1, status="selected", status_updated_at=None):
     app.deadline = None
     app.notes = None
     app.job_posting_id = None
-    app.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    app.updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    app.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    app.updated_at = datetime(2026, 1, 1, tzinfo=UTC)
     return app
 
 
@@ -128,9 +128,9 @@ def _make_row(app_id=1, user_id=1, status="selected",
         "applied_at": None,
         "notes": None,
         "job_posting_id": None,
-        "status_updated_at": status_updated_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
-        "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
-        "updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        "status_updated_at": status_updated_at or datetime(2026, 1, 1, tzinfo=UTC),
+        "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+        "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
     }
 
 
@@ -151,8 +151,8 @@ def _make_kanban_db(rows: list[dict]):
 async def test_kanban_orders_by_status_updated_at_desc():
     from app.modules.applications.router import get_pipeline
 
-    older_row = _make_row(app_id=1, status_updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
-    newer_row = _make_row(app_id=2, status_updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
+    older_row = _make_row(app_id=1, status_updated_at=datetime(2026, 1, 1, tzinfo=UTC))
+    newer_row = _make_row(app_id=2, status_updated_at=datetime(2026, 6, 1, tzinfo=UTC))
 
     # DB returns rows already ordered DESC (newer first)
     db = _make_kanban_db([newer_row, older_row])

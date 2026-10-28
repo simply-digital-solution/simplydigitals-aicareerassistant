@@ -1,6 +1,6 @@
 import csv
 import io
-from typing import Optional
+from datetime import UTC
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -20,7 +20,7 @@ VALID_STATUSES = {"selected", "applied", "interviewing", "offered", "rejected", 
 
 @router.get("/", response_model=list[ApplicationResponse])
 async def list_applications(
-    status: Optional[str] = Query(None),
+    status: str | None = Query(None),
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -132,8 +132,8 @@ async def move_pipeline(
         raise HTTPException(400, f"Invalid status. Must be one of: {VALID_STATUSES}")
     app = await _get_or_404(db, body.application_id, current_user.id)
     app.status = body.new_status
-    from datetime import date, datetime, timezone
-    app.status_updated_at = datetime.now(timezone.utc)
+    from datetime import date, datetime
+    app.status_updated_at = datetime.now(UTC)
     if body.new_status == 'applied' and not app.applied_at:
         app.applied_at = date.today()
     if app.job_posting_id and not app.job_description:

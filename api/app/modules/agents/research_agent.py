@@ -5,8 +5,9 @@ Scores and ranks job opportunities against the user's profile.
 Input: profile dict + list of job postings (from scraper or manual paste).
 Output: ResearchOutput (ranked opportunities with fit scores).
 """
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -118,15 +119,15 @@ async def run_research_agent(
     profile: dict[str, Any],
     job_postings: list[dict],
     search_filters: dict[str, Any] | None = None,
-    db: Optional[AsyncSession] = None,
-    user_id: Optional[int] = None,
-    application_id: Optional[int] = None,
-    job_posting_id: Optional[int] = None,
+    db: AsyncSession | None = None,
+    user_id: int | None = None,
+    application_id: int | None = None,
+    job_posting_id: int | None = None,
     request_type: str = "research",
-    stream_callback: Optional[callable] = None,
+    stream_callback: Callable[..., Any] | None = None,
     feedback_examples: str = "",
     full_description: bool = False,
-    max_self_corrections: Optional[int] = None,
+    max_self_corrections: int | None = None,
 ) -> tuple[ResearchOutput | AgentError, dict]:
     """
     Run the research agent against a list of job postings.

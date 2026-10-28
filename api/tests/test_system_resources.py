@@ -3,8 +3,6 @@ Tests for _compute_batch_size() in app.shared.system_resources.
 """
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.shared.system_resources import _MAX_BATCH, _MIN_BATCH, _compute_batch_size
 
 

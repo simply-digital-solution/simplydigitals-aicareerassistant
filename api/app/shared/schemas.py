@@ -1,4 +1,3 @@
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -197,5 +196,5 @@ class SignalsOutput(AgentBaseModel):
 
 class AgentError(BaseModel):
     error: str
-    raw_output: Optional[str] = None
+    raw_output: str | None = None
     needs_human_review: bool = True
