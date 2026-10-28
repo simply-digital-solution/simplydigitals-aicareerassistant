@@ -5,7 +5,6 @@ Takes the candidate's original resume text + job description and produces
 a complete tailored resume in the candidate's own format and style.
 """
 from pathlib import Path
-from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,9 +54,9 @@ async def run_resume_generate_agent(
     jd_text: str,
     candidate_name: str = "",
     additional_context: str = "",
-    db: Optional[AsyncSession] = None,
-    user_id: Optional[int] = None,
-    application_id: Optional[int] = None,
+    db: AsyncSession | None = None,
+    user_id: int | None = None,
+    application_id: int | None = None,
 ) -> tuple[GeneratedResumeOutput | AgentError, dict]:
     """
     Generate a tailored resume for a specific job.

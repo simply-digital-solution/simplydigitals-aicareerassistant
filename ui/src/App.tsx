@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './hooks/useAuth'
+import { useDriveConnectedToast } from './hooks/useDriveConnectedToast'
 import { authApi } from './api/client'
 import type { ProfileData } from './api/client'
 import api from './api/client'
@@ -97,18 +98,8 @@ function Layout({
   activeTab: Tab
   onTabChange: (t: Tab) => void
 }) {
-  const [driveToast, setDriveToast] = useState(false)
+  const driveToast = useDriveConnectedToast()
   const [signingOut, setSigningOut] = useState(false)
-
-  // Handle ?drive=connected redirect from OAuth callback
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('drive') === 'connected') {
-      setDriveToast(true)
-      window.history.replaceState({}, '', window.location.pathname)
-      setTimeout(() => setDriveToast(false), 3500)
-    }
-  }, [])
 
   const handleSignOut = async () => {
     setSigningOut(true)

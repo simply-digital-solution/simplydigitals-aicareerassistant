@@ -147,7 +147,7 @@ async def parse_resume_file(
         try:
             text = _extract_text_from_pdf(content)
         except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Could not parse PDF: {e}")
+            raise HTTPException(status_code=422, detail=f"Could not parse PDF: {e}") from e
         obj = base64.b64encode(content).decode("ascii")
         mime = "application/pdf"
 
@@ -155,7 +155,7 @@ async def parse_resume_file(
         try:
             text = _extract_text_from_docx(content)
         except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Could not parse DOCX: {e}")
+            raise HTTPException(status_code=422, detail=f"Could not parse DOCX: {e}") from e
         obj = base64.b64encode(content).decode("ascii")
         mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
@@ -522,7 +522,6 @@ async def seed_all_skill_gaps(
     db: AsyncSession = Depends(get_db),
 ):
     """Seed required skills for all target titles that have no data yet."""
-    import asyncio
 
     from app.shared.api_client import get_llm_client
     from app.shared.skill_gap import get_all_title_skills, save_title_skills, seed_required_skills

@@ -25,12 +25,7 @@ Endpoints:
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
-
-from app.shared.sql_compat import now_utc
-
-logger = logging.getLogger(__name__)
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -48,6 +43,9 @@ from app.pipeline.graph import run_session
 from app.shared.config import get_settings
 from app.shared.database import get_db
 from app.shared.schemas import AgentError
+from app.shared.sql_compat import now_utc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["agents"])
 
@@ -59,37 +57,37 @@ router = APIRouter(prefix="/api/v1", tags=["agents"])
 class ResearchRequest(BaseModel):
     # All optional — if empty, scraper fetches jobs automatically from profile targets
     job_postings: list[dict] = Field(default_factory=list)
-    query: Optional[str] = None
+    query: str | None = None
     queries: list[str] = Field(default_factory=list)   # multiple roles — scrape all in parallel
-    location: Optional[str] = None
-    remote_preference: Optional[str] = None
-    employment_type: Optional[str] = None
-    salary_floor: Optional[int] = None
-    salary_currency: Optional[str] = None
+    location: str | None = None
+    remote_preference: str | None = None
+    employment_type: str | None = None
+    salary_floor: int | None = None
+    salary_currency: str | None = None
     required_skills: list[str] = Field(default_factory=list)
     excluded_companies: list[str] = Field(default_factory=list)
-    application_id: Optional[int] = None
+    application_id: int | None = None
 
 
 class ResumeRequest(BaseModel):
     jd_text: str
-    resume_text: Optional[str] = None  # if omitted, loaded from DB profile
-    jd_summary: Optional[str] = None
-    application_id: Optional[int] = None
+    resume_text: str | None = None  # if omitted, loaded from DB profile
+    jd_summary: str | None = None
+    application_id: int | None = None
 
 
 class ApplicationRequest(BaseModel):
     jd_text: str
-    resume_text: Optional[str] = None  # if omitted, loaded from DB profile
-    jd_summary: Optional[str] = None
-    application_id: Optional[int] = None
+    resume_text: str | None = None  # if omitted, loaded from DB profile
+    jd_summary: str | None = None
+    application_id: int | None = None
 
 
 class InterviewRequest(BaseModel):
     jd_text: str
     company_name: str = ""
-    jd_summary: Optional[str] = None
-    application_id: Optional[int] = None
+    jd_summary: str | None = None
+    application_id: int | None = None
 
 
 class InterviewFromJobRequest(BaseModel):
@@ -97,8 +95,8 @@ class InterviewFromJobRequest(BaseModel):
 
 
 class RunSessionRequest(BaseModel):
-    job_postings: Optional[list[dict]] = None
-    job_description: Optional[str] = None
+    job_postings: list[dict] | None = None
+    job_description: str | None = None
     trigger: str = "manual"
 
 
@@ -669,7 +667,6 @@ async def interview_from_job(
     if drive_connected:
         from app.shared.google_drive import convert_docx_to_pdf_bytes, upload_or_update_file
         from app.shared.interview_pack_docx import build_interview_pack_docx
-        from app.shared.schemas import InterviewPackOutput as _IPO
 
         job_title = app_row[1][:60] if app_row[1] else "Role"  # use JD start as fallback
         # prefer company name from DB row
@@ -995,7 +992,7 @@ async def _update_draft_status(
     draft_id: int,
     user_id: int,
     status: str,
-    edited_content: Optional[str],
+    edited_content: str | None,
 ):
     row = await db.execute(
         text("SELECT id FROM drafts WHERE id = :did AND user_id = :uid"),
@@ -1158,7 +1155,6 @@ async def get_stored_jobs(
     Jobs with no inferred industries (empty list) are always shown.
     The days filter uses the calendar day boundary in the user's browser timezone.
     """
-    import json as _json
     offset = (page - 1) * per_page
 
     # Load user's target industries for server-side filtering
@@ -1177,7 +1173,7 @@ async def get_stored_jobs(
     if target_industries:
         ind_placeholders = ",".join(f":ind{i}" for i in range(len(target_industries)))
         ujp_where.append(
-            f"(jp.inferred_industries = '[]' OR jp.inferred_industries IS NULL OR "
+            f"(jp.inferred_industries = '[]' OR jp.inferred_industries IS NULL OR "  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
             f"EXISTS (SELECT 1 FROM json_array_elements_text(jp.inferred_industries::json) AS v WHERE v IN ({ind_placeholders})))"
         )
         for i, ind in enumerate(target_industries):
@@ -1208,7 +1204,7 @@ async def get_stored_jobs(
             FROM user_job_postings ujp
             JOIN job_postings jp ON jp.id = ujp.job_posting_id
             WHERE {where_sql}
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     total = count_row.scalar_one()
@@ -1225,7 +1221,7 @@ async def get_stored_jobs(
             WHERE {where_sql}
             ORDER BY jp.posted_at DESC, ujp.created_at DESC
             LIMIT :limit OFFSET :offset
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     jobs = [dict(r) for r in rows.mappings()]
@@ -1342,7 +1338,7 @@ async def bulk_archive_jobs(
     for i, jid in enumerate(body.job_ids):
         params[f"id{i}"] = jid
     await db.execute(
-        text(f"UPDATE user_job_postings SET archived = true WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),
+        text(f"UPDATE user_job_postings SET archived = true WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     await db.commit()
@@ -1368,7 +1364,7 @@ async def bulk_rescore_jobs(
         params[f"id{i}"] = jid
 
     owned = await db.execute(
-        text(f"SELECT job_posting_id FROM user_job_postings WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),
+        text(f"SELECT job_posting_id FROM user_job_postings WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     owned_ids = [r[0] for r in owned.fetchall()]
@@ -1397,7 +1393,7 @@ async def bulk_rescore_jobs(
             FROM job_postings jp
             JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             WHERE jp.id IN ({owned_placeholders})
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         owned_params,
     )
     jobs = [dict(r) for r in rows.mappings().all()]
@@ -1466,10 +1462,14 @@ class GenerateResumeRequest(BaseModel):
     additional_context: str = ""
 
 
+# Shared read-only default so the endpoint signature needs no call in its default.
+_DEFAULT_GENERATE_RESUME_REQUEST = GenerateResumeRequest()
+
+
 @router.post("/research/jobs/{job_id}/generate-resume")
 async def generate_resume(
     job_id: int,
-    body: GenerateResumeRequest = GenerateResumeRequest(),
+    body: GenerateResumeRequest = _DEFAULT_GENERATE_RESUME_REQUEST,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1546,7 +1546,7 @@ async def generate_resume(
         )
     except _httpx.HTTPStatusError as exc:
         if exc.response.status_code == 503:
-            raise HTTPException(503, "AI service is temporarily unavailable. Please try again in a few minutes.")
+            raise HTTPException(503, "AI service is temporarily unavailable. Please try again in a few minutes.") from exc
         raise
 
     if isinstance(result, AgentError):
@@ -1698,8 +1698,6 @@ async def retry_drive_upload(
     On success, clears resume_json from the DB row.
     """
     import json as _json
-
-    from fastapi.responses import JSONResponse
 
     from app.shared.google_drive import convert_docx_to_pdf_bytes, upload_or_update_file
     from app.shared.resume_docx import build_docx_bytes
@@ -1880,7 +1878,7 @@ async def bulk_generate_resumes(
             SELECT jp.id FROM job_postings jp
             JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             WHERE jp.id IN ({placeholders})
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     owned_ids = [r[0] for r in owned.fetchall()]
@@ -2026,7 +2024,7 @@ async def google_oauth_callback(
     try:
         token_data = await exchange_code(code)
     except Exception as exc:
-        raise HTTPException(400, f"Google token exchange failed: {exc}")
+        raise HTTPException(400, f"Google token exchange failed: {exc}") from exc
 
     expiry = token_expiry_iso(token_data.get("expires_in", 3600))
 
@@ -2191,7 +2189,7 @@ async def upload_resume_to_drive(
             "upload_resume_to_drive: Drive upload failed — user_id=%d job_id=%d: %s",
             current_user.id, job_id, exc, exc_info=True,
         )
-        raise HTTPException(502, f"Google Drive upload failed: {exc}")
+        raise HTTPException(502, f"Google Drive upload failed: {exc}") from exc
 
     # Persist refreshed tokens if they were rotated
     if new_token_data:

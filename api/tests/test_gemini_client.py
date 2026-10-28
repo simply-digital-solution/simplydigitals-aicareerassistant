@@ -313,7 +313,7 @@ def test_get_llm_client_returns_gemini_when_key_is_set():
 @pytest.mark.asyncio
 async def test_gemini_call_falls_back_to_secondary_model_on_503():
     """When primary model returns 503, _call() retries with the fallback model."""
-    from app.shared.api_client import GEMINI_BASE_URL, GeminiClient
+    from app.shared.api_client import GeminiClient
 
     urls_called = []
 

@@ -4,17 +4,17 @@ sql_compat.py — PostgreSQL SQL helpers.
 Date arithmetic helpers kept here so callers don't need to inline
 datetime math. All SQL is PostgreSQL-only.
 """
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 
 def now_utc() -> datetime:
     """Current UTC datetime — use for all SQL TIMESTAMP bind parameters."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def today_utc() -> date:
     """Current UTC date — use for all SQL DATE bind parameters."""
-    return datetime.now(timezone.utc).date()
+    return datetime.now(UTC).date()
 
 
 def days_ago(n: int) -> datetime:
@@ -28,4 +28,4 @@ def months_ago(n: int) -> datetime:
     while month <= 0:
         month += 12
         year -= 1
-    return datetime(year, month, 1, tzinfo=timezone.utc)
+    return datetime(year, month, 1, tzinfo=UTC)

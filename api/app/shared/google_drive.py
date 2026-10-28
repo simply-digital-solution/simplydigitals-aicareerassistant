@@ -17,8 +17,7 @@ Upload flow:
 from __future__ import annotations
 
 import urllib.parse
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -103,21 +102,21 @@ async def refresh_access_token(refresh_token: str) -> dict:
 
 def token_expiry_iso(expires_in: int) -> str:
     """Convert expires_in seconds to an ISO-8601 UTC string."""
-    expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in - 60)
+    expiry = datetime.now(UTC) + timedelta(seconds=expires_in - 60)
     return expiry.isoformat()
 
 
-def is_token_expired(expiry_iso: Optional[str]) -> bool:
+def is_token_expired(expiry_iso: str | None) -> bool:
     if not expiry_iso:
         return True
     try:
         expiry = datetime.fromisoformat(expiry_iso)
-        return datetime.now(timezone.utc) >= expiry
+        return datetime.now(UTC) >= expiry
     except ValueError:
         return True
 
 
-async def _get_valid_access_token(access_token: str, refresh_token: str, expiry_iso: Optional[str]) -> tuple[str, Optional[dict]]:
+async def _get_valid_access_token(access_token: str, refresh_token: str, expiry_iso: str | None) -> tuple[str, dict | None]:
     """Return a valid access token, refreshing if necessary.
 
     Returns (token, new_token_data | None).
@@ -133,7 +132,7 @@ async def _get_valid_access_token(access_token: str, refresh_token: str, expiry_
     return data["access_token"], new_token_data
 
 
-async def _find_or_create_folder(client: httpx.AsyncClient, token: str, name: str, parent_id: Optional[str] = None) -> str:
+async def _find_or_create_folder(client: httpx.AsyncClient, token: str, name: str, parent_id: str | None = None) -> str:
     """Find a Drive folder by name (and optional parent), creating it if absent. Returns folder id."""
     q_parts = [f"name='{name}'", "mimeType='application/vnd.google-apps.folder'", "trashed=false"]
     if parent_id:
@@ -165,12 +164,12 @@ async def _find_or_create_folder(client: httpx.AsyncClient, token: str, name: st
 async def upload_or_update_file(
     access_token: str,
     refresh_token: str,
-    expiry_iso: Optional[str],
+    expiry_iso: str | None,
     folder_name: str,
     filename: str,
     file_bytes: bytes,
-    existing_file_id: Optional[str] = None,
-) -> tuple[str, str, Optional[dict]]:
+    existing_file_id: str | None = None,
+) -> tuple[str, str, dict | None]:
     """Upload a file to Drive, creating or updating it.
 
     Folder structure: My Drive / AI Career Assistant / {folder_name} / {filename}
@@ -222,10 +221,10 @@ async def upload_or_update_file(
 async def convert_docx_to_pdf_bytes(
     access_token: str,
     refresh_token: str,
-    expiry_iso: Optional[str],
+    expiry_iso: str | None,
     docx_bytes: bytes,
     filename: str,
-) -> tuple[bytes, Optional[dict]]:
+) -> tuple[bytes, dict | None]:
     """Convert a .docx file to PDF bytes using the Drive API.
 
     Uploads docx as a Google Doc (Drive converts it), exports as PDF,
@@ -279,7 +278,7 @@ def _multipart_content_type() -> str:
     return f"multipart/related; boundary={_BOUNDARY}"
 
 
-def _build_multipart(filename: str, mime: str, file_bytes: bytes, metadata: Optional[dict] = None) -> bytes:
+def _build_multipart(filename: str, mime: str, file_bytes: bytes, metadata: dict | None = None) -> bytes:
     import json
     meta = metadata or {"name": filename}
     meta_json = json.dumps(meta).encode()

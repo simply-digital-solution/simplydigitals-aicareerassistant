@@ -1,0 +1,19 @@
+# Known dependency advisories accepted for now (Trivy ids; see also .pip-audit-ignore).
+# Every ID needs a '# <package>: <reason>' line directly above it; remove the entry when the follow-up lands.
+
+# cryptography: fix needs cryptography 50.x, pinned via python-jose; follow-up PR replacing python-jose with PyJWT
+CVE-2026-69247
+# langchain-core: fix needs langchain-core 1.x; follow-up PR 'langgraph/langchain majors'
+CVE-2026-34070
+# langgraph-checkpoint: fix needs langgraph-checkpoint 3.x+; follow-up PR 'langgraph/langchain majors'
+CVE-2025-64439
+# langgraph-sdk: fix needs langgraph-sdk 0.3+/0.4+; follow-up PR 'langgraph/langchain majors'
+CVE-2026-104873
+# lxml: fix needs lxml 6.x; follow-up PR once python-docx/pdfplumber constraints are checked
+CVE-2026-41066
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+CVE-2025-62727
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+CVE-2026-48818
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+CVE-2026-54283

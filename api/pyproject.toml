@@ -21,7 +21,7 @@ httpx = "^0.27"
 python-jose = {extras = ["cryptography"], version = "^3.3"}
 passlib = {extras = ["bcrypt"], version = "^1.7"}
 structlog = "^24.4"
-python-multipart = "^0.0.9"
+python-multipart = "^0.0.31"
 playwright = "^1.47"
 feedparser = "^6.0"
 pyyaml = "^6.0"
@@ -65,3 +65,14 @@ ignore = ["E501"]
 # out clean from migrations/script.py.mako.
 [tool.ruff.lint.per-file-ignores]
 "migrations/versions/*" = ["UP007", "UP035", "I001", "F401"]
+
+# FastAPI's parameter helpers are meant to be called in argument defaults.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Query",
+    "fastapi.Form",
+    "fastapi.Body",
+    "fastapi.Header",
+]

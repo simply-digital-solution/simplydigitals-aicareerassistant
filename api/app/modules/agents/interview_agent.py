@@ -5,8 +5,9 @@ Generates behavioural, technical, and STAR prep for a specific role.
 Input: profile dict + target job description.
 Output: InterviewOutput.
 """
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,7 +28,7 @@ def _build_user_message(
     profile: dict[str, Any],
     jd_text: str,
     company_name: str = "",
-    jd_summary: Optional[str] = None,
+    jd_summary: str | None = None,
 ) -> str:
     background = profile.get("background", {})
     targets = profile.get("targets", {})
@@ -58,12 +59,12 @@ def _build_user_message(
 async def run_interview_agent(
     profile: dict[str, Any],
     jd_text: str,
-    db: Optional[AsyncSession] = None,
-    user_id: Optional[int] = None,
-    application_id: Optional[int] = None,
+    db: AsyncSession | None = None,
+    user_id: int | None = None,
+    application_id: int | None = None,
     company_name: str = "",
-    jd_summary: Optional[str] = None,
-    stream_callback: Optional[callable] = None,
+    jd_summary: str | None = None,
+    stream_callback: Callable[..., Any] | None = None,
 ) -> tuple[InterviewOutput | AgentError, dict]:
     """
     Run the interview coach agent.

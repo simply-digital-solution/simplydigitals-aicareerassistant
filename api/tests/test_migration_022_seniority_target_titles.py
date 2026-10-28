@@ -3,8 +3,6 @@ import importlib.util
 import pathlib
 from unittest.mock import MagicMock, patch
 
-import sqlalchemy as sa
-
 
 def _load_migration():
     path = (

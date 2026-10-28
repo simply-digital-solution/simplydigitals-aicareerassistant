@@ -9,7 +9,6 @@ Human gates are handled outside the graph in Phase 0
 Phase 1 will add parallel fan-out, ask_user gates, and orchestrator routing.
 """
 import uuid
-from typing import Any, Optional
 
 from langgraph.graph import END, StateGraph
 
@@ -127,8 +126,8 @@ def get_graph():
 
 async def run_session(
     user_id: int,
-    job_postings: Optional[list[dict]] = None,
-    job_description: Optional[str] = None,
+    job_postings: list[dict] | None = None,
+    job_description: str | None = None,
     trigger: str = "manual",
 ) -> GraphState:
     """Entry point for triggering a graph session."""

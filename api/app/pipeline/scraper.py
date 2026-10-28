@@ -19,9 +19,8 @@ import asyncio
 import json
 import logging
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 import feedparser
 import httpx
@@ -114,12 +113,12 @@ RSS_FEEDS = {
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _save_raw(jobs: list[dict], source: str) -> Path:
     """Save raw scraped jobs to data/jobs_raw/ for audit trail."""
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     path = DATA_DIR / f"{source}_{ts}.json"
     path.write_text(json.dumps(jobs, indent=2, default=str), encoding="utf-8")
     return path
@@ -582,7 +581,7 @@ async def scrape_remotive(query: str, max_results: int = 15) -> list[dict]:
 async def search_jobs(
     query: str,
     location: str = "Remote",
-    sources: Optional[list[str]] = None,
+    sources: list[str] | None = None,
     max_per_source: int = 10,
     keyword_filter: str = "",
 ) -> list[dict]:

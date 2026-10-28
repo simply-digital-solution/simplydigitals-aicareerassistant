@@ -74,8 +74,8 @@ export default function ResumeSection({
         setDirty(false)
         onSaved()
         await runExtraction()
-      } catch (err: any) {
-        const detail = err?.response?.data?.detail
+      } catch (err: unknown) {
+        const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
         setUploadError((detail ?? 'Server could not parse the file.') + ' Try a different file or paste text instead.')
       }
     }

@@ -234,7 +234,6 @@ async def test_suspend_user_not_found(app):
 async def test_activate_user(app):
     from unittest.mock import patch
 
-    from app.pipeline.suspension import reactivate_user
 
     app.dependency_overrides[get_db] = _db_override([])
     try:

@@ -13,7 +13,6 @@ Execute call sequence (success path, user_id provided):
   [8] UPDATE job_postings inferred_industries (params: ind, id)
   [9] _increment_scorings_today INSERT
 """
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

@@ -8,7 +8,6 @@ Verifies that:
 - log_path resolves to /var/log/aicareer in prod-like envs, falls back to api/logs in dev
 """
 import json
-import logging
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -110,7 +109,6 @@ async def test_log_event_no_plain_open_call():
 
 def test_logs_dir_falls_back_to_dev_when_var_log_not_writable(tmp_path, monkeypatch):
     """If /var/log is not writable, _LOGS_DIR should be the api/logs directory."""
-    import importlib
 
     import app.shared.logger as logger_mod
 

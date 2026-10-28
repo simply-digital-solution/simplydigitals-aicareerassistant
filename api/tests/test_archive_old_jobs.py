@@ -1,6 +1,7 @@
 """
 Unit tests for archive_old_job_postings() in job_cleanup.py.
 """
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -86,27 +87,27 @@ async def test_excludes_jobs_with_applications():
 
 @pytest.mark.asyncio
 async def test_cutoff_uses_days_parameter():
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from app.pipeline.job_cleanup import archive_old_job_postings
     db = _make_db()
     await archive_old_job_postings(db, days=7)
     params = db.execute.call_args[0][1]
     assert "cutoff" in params
-    expected = datetime.now(timezone.utc) - timedelta(days=7)
+    expected = datetime.now(UTC) - timedelta(days=7)
     assert abs((params["cutoff"] - expected).total_seconds()) < 5
 
 
 @pytest.mark.asyncio
 async def test_default_days_is_14():
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from app.pipeline.job_cleanup import ARCHIVE_POSTING_DAYS, archive_old_job_postings
     assert ARCHIVE_POSTING_DAYS == 14
     db = _make_db()
     await archive_old_job_postings(db)
     params = db.execute.call_args[0][1]
-    expected = datetime.now(timezone.utc) - timedelta(days=14)
+    expected = datetime.now(UTC) - timedelta(days=14)
     assert abs((params["cutoff"] - expected).total_seconds()) < 5
 
 

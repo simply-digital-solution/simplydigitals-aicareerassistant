@@ -9,8 +9,6 @@ Gap analysis: required_skills vs profile.skills → have / missing.
 """
 import json
 import re
-from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession

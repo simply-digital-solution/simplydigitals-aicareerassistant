@@ -99,7 +99,7 @@ async def get_dashboard_stats(
     )
 
     # 5. Jobs called for interview per month (last 3 months)
-    r5 = await db.execute(text(f"""
+    r5 = await db.execute(text("""
         SELECT TO_CHAR(status_updated_at, 'YYYY-MM') AS month, count(*) AS count
         FROM applications
         WHERE user_id = :uid AND status = 'interviewing'

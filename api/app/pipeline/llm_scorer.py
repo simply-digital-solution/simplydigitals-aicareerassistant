@@ -9,7 +9,6 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -205,7 +204,7 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
               )
             ORDER BY (ujp.scoring_status = 'in_progress') DESC, jp.posted_at DESC, jp.scraped_at DESC
             LIMIT 1
-        """),
+        """),  # nosec B608 - interpolates int()-cast settings values, no user input
         {},
     )
     job_rows = rows.mappings().all()
@@ -542,7 +541,7 @@ async def run_scorer_loop(get_db_fn, shutdown_event: asyncio.Event) -> None:
         # Interruptible sleep: wakes immediately if shutdown is signalled
         try:
             await asyncio.wait_for(shutdown_event.wait(), timeout=sleep_secs)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
     logger.info("llm_scorer: shutdown signal received — loop exiting cleanly")

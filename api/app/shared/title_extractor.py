@@ -12,10 +12,8 @@ Key prompt rules:
 - Never infer functional ownership titles (Market Risk Manager, Risk Manager, Regulatory Reporting Manager)
   unless the resume explicitly shows the person owned the P&L or business function, not just the technology
 """
-import asyncio
 import json
 import re
-from typing import Optional
 
 _TOP_N = 5
 
@@ -140,7 +138,6 @@ _DEFAULT_FALLBACK = ["Technology Lead", "Engineering Manager"]
 
 
 def _heuristic_extract(resume_text: str, top_n: int) -> list[str]:
-    tech_score = len(_TECH_SIGNALS.findall(resume_text))
     results: list[str] = []
     seen: set[str] = set()
 

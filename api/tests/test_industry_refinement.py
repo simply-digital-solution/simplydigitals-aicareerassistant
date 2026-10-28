@@ -80,7 +80,6 @@ async def test_extract_resume_details_free_form_when_no_labels():
 # industry_refinement — refine_user_industries
 # ---------------------------------------------------------------------------
 
-from contextlib import asynccontextmanager
 
 
 def _make_db(profile_industries, job_labels):

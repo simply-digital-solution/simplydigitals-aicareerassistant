@@ -12,7 +12,7 @@ segment of `url`, so each job's URL must end in a stable, unique id.
 import html
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 import httpx
@@ -47,7 +47,7 @@ def detect_ats_platform(url: str) -> str | None:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _parse_workday_posted_on(posted_on: str) -> str | None:
@@ -68,7 +68,7 @@ def _parse_workday_posted_on(posted_on: str) -> str | None:
         days_ago = int(match.group(1))
 
     from datetime import timedelta
-    posted_date = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    posted_date = datetime.now(UTC) - timedelta(days=days_ago)
     return posted_date.date().isoformat()
 
 
