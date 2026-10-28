@@ -122,7 +122,6 @@ class GeneratedResume(Base):
     resume_json      = Column(Text, nullable=False)
     drive_file_id    = Column(Text)
     drive_link       = Column(Text)
-    drive_pdf_file_id = Column(Text)
     created_at       = Column(DateTime(timezone=True), default=_now)
     updated_at       = Column(DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -135,7 +134,7 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # NULL for system runs (e.g. industry_backfill)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True)
     agent_name = Column(String(100), nullable=False)
     reasoning_pattern = Column(String(50))  # react | plan_execute | reflexion | workflow
