@@ -575,6 +575,50 @@ describe('LatestJobs — pagination', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Selection is cleared when the page or filters change
+// ---------------------------------------------------------------------------
+
+describe('LatestJobs — selection is cleared when the view changes', () => {
+  it('keeps the selection while the view is unchanged', async () => {
+    setupApiMocks([makeJob()], 25)
+    wrap()
+
+    fireEvent.click(await screen.findByLabelText('Select Data Engineer'))
+
+    expect(await screen.findByText('1 job selected')).toBeInTheDocument()
+  })
+
+  it('clears the selection when moving to another page', async () => {
+    setupApiMocks([makeJob()], 25)
+    wrap()
+
+    fireEvent.click(await screen.findByLabelText('Select Data Engineer'))
+    expect(await screen.findByText('1 job selected')).toBeInTheDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: /next →/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByText('1 job selected')).not.toBeInTheDocument()
+    })
+  })
+
+  it('clears the selection when the date filter changes', async () => {
+    setupApiMocks([makeJob()], 25)
+    wrap()
+
+    fireEvent.click(await screen.findByLabelText('Select Data Engineer'))
+    expect(await screen.findByText('1 job selected')).toBeInTheDocument()
+
+    const dateFilter = await screen.findByRole('combobox', { name: /filter stored jobs by date/i })
+    fireEvent.change(dateFilter, { target: { value: '7' } })
+
+    await waitFor(() => {
+      expect(screen.queryByText('1 job selected')).not.toBeInTheDocument()
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Refresh button
 // ---------------------------------------------------------------------------
 
