@@ -1,16 +1,17 @@
 import asyncio
+import os
+import sys
 from logging.config import fileConfig
+
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from alembic import context
-import sys
-import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.shared.database import Base
 import app.shared.models  # noqa: F401 — registers all ORM models
+from app.shared.database import Base
 
 config = context.config
 if config.config_file_name is not None:

@@ -1,0 +1,4 @@
+{
+  "extends": "./api/pyrightconfig.json",
+  "venvPath": "api"
+}
