@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.api_client import get_llm_client, get_scorer_client
+from app.shared.prompts import load_prompt
 from app.shared.schemas import AgentError, ResearchOutput
 
 PROMPT_FILE = Path(__file__).parents[3] / "prompts" / "research.md"
@@ -19,7 +20,7 @@ AGENT_NAME = "research"
 
 
 def _load_system_prompt() -> str:
-    return PROMPT_FILE.read_text(encoding="utf-8")
+    return load_prompt(PROMPT_FILE)
 
 
 DESC_SNIPPET_CHARS = 300  # fallback for non-MCF sources that return prose descriptions
