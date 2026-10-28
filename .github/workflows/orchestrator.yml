@@ -192,6 +192,32 @@ jobs:
     secrets:
       PROD_API_URL: ${{ secrets.PROD_API_URL }}
 
+  # ── CI Gate (the one check branch protection requires) ───────────────────
+  # A pipeline skipped because nothing under its paths changed is fine; one that
+  # ran and failed (or was cancelled) blocks the merge. Requiring this single
+  # check avoids requiring per-job names that never report when a pipeline is skipped.
+  ci-gate:
+    name: CI Gate
+    needs: [detect, api, ui]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every pipeline that ran to pass
+        env:
+          DETECT: ${{ needs.detect.result }}
+          API:    ${{ needs.api.result }}
+          UI:     ${{ needs.ui.result }}
+        run: |
+          echo "detect=$DETECT api=$API ui=$UI"
+          [ "$DETECT" = "success" ] || { echo "❌ change detection did not succeed"; exit 1; }
+          for r in "$API" "$UI"; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "❌ a pipeline finished as '$r'"; exit 1 ;;
+            esac
+          done
+          echo "✅ all pipelines that ran passed"
+
   # ── PR Quality Gate Summary ──────────────────────────────────────────────
   summary:
     name: PR Summary

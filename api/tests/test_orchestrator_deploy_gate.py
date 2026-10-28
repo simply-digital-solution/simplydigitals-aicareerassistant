@@ -75,3 +75,22 @@ def test_lint_runs_on_pull_requests_and_branch_pushes_but_not_main(jobs, job):
     assert "github.event_name == 'pull_request'" in expr
     assert "github.event_name == 'push'" in expr
     assert "github.ref != 'refs/heads/main'" in expr
+
+
+# ── CI Gate: the single check branch protection requires ──
+
+
+def test_ci_gate_waits_for_detect_and_both_pipelines_on_pull_requests(jobs):
+    gate = jobs["ci-gate"]
+    assert gate["name"] == "CI Gate"
+    assert set(gate["needs"]) == {"detect", "api", "ui"}
+    assert "always()" in gate["if"]
+    assert "github.event_name == 'pull_request'" in gate["if"]
+
+
+def test_ci_gate_fails_on_failure_or_cancel_but_accepts_skipped(jobs):
+    script = jobs["ci-gate"]["steps"][0]["run"]
+    env = jobs["ci-gate"]["steps"][0]["env"]
+    assert set(env) == {"DETECT", "API", "UI"}
+    assert "success|skipped) ;;" in script
+    assert "*) echo" in script and "exit 1" in script
