@@ -121,3 +121,30 @@ async def test_success_leaves_failures_list_empty():
     await scrape_mycareersfuture("PM", failures=failures)
 
     assert failures == []
+
+
+def test_read_timeout_outlasts_mcf_cold_query_latency():
+    """MCF took 12-16 s to answer an uncached search; a 15 s read limit abandoned those requests."""
+    from app.pipeline.scraper import _MCF_TIMEOUT
+
+    assert _MCF_TIMEOUT.read >= 45.0
+    assert _MCF_TIMEOUT.connect <= 10.0  # a hang at connection time should still fail fast
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_request_uses_the_mcf_timeout():
+    from app.pipeline.scraper import _MCF_TIMEOUT
+
+    respx.get(_MCF_BASE).mock(return_value=httpx.Response(200, json=_ONE_JOB))
+    real_client = httpx.AsyncClient
+    seen = {}
+
+    def _spy(*args, **kwargs):
+        seen["timeout"] = kwargs.get("timeout")
+        return real_client(*args, **kwargs)
+
+    with patch("app.pipeline.scraper.httpx.AsyncClient", _spy):
+        await scrape_mycareersfuture("PM")
+
+    assert seen["timeout"] is _MCF_TIMEOUT
