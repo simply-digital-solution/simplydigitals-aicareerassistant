@@ -74,3 +74,16 @@ def test_multiple_efc_locations_parsed_into_set(client):
 
     assert resp.status_code == 200
     assert mock_scrape.call_args.kwargs["efc_locations"] == {"singapore", "uae"}
+
+
+def test_response_includes_mcf_query_stats(client):
+    async def _fake_scrape(user_id, db, sources=None, efc_locations=None, stats=None):
+        stats["mcf_queries_attempted"] = 10
+        stats["mcf_queries_failed"] = 8
+        return 0
+
+    with patch("app.pipeline.daily_scrape.scrape_for_user", _fake_scrape):
+        resp = client.post("/api/v1/research/scrape?sources=mycareersfuture")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"inserted": 0, "mcf_queries_attempted": 10, "mcf_queries_failed": 8}

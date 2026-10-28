@@ -18,7 +18,9 @@ Playwright ATS scrapers (Workday, Greenhouse, Lever) are Phase 1.
 import asyncio
 import json
 import logging
+import socket
 import tempfile
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -273,16 +275,77 @@ _MCF_BASE = "https://api.mycareersfuture.gov.sg/v2/jobs"
 _MCF_JOB_URL = "https://www.mycareersfuture.gov.sg/job"
 
 
-async def scrape_mycareersfuture(query: str, max_results: int = 20) -> list[dict]:
+# Separate connect/read limits so a hang at connection time is labelled as such and fails fast.
+_MCF_TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)
+_MCF_ATTEMPTS = 3
+_MCF_RETRY_BACKOFF_SECONDS = (2.0, 5.0)  # sleep before attempt 2 and 3
+
+
+def _is_transient(exc: Exception) -> bool:
+    """Network-level failures and 429/5xx are worth retrying; other 4xx are not."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return isinstance(exc, httpx.TransportError)
+
+
+async def _resolved_ips(url: str) -> list[str]:
+    """Best-effort DNS lookup for diagnostics; the host rotates through many addresses."""
+    host = httpx.URL(url).host
+    try:
+        infos = await asyncio.wait_for(
+            asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM), timeout=3.0
+        )
+        return sorted({info[4][0] for info in infos})
+    except Exception as exc:
+        return [f"lookup failed: {type(exc).__name__}"]
+
+
+async def _get_json_with_retry(url: str, params: dict, label: str) -> dict:
+    """
+    GET `url` and return the parsed JSON, retrying transient failures with backoff.
+    Every failed attempt is logged with the exception type, elapsed time and the
+    addresses the host currently resolves to. Raises the last exception once the
+    attempts are exhausted or the failure is not transient.
+    """
+    for attempt in range(1, _MCF_ATTEMPTS + 1):
+        started = time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=_MCF_TIMEOUT) as client:
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                return resp.json()
+        except Exception as exc:
+            elapsed = time.monotonic() - started
+            will_retry = attempt < _MCF_ATTEMPTS and _is_transient(exc)
+            logger.warning(
+                "%s: attempt %d/%d failed after %.2fs: %s(%r); resolved_ips=%s%s",
+                label, attempt, _MCF_ATTEMPTS, elapsed, type(exc).__name__, str(exc),
+                await _resolved_ips(url), " — retrying" if will_retry else "",
+            )
+            if not will_retry:
+                raise
+            await asyncio.sleep(_MCF_RETRY_BACKOFF_SECONDS[attempt - 1])
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
+async def scrape_mycareersfuture(
+    query: str, max_results: int = 20, failures: list[str] | None = None
+) -> list[dict]:
+    """
+    Fetch MCF jobs for `query`. Returns [] on failure; callers that need to tell a
+    failed query from one with no results pass a `failures` list, which receives a
+    "<ExceptionType>" entry when the request ultimately failed.
+    """
     params = {"search": query, "limit": min(max_results, 100)}
     logger.info("MCF: GET %s params=%s", _MCF_BASE, params)
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(_MCF_BASE, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await _get_json_with_retry(_MCF_BASE, params, label=f"MCF query={query!r}")
     except Exception as e:
-        logger.error("PIPELINE_ERROR: MCF request failed for query=%r: %s", query, e)
+        logger.error(
+            "PIPELINE_ERROR: MCF request failed for query=%r: %s(%r)", query, type(e).__name__, str(e)
+        )
+        if failures is not None:
+            failures.append(type(e).__name__)
         return []
 
     total_available = data.get("total", "unknown")
