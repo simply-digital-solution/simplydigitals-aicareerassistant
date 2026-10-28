@@ -1,7 +1,7 @@
 # Known dependency advisories accepted for now (Trivy ids; see also .pip-audit-ignore).
 # Every ID needs a '# <package>: <reason>' line directly above it; remove the entry when the follow-up lands.
 
-# cryptography: fix needs cryptography 50.x, pinned via python-jose; follow-up PR replacing python-jose with PyJWT
+# cryptography: fix needs cryptography 50.x; pulled in by pdfminer-six (pdfplumber); follow-up PR upgrading cryptography
 CVE-2026-69247
 # langchain-core: fix needs langchain-core 1.x; follow-up PR 'langgraph/langchain majors'
 CVE-2026-34070

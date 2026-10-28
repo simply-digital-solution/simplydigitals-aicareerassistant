@@ -15,10 +15,8 @@ PYSEC-2026-1942
 PYSEC-2026-2280
 # starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
 PYSEC-2026-2281
-# cryptography: fix needs cryptography 50.x, pinned via python-jose; follow-up PR replacing python-jose with PyJWT
+# cryptography: fix needs cryptography 50.x; pulled in by pdfminer-six (pdfplumber); follow-up PR upgrading cryptography
 PYSEC-2026-3552
-# ecdsa: no fixed release exists (dependency of python-jose); removed with python-jose
-PYSEC-2026-1325
 # langchain-core: fix needs langchain-core 1.x; follow-up PR 'langgraph/langchain majors'
 PYSEC-2026-2193
 # langchain-core: fix needs langchain-core 1.x; follow-up PR 'langgraph/langchain majors'
@@ -39,5 +37,3 @@ PYSEC-2026-4240
 PYSEC-2026-83
 # lxml: fix needs lxml 6.x; follow-up PR once python-docx/pdfplumber constraints are checked
 PYSEC-2026-87
-# python-jose: no fixed release exists; follow-up PR replacing python-jose with PyJWT
-PYSEC-2026-4298
