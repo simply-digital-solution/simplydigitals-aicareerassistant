@@ -276,7 +276,9 @@ _MCF_JOB_URL = "https://www.mycareersfuture.gov.sg/job"
 
 
 # Separate connect/read limits so a hang at connection time is labelled as such and fails fast.
-_MCF_TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)
+# MCF answers an uncached search slowly (12-16 s measured) and then serves it from cache in
+# well under a second, so the read limit must be well above the cold-query latency.
+_MCF_TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
 _MCF_ATTEMPTS = 3
 _MCF_RETRY_BACKOFF_SECONDS = (2.0, 5.0)  # sleep before attempt 2 and 3
 
