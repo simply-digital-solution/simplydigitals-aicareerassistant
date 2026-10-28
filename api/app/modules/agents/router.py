@@ -27,10 +27,6 @@ import json
 import logging
 from typing import Any
 
-from app.shared.sql_compat import now_utc
-
-logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -47,6 +43,9 @@ from app.pipeline.graph import run_session
 from app.shared.config import get_settings
 from app.shared.database import get_db
 from app.shared.schemas import AgentError
+from app.shared.sql_compat import now_utc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["agents"])
 
@@ -1463,10 +1462,14 @@ class GenerateResumeRequest(BaseModel):
     additional_context: str = ""
 
 
+# Shared read-only default so the endpoint signature needs no call in its default.
+_DEFAULT_GENERATE_RESUME_REQUEST = GenerateResumeRequest()
+
+
 @router.post("/research/jobs/{job_id}/generate-resume")
 async def generate_resume(
     job_id: int,
-    body: GenerateResumeRequest = GenerateResumeRequest(),
+    body: GenerateResumeRequest = _DEFAULT_GENERATE_RESUME_REQUEST,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1543,7 +1546,7 @@ async def generate_resume(
         )
     except _httpx.HTTPStatusError as exc:
         if exc.response.status_code == 503:
-            raise HTTPException(503, "AI service is temporarily unavailable. Please try again in a few minutes.")
+            raise HTTPException(503, "AI service is temporarily unavailable. Please try again in a few minutes.") from exc
         raise
 
     if isinstance(result, AgentError):
@@ -2021,7 +2024,7 @@ async def google_oauth_callback(
     try:
         token_data = await exchange_code(code)
     except Exception as exc:
-        raise HTTPException(400, f"Google token exchange failed: {exc}")
+        raise HTTPException(400, f"Google token exchange failed: {exc}") from exc
 
     expiry = token_expiry_iso(token_data.get("expires_in", 3600))
 
@@ -2186,7 +2189,7 @@ async def upload_resume_to_drive(
             "upload_resume_to_drive: Drive upload failed — user_id=%d job_id=%d: %s",
             current_user.id, job_id, exc, exc_info=True,
         )
-        raise HTTPException(502, f"Google Drive upload failed: {exc}")
+        raise HTTPException(502, f"Google Drive upload failed: {exc}") from exc
 
     # Persist refreshed tokens if they were rotated
     if new_token_data:

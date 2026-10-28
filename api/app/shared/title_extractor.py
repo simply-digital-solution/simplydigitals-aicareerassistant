@@ -138,7 +138,6 @@ _DEFAULT_FALLBACK = ["Technology Lead", "Engineering Manager"]
 
 
 def _heuristic_extract(resume_text: str, top_n: int) -> list[str]:
-    tech_score = len(_TECH_SIGNALS.findall(resume_text))
     results: list[str] = []
     seen: set[str] = set()
 

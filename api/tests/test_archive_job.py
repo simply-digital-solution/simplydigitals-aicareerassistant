@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from app.modules.agents.router import archive_job
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -35,12 +37,6 @@ def _db_with_job_then_update():
     db.execute.return_value = select_result
     return db
 
-
-# ---------------------------------------------------------------------------
-# Import the function under test
-# ---------------------------------------------------------------------------
-
-from app.modules.agents.router import archive_job
 
 # ---------------------------------------------------------------------------
 # Tests

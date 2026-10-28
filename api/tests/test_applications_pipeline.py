@@ -299,7 +299,7 @@ async def test_create_backfills_job_description_from_posting():
             company_name="Acme", role_title="Engineer",
             job_posting_id=7, status="selected",
         )
-        result = await create_application(body=body, current_user=_make_user(), db=db)
+        await create_application(body=body, current_user=_make_user(), db=db)
 
     assert created_app.job_description == "JD from posting"
 

@@ -55,7 +55,7 @@ _INDUSTRY_RULE_CONSTRAINED = (
 
 def _build_system_prompt(job_industry_labels: list[str]) -> str:
     if job_industry_labels:
-        labels = ", ".join(f'"{l}"' for l in job_industry_labels)
+        labels = ", ".join(f'"{label}"' for label in job_industry_labels)
         industry_rule = _INDUSTRY_RULE_CONSTRAINED.format(labels=labels)
     else:
         industry_rule = _INDUSTRY_RULE_FREE
@@ -97,7 +97,7 @@ def _parse_response(raw: str) -> dict:
     result = _empty_result()
 
     yoe = data.get("years_experience")
-    if isinstance(yoe, (int, float)) and yoe >= 0:
+    if isinstance(yoe, int | float) and yoe >= 0:
         result["years_experience"] = int(yoe)
 
     seniority = str(data.get("seniority_level", "")).strip().lower()

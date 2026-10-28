@@ -196,9 +196,6 @@ async def test_scores_exactly_one_job_per_call():
     row = _make_job_row(job_id=1)
     db  = _db_with_batch([row])
 
-    opp    = _make_opportunity(job_id=1, fit_score=0.78)
-    result = _make_research_result([opp])
-
     captured: dict = {}
 
     async def fake_agent(profile, job_postings, **kwargs):

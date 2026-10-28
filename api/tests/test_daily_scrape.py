@@ -8,7 +8,9 @@ Per-job execute() call sequence (after profile select):
   1. INSERT INTO job_postings ... ON CONFLICT ... RETURNING id → .fetchone() returns (id,)
   2. INSERT INTO user_job_postings ... ON CONFLICT DO NOTHING RETURNING id → .fetchone() returns (id,) or None
 """
+import asyncio as _asyncio
 import json
+from contextlib import asynccontextmanager
 from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -596,9 +598,6 @@ async def test_source_not_overwritten_in_conflict_update_clause():
 # Helpers for scrape_for_all_users (get_db_context-based)
 # ---------------------------------------------------------------------------
 
-from contextlib import asynccontextmanager
-
-
 def _make_get_db_context(user_ids: list[int]):
     """Returns a get_db_context that yields a fresh AsyncMock each call."""
     call_count = 0
@@ -794,8 +793,6 @@ async def test_industry_backfill_failure_does_not_abort_scrape():
 # ---------------------------------------------------------------------------
 # Graceful shutdown — scrape_for_all_users stops between users
 # ---------------------------------------------------------------------------
-
-import asyncio as _asyncio
 
 
 @pytest.mark.asyncio

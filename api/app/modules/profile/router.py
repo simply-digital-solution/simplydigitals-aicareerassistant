@@ -147,7 +147,7 @@ async def parse_resume_file(
         try:
             text = _extract_text_from_pdf(content)
         except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Could not parse PDF: {e}")
+            raise HTTPException(status_code=422, detail=f"Could not parse PDF: {e}") from e
         obj = base64.b64encode(content).decode("ascii")
         mime = "application/pdf"
 
@@ -155,7 +155,7 @@ async def parse_resume_file(
         try:
             text = _extract_text_from_docx(content)
         except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Could not parse DOCX: {e}")
+            raise HTTPException(status_code=422, detail=f"Could not parse DOCX: {e}") from e
         obj = base64.b64encode(content).decode("ascii")
         mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
