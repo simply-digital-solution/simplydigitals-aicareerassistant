@@ -54,12 +54,18 @@ jobs:
               - 'api/**'
               - '!api/**.md'
               - 'prompts/**'
+              - '.github/workflows/api-ci.yml'
+              - '.github/workflows/orchestrator.yml'
             ui:
               - 'ui/**'
               - '!ui/**.md'
+              - '.github/workflows/ui-ci.yml'
+              - '.github/workflows/orchestrator.yml'
             website:
               - 'website/**'
               - '!website/setup-aws.sh'
+              - '.github/workflows/website-ci.yml'
+              - '.github/workflows/orchestrator.yml'
 
   # ── Validate required secrets (runs on pull request only) ────────────────
   validate-secrets:
