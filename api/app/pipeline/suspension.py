@@ -63,7 +63,7 @@ async def suspend_inactive_users(db: AsyncSession) -> list[int]:
     if to_suspend:
         placeholders = ",".join(str(uid) for uid in to_suspend)
         await db.execute(
-            text(f"UPDATE users SET scoring_suspended = true WHERE id IN ({placeholders})")
+            text(f"UPDATE users SET scoring_suspended = true WHERE id IN ({placeholders})")  # nosec B608 - interpolates DB-sourced integer user IDs, no user input
         )
         await db.commit()
         logger.info("suspension: suspended %d user(s): %s", len(to_suspend), to_suspend)

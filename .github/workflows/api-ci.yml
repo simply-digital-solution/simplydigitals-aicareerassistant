@@ -102,6 +102,11 @@ jobs:
       - name: Install dependencies
         run: pip install poetry && poetry install --with dev
 
+      # Some tests query real tables, and the service database starts empty.
+      # Running every migration also proves the chain builds from scratch.
+      - name: Apply migrations
+        run: poetry run python -m alembic upgrade head
+
       - name: Run pytest with coverage
         run: |
           poetry run pytest tests/ \
@@ -136,7 +141,7 @@ jobs:
           cache-dependency-path: api/pyproject.toml
 
       - name: Install dependencies
-        run: pip install poetry bandit pip-audit && poetry install
+        run: pip install poetry poetry-plugin-export bandit pip-audit && poetry install
 
       - name: Bandit SAST
         run: |
@@ -145,17 +150,20 @@ jobs:
 
       - name: pip-audit CVE scan
         run: |
-          poetry export --without dev --without-hashes -f requirements.txt | \
-            pip-audit -r /dev/stdin --desc
+          # Accepted advisories live in api/.pip-audit-ignore (reason required per ID).
+          IGNORES=$(grep -vE '^\s*(#|$)' .pip-audit-ignore | sed 's/^/--ignore-vuln /' | tr '\n' ' ')
+          poetry export --without dev --without-hashes -f requirements.txt -o requirements-audit.txt
+          pip-audit -r requirements-audit.txt --no-deps --disable-pip --desc $IGNORES
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: api
           severity: HIGH,CRITICAL
           exit-code: 1
           ignore-unfixed: true
+          trivyignores: api/.trivyignore
           format: table
 
       - uses: actions/upload-artifact@v4

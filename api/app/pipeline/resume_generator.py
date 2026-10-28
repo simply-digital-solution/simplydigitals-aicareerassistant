@@ -49,7 +49,7 @@ async def generate_resumes_for_jobs(
             FROM job_postings jp
             JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id
             WHERE jp.id IN ({placeholders}) AND ujp.user_id = :uid
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         {"uid": user_id, **params},
     )
     job_map = {r["id"]: r["description"] or "" for r in rows.mappings().all()}

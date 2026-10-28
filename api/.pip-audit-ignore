@@ -1,0 +1,43 @@
+# Known dependency advisories accepted for now (read by .github/workflows/api-ci.yml).
+# Every ID needs a '# <package>: <reason>' line directly above it; remove the entry when the follow-up lands.
+
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+PYSEC-2026-161
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+PYSEC-2026-248
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+PYSEC-2026-249
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+PYSEC-2026-1941
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+PYSEC-2026-1942
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+PYSEC-2026-2280
+# starlette: needs Starlette 1.x, which needs a FastAPI major upgrade; follow-up PR 'FastAPI + Starlette'
+PYSEC-2026-2281
+# cryptography: fix needs cryptography 50.x, pinned via python-jose; follow-up PR replacing python-jose with PyJWT
+PYSEC-2026-3552
+# ecdsa: no fixed release exists (dependency of python-jose); removed with python-jose
+PYSEC-2026-1325
+# langchain-core: fix needs langchain-core 1.x; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-2193
+# langchain-core: fix needs langchain-core 1.x; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-2562
+# langgraph-checkpoint: fix needs langgraph-checkpoint 3.x+; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-1527
+# langgraph-checkpoint: fix needs langgraph-checkpoint 3.x+; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-2573
+# langgraph-checkpoint: fix needs langgraph-checkpoint 3.x+; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-2574
+# langgraph-sdk: fix needs langgraph-sdk 0.3+/0.4+; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-2194
+# langgraph-sdk: fix needs langgraph-sdk 0.3+/0.4+; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-2575
+# langgraph-sdk: fix needs langgraph-sdk 0.3+/0.4+; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-4240
+# langgraph: fix needs langgraph 1.x; follow-up PR 'langgraph/langchain majors'
+PYSEC-2026-83
+# lxml: fix needs lxml 6.x; follow-up PR once python-docx/pdfplumber constraints are checked
+PYSEC-2026-87
+# python-jose: no fixed release exists; follow-up PR replacing python-jose with PyJWT
+PYSEC-2026-4298

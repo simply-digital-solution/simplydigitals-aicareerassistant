@@ -1173,7 +1173,7 @@ async def get_stored_jobs(
     if target_industries:
         ind_placeholders = ",".join(f":ind{i}" for i in range(len(target_industries)))
         ujp_where.append(
-            f"(jp.inferred_industries = '[]' OR jp.inferred_industries IS NULL OR "
+            f"(jp.inferred_industries = '[]' OR jp.inferred_industries IS NULL OR "  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
             f"EXISTS (SELECT 1 FROM json_array_elements_text(jp.inferred_industries::json) AS v WHERE v IN ({ind_placeholders})))"
         )
         for i, ind in enumerate(target_industries):
@@ -1204,7 +1204,7 @@ async def get_stored_jobs(
             FROM user_job_postings ujp
             JOIN job_postings jp ON jp.id = ujp.job_posting_id
             WHERE {where_sql}
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     total = count_row.scalar_one()
@@ -1221,7 +1221,7 @@ async def get_stored_jobs(
             WHERE {where_sql}
             ORDER BY jp.posted_at DESC, ujp.created_at DESC
             LIMIT :limit OFFSET :offset
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     jobs = [dict(r) for r in rows.mappings()]
@@ -1338,7 +1338,7 @@ async def bulk_archive_jobs(
     for i, jid in enumerate(body.job_ids):
         params[f"id{i}"] = jid
     await db.execute(
-        text(f"UPDATE user_job_postings SET archived = true WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),
+        text(f"UPDATE user_job_postings SET archived = true WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     await db.commit()
@@ -1364,7 +1364,7 @@ async def bulk_rescore_jobs(
         params[f"id{i}"] = jid
 
     owned = await db.execute(
-        text(f"SELECT job_posting_id FROM user_job_postings WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),
+        text(f"SELECT job_posting_id FROM user_job_postings WHERE user_id = :uid AND job_posting_id IN ({placeholders})"),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     owned_ids = [r[0] for r in owned.fetchall()]
@@ -1393,7 +1393,7 @@ async def bulk_rescore_jobs(
             FROM job_postings jp
             JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             WHERE jp.id IN ({owned_placeholders})
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         owned_params,
     )
     jobs = [dict(r) for r in rows.mappings().all()]
@@ -1878,7 +1878,7 @@ async def bulk_generate_resumes(
             SELECT jp.id FROM job_postings jp
             JOIN user_job_postings ujp ON ujp.job_posting_id = jp.id AND ujp.user_id = :uid
             WHERE jp.id IN ({placeholders})
-        """),
+        """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
     )
     owned_ids = [r[0] for r in owned.fetchall()]

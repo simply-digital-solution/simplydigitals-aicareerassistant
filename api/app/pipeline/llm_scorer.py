@@ -204,7 +204,7 @@ async def _pick_next_job(db: AsyncSession) -> dict | None:
               )
             ORDER BY (ujp.scoring_status = 'in_progress') DESC, jp.posted_at DESC, jp.scraped_at DESC
             LIMIT 1
-        """),
+        """),  # nosec B608 - interpolates int()-cast settings values, no user input
         {},
     )
     job_rows = rows.mappings().all()
