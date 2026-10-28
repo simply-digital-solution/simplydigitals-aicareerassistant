@@ -78,4 +78,6 @@ def test_migration_chains_onto_previous_head_and_repo_has_single_head():
     assert mod.down_revision == "a4001bda2f32"
     cfg = Config(str(API_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(API_DIR / "migrations"))
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["cd67c0c34a89"]
+    script = ScriptDirectory.from_config(cfg)
+    assert len(script.get_heads()) == 1
+    assert script.get_revision("cd67c0c34a89") is not None
