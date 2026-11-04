@@ -1149,7 +1149,8 @@ async def get_stored_jobs(
 ):
     """
     Return paginated stored job postings for the current user.
-    Ordered by posted_at DESC (most recent first).
+    Ordered by posted_at DESC (most recent first), with created_at and id as
+    tie-breakers so LIMIT/OFFSET paging is deterministic.
     Optionally filter by role title, recency (days), and minimum fit score.
     Jobs whose inferred_industries don't match the user's target_industries are excluded.
     Jobs with no inferred industries (empty list) are always shown.
@@ -1219,7 +1220,7 @@ async def get_stored_jobs(
             FROM user_job_postings ujp
             JOIN job_postings jp ON jp.id = ujp.job_posting_id
             WHERE {where_sql}
-            ORDER BY jp.posted_at DESC, ujp.created_at DESC
+            ORDER BY jp.posted_at DESC, ujp.created_at DESC, jp.id DESC
             LIMIT :limit OFFSET :offset
         """),  # nosec B608 - only :named bind placeholders are interpolated; values are bound params
         params,
