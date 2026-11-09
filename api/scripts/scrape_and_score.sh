@@ -5,7 +5,7 @@
 #   cd api
 #   ./scripts/scrape_and_score.sh <user-email> [backend-url] [sources] [efc_locations]
 #
-# backend-url defaults to http://localhost:8001 (this project's current local dev port).
+# backend-url defaults to http://localhost:8000 (the port `make dev` serves on).
 # sources optionally restricts which aggregators run, comma-separated
 # (e.g. "mycareersfuture" or "mycareersfuture,efinancialcareers");
 # omitted runs all of them.
@@ -22,7 +22,7 @@
 set -uo pipefail
 
 USER_EMAIL="${1:?Usage: scrape_and_score.sh <user-email> [backend-url] [sources] [efc_locations]}"
-BACKEND_URL="${2:-http://localhost:8001}"
+BACKEND_URL="${2:-http://localhost:8000}"
 SOURCES="${3:-}"
 EFC_LOCATIONS="${4:-}"
 
