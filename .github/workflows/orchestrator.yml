@@ -134,6 +134,7 @@ jobs:
       DATABASE_URL:          ${{ secrets.DATABASE_URL }}
       JWT_SECRET_KEY:        ${{ secrets.JWT_SECRET_KEY }}
       GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
+      ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
       HCAPTCHA_SECRET_KEY:   ${{ secrets.HCAPTCHA_SECRET_KEY }}
       GOOGLE_CLIENT_ID:      ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET:  ${{ secrets.GOOGLE_CLIENT_SECRET }}

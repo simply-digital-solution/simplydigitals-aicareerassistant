@@ -24,6 +24,7 @@ on:
       DATABASE_URL:          { required: false }
       JWT_SECRET_KEY:        { required: false }
       GEMINI_API_KEY:        { required: false }
+      ANTHROPIC_API_KEY:     { required: false }
       HCAPTCHA_SECRET_KEY:   { required: false }
       GOOGLE_CLIENT_ID:      { required: false }
       GOOGLE_CLIENT_SECRET:  { required: false }
@@ -374,6 +375,7 @@ jobs:
           [ -z "${{ secrets.DATABASE_URL }}"          ] && MISSING="$MISSING DATABASE_URL"
           [ -z "${{ secrets.JWT_SECRET_KEY }}"        ] && MISSING="$MISSING JWT_SECRET_KEY"
           [ -z "${{ secrets.GEMINI_API_KEY }}"        ] && MISSING="$MISSING GEMINI_API_KEY"
+          [ -z "${{ secrets.ANTHROPIC_API_KEY }}"     ] && MISSING="$MISSING ANTHROPIC_API_KEY"
           [ -z "${{ secrets.AWS_ACCOUNT_ID }}"        ] && MISSING="$MISSING AWS_ACCOUNT_ID"
           [ -z "${{ secrets.AWS_REGION }}"            ] && MISSING="$MISSING AWS_REGION"
           [ -z "${{ secrets.ECR_REPOSITORY }}"        ] && MISSING="$MISSING ECR_REPOSITORY"
@@ -406,6 +408,7 @@ jobs:
             echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
             echo "JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}"
             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
+            echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}"
             echo "HCAPTCHA_SECRET_KEY=${{ secrets.HCAPTCHA_SECRET_KEY }}"
             echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"
             echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}"
