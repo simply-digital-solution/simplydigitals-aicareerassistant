@@ -30,6 +30,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 API_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$API_DIR"
 
+# The Anthropic key is deliberately NOT in api/.env, so the backend server never
+# sees it and only this script's classify and score steps call the Anthropic
+# API. It lives in api/.env.anthropic (gitignored); it is kept in a plain shell
+# variable (not exported) and handed to those two commands only. Without it the
+# per-task clients would silently fall back to Gemini/Ollama, so stop instead.
+ANTHROPIC_KEY_FILE="$API_DIR/.env.anthropic"
+if [ ! -f "$ANTHROPIC_KEY_FILE" ]; then
+  echo "Missing $ANTHROPIC_KEY_FILE — copy .env.anthropic.example to .env.anthropic and add your key." >&2
+  exit 1
+fi
+ANTHROPIC_API_KEY="$(grep -E '^ANTHROPIC_API_KEY=' "$ANTHROPIC_KEY_FILE" | tail -1 | cut -d= -f2-)"
+if [ -z "$ANTHROPIC_API_KEY" ]; then
+  echo "ANTHROPIC_API_KEY is empty in $ANTHROPIC_KEY_FILE — refusing to run, the classify and score steps would fall back to Gemini/Ollama." >&2
+  exit 1
+fi
+
 echo "== Checking backend at $BACKEND_URL =="
 if ! curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/docs" | grep -q "^200$"; then
   echo "Backend not reachable at $BACKEND_URL/docs — start it first (make dev)." >&2
@@ -60,11 +76,11 @@ echo "$SCRAPE_SUMMARY"
 echo "(exception types and resolved IPs for failed requests are in the backend server's own log)"
 
 echo "== Classifying industries for newly scraped jobs =="
-CLASSIFY_OUTPUT=$(poetry run python -m app.pipeline.industry_backfill 2>&1)
+CLASSIFY_OUTPUT=$(ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" poetry run python -m app.pipeline.industry_backfill 2>&1)
 echo "$CLASSIFY_OUTPUT"
 
 echo "== Scoring idle jobs =="
-SCORE_OUTPUT=$(poetry run python -m scripts.score_idle_jobs 2>&1)
+SCORE_OUTPUT=$(ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" poetry run python -m scripts.score_idle_jobs 2>&1)
 echo "$SCORE_OUTPUT"
 
 echo "== Done =="

@@ -43,6 +43,8 @@ Copy `.env.example` to `api/.env`. Backend reads config from `api/.env` via `pyd
 `make dev` starts Postgres automatically via `docker-compose.dev.yml` (named volume `aicareer-pgdata` persists data across restarts).
 Set `DATABASE_URL=postgresql+asyncpg://postgres:dev@localhost:5432/aicareer-db` in `api/.env`.
 
+**Anthropic key (local dev)**: do not put `ANTHROPIC_API_KEY` in `api/.env` — the backend server loads that file and would then call Anthropic. Copy `api/.env.anthropic.example` to `api/.env.anthropic` (gitignored) instead; `scripts/scrape_and_score.sh` reads it and passes the key only to its classify and score steps, and refuses to run if it is missing. In production the deploy pipeline writes `ANTHROPIC_API_KEY` into the server's `.env` from the `ANTHROPIC_API_KEY` GitHub secret, so every container uses Anthropic there (never bake the key into the Docker image).
+
 ## Architecture
 
 ### LLM backend
