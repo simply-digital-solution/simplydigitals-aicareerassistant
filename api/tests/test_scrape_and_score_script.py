@@ -120,3 +120,17 @@ def test_deploy_pipeline_writes_the_key_into_the_production_env():
     assert 'echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}"' in api_ci
     assert "ANTHROPIC_API_KEY:     { required: false }" in api_ci
     assert "ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}" in orchestrator
+
+
+def test_key_is_checked_only_by_the_deploy_job_not_the_pr_secrets_check():
+    """A missing key must fail deploy runs only; the pull-request secrets check
+    in orchestrator.yml must not require it."""
+    orchestrator = (REPO_DIR / ".github" / "workflows" / "orchestrator.yml").read_text()
+    api_ci = (REPO_DIR / ".github" / "workflows" / "api-ci.yml").read_text()
+
+    start = orchestrator.index("name: Validate Required Secrets")
+    end = orchestrator.index('echo "✅ All required API secrets are present"')
+    assert "ANTHROPIC_API_KEY" not in orchestrator[start:end]
+
+    # The deploy job's own validation step still requires it.
+    assert '[ -z "${{ secrets.ANTHROPIC_API_KEY }}"     ] && MISSING' in api_ci

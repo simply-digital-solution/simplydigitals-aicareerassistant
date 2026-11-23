@@ -82,7 +82,6 @@ jobs:
           DATABASE_URL:          ${{ secrets.DATABASE_URL }}
           JWT_SECRET_KEY:        ${{ secrets.JWT_SECRET_KEY }}
           GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
-          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           missing=()
           [ -z "$AWS_ACCESS_KEY_ID" ]     && missing+=("AWS_ACCESS_KEY_ID")
@@ -92,7 +91,6 @@ jobs:
           [ -z "$DATABASE_URL" ]          && missing+=("DATABASE_URL")
           [ -z "$JWT_SECRET_KEY" ]        && missing+=("JWT_SECRET_KEY")
           [ -z "$GEMINI_API_KEY" ]        && missing+=("GEMINI_API_KEY")
-          [ -z "$ANTHROPIC_API_KEY" ]     && missing+=("ANTHROPIC_API_KEY")
           if [ ${#missing[@]} -gt 0 ]; then
             echo "❌ Missing required API secrets: ${missing[*]}"
             exit 1
